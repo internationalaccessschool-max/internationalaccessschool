@@ -1,0 +1,459 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { collection, doc, getDoc, getDocs, setDoc, query, where, orderBy, serverTimestamp, collectionGroup } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Check, X, Clock, Loader2, AlertCircle, CalendarCheck, Users } from "lucide-react";
+
+type AttendanceStatus = "present" | "absent" | "late";
+
+interface Student {
+    id: string;
+    name: string;
+    regNo: string;
+    status: AttendanceStatus;
+}
+
+export default function TeacherAttendancePage() {
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    // Class teacher info
+    const [assignedSections, setAssignedSections] = useState<{ cls: string, section: string }[]>([]);
+    const [assignedClass, setAssignedClass] = useState<string | null>(null);
+    const [assignedSection, setAssignedSection] = useState<string | null>(null);
+    const [notClassTeacher, setNotClassTeacher] = useState(false);
+
+    // Students & attendance
+    const [students, setStudents] = useState<Student[]>([]);
+    const [selectedDate, setSelectedDate] = useState(() => {
+        const d = new Date();
+        return d.toISOString().split("T")[0]; // "2026-02-22"
+    });
+    const [existingDocId, setExistingDocId] = useState<string | null>(null);
+
+    // Step 1: Find the teacher's assigned class from class_teachers collection
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!user) return;
+
+            try {
+                const ctSnap = await getDocs(collection(db, "class_teachers"));
+                let matches: { cls: string, section: string }[] = [];
+
+                // Try 1: Direct UID match
+                ctSnap.docs.forEach(d => {
+                    const data = d.data();
+                    if (data.teacherId === user.uid) {
+                        matches.push({ cls: data.cls, section: data.section });
+                    }
+                });
+
+                // Try 2: If no match, look up teacher doc by UID to get their name,
+                //         then match by teacherName in class_teachers
+                if (matches.length === 0) {
+                    // Check teachers collection
+                    const teacherDoc = await getDoc(doc(db, "teachers", user.uid));
+                    let teacherName = "";
+                    if (teacherDoc.exists()) {
+                        const td = teacherDoc.data();
+                        teacherName = `${td.firstName || ""} ${td.lastName || ""}`.trim();
+                    }
+                    // Also check users collection
+                    if (!teacherName) {
+                        const userDoc = await getDoc(doc(db, "users", user.uid));
+                        if (userDoc.exists()) {
+                            teacherName = userDoc.data().name || "";
+                        }
+                    }
+                    if (teacherName) {
+                        ctSnap.docs.forEach(d => {
+                            const data = d.data();
+                            if (data.teacherName === teacherName) {
+                                matches.push({ cls: data.cls, section: data.section });
+                            }
+                        });
+                    }
+                }
+
+                // Try 3: If still no match, check by email in teachers collection
+                if (matches.length === 0 && user.email) {
+                    const teachersByEmail = await getDocs(
+                        query(collection(db, "teachers"), where("email", "==", user.email))
+                    );
+                    if (!teachersByEmail.empty) {
+                        const teacherDocId = teachersByEmail.docs[0].id;
+                        ctSnap.docs.forEach(d => {
+                            const data = d.data();
+                            if (data.teacherId === teacherDocId) {
+                                matches.push({ cls: data.cls, section: data.section });
+                            }
+                        });
+                    }
+                }
+
+                if (matches.length > 0) {
+                    setAssignedSections(matches);
+                    setAssignedClass(matches[0].cls);
+                    setAssignedSection(matches[0].section);
+                } else {
+                    setNotClassTeacher(true);
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error("Error finding class teacher assignment:", err);
+                setNotClassTeacher(true);
+                setLoading(false);
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Step 2: Load students for the assigned class
+    useEffect(() => {
+        if (!assignedClass || !assignedSection) return;
+
+        const fetchStudents = async () => {
+            try {
+                // Determine raw class string. The DB stores "Class X"
+                const q = query(
+                    collectionGroup(db, "profiles"),
+                    where("className", "==", assignedClass),
+                    where("section", "==", assignedSection)
+                );
+                const snap = await getDocs(q);
+                const studentList: Student[] = snap.docs.map(d => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        name: data.firstName ? `${data.firstName} ${data.lastName || ""}`.trim() : (data.name || "Unknown"),
+                        regNo: data.admissionNumber || data.regNo || data.registrationNumber || "—",
+                        status: "present" as AttendanceStatus, // Default to present
+                    };
+                });
+
+                // Sort by regNo
+                studentList.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
+                setStudents(studentList);
+            } catch (err) {
+                console.error("Error fetching students:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchStudents();
+    }, [assignedClass, assignedSection]);
+
+    // Step 3: When date changes, check if attendance already exists for that date
+    useEffect(() => {
+        if (!assignedClass || !assignedSection || !selectedDate || students.length === 0) return;
+
+        const checkExisting = async () => {
+            const docId = `${assignedClass}-${assignedSection}_${selectedDate}`.replace(/ /g, "_");
+            try {
+                const existingDoc = await getDoc(doc(db, "attendance", docId));
+                if (existingDoc.exists()) {
+                    const data = existingDoc.data();
+                    const records = data.records || {};
+                    setExistingDocId(docId);
+
+                    // Update student statuses from saved data
+                    setStudents(prev => prev.map(s => ({
+                        ...s,
+                        status: (records[s.id] as AttendanceStatus) || "present",
+                    })));
+                } else {
+                    setExistingDocId(null);
+                    // Reset all to present
+                    setStudents(prev => prev.map(s => ({ ...s, status: "present" as AttendanceStatus })));
+                }
+            } catch (err) {
+                console.error("Error checking existing attendance:", err);
+            }
+        };
+
+        checkExisting();
+    }, [selectedDate, assignedClass, assignedSection, students.length]);
+
+    const setStatus = (studentId: string, status: AttendanceStatus) => {
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status } : s));
+        setSaved(false);
+    };
+
+    const markAll = (status: AttendanceStatus) => {
+        setStudents(prev => prev.map(s => ({ ...s, status })));
+        setSaved(false);
+    };
+
+    const handleSave = async () => {
+        if (!assignedClass || !assignedSection) return;
+        setSaving(true);
+        setSaved(false);
+
+        try {
+            const docId = `${assignedClass}-${assignedSection}_${selectedDate}`.replace(/ /g, "_");
+            const records: Record<string, string> = {};
+            students.forEach(s => { records[s.id] = s.status; });
+
+            const currentUser = auth.currentUser;
+            await setDoc(doc(db, "attendance", docId), {
+                cls: assignedClass,
+                section: assignedSection,
+                date: selectedDate,
+                records,
+                markedBy: currentUser?.uid || "unknown",
+                markedByName: currentUser?.displayName || "Teacher",
+                createdAt: serverTimestamp(),
+            });
+
+            setExistingDocId(docId);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch (err) {
+            console.error("Error saving attendance:", err);
+            alert("Failed to save attendance. Please try again.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Counts
+    const presentCount = students.filter(s => s.status === "present").length;
+    const lateCount = students.filter(s => s.status === "late").length;
+    const absentCount = students.filter(s => s.status === "absent").length;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isPastDate = selectedDate < todayStr; // true when viewing a previous day
+    const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric"
+    });
+
+    // ── Not a class teacher ──
+    if (notClassTeacher) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <AlertCircle className="w-8 h-8 text-amber-600" />
+                </div>
+                <h2 className="text-xl font-bold text-navy">Not a Class Teacher</h2>
+                <p className="text-gray-500 text-sm text-center max-w-md">
+                    You are not assigned as a Class Teacher. Only class teachers can mark attendance.
+                    Please contact the admin if this is a mistake.
+                </p>
+            </div>
+        );
+    }
+
+    // ── Loading ──
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-10 h-10 animate-spin text-navy" />
+                    <p className="text-sm text-gray-400">Loading students...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="rounded-2xl bg-gradient-to-br from-navy to-navy-light p-6 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10"
+                    style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.4) 0%, transparent 60%)" }}
+                />
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <p className="text-white/50 text-sm font-medium">Class Teacher</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">
+                            Mark Attendance
+                        </h1>
+                        <div className="flex items-center gap-2 mt-2">
+                            {assignedSections.length > 1 ? (
+                                <select
+                                    className="px-3 py-1.5 rounded-lg text-sm bg-white/20 text-white font-medium border-0 focus:ring-2 focus:ring-gold/30 outline-none"
+                                    value={`${assignedClass}|${assignedSection}`}
+                                    onChange={(e) => {
+                                        const [c, s] = e.target.value.split('|');
+                                        setAssignedClass(c);
+                                        setAssignedSection(s);
+                                    }}
+                                >
+                                    {assignedSections.map(seq => (
+                                        <option key={`${seq.cls}-${seq.section}`} value={`${seq.cls}|${seq.section}`} className="text-navy">
+                                            {seq.cls} — Section {seq.section}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <p className="text-white/80 text-sm font-medium">
+                                    {assignedClass} — Section {assignedSection}
+                                </p>
+                            )}
+                            <span className="text-white/40 text-sm">• {students.length} students</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            max={todayStr}
+                            onChange={e => setSelectedDate(e.target.value)}
+                            className="px-4 py-2 rounded-xl text-sm border-0 bg-white/10 text-white backdrop-blur-sm focus:ring-2 focus:ring-gold/30 outline-none"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Date info + Stats */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-navy">{dateDisplay}</p>
+                    {existingDocId && (
+                        <p className="text-xs text-amber-600 font-medium mt-1">⚡ Attendance already marked — editing mode</p>
+                    )}
+                </div>
+                <div className="flex items-center gap-3">
+                    <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                        ✓ {presentCount} Present
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
+                        ⏰ {lateCount} Late
+                    </span>
+                    <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
+                        ✗ {absentCount} Absent
+                    </span>
+                </div>
+            </div>
+
+            {/* Past date — read only banner */}
+            {isPastDate && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span>Past attendance is <strong>view-only</strong>. Only Admin or Supervisor can edit previous days.</span>
+                </div>
+            )}
+
+            {/* Quick actions */}
+            <div className="flex gap-2">
+                <button
+                    disabled={isPastDate}
+                    onClick={() => markAll("present")}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${isPastDate
+                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                            : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                        }`}>
+                    Mark All Present
+                </button>
+                <button
+                    disabled={isPastDate}
+                    onClick={() => markAll("absent")}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${isPastDate
+                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                            : "bg-red-50 text-red-600 hover:bg-red-100"
+                        }`}>
+                    Mark All Absent
+                </button>
+            </div>
+
+            {/* Student List */}
+            {students.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 text-sm">
+                    No students found in {assignedClass} - {assignedSection}.
+                </div>
+            ) : (
+                <Card className="overflow-hidden">
+                    <CardContent className="p-0">
+                        <div className="divide-y divide-gray-100">
+                            {students.map((student, idx) => (
+                                <div key={student.id} className="flex items-center justify-between px-4 py-3 sm:px-6 hover:bg-gray-50/50 transition-colors">
+                                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs sm:text-sm shrink-0">
+                                            {idx + 1}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-semibold text-navy text-sm truncate">{student.name}</p>
+                                            <p className="text-xs text-gray-400">Reg: {student.regNo}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                        {/* Present */}
+                                        <button
+                                            disabled={isPastDate}
+                                            onClick={() => setStatus(student.id, "present")}
+                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                    ? student.status === "present" ? "bg-emerald-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                    : student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
+                                                }`}
+                                        >
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Present</span>
+                                        </button>
+
+                                        {/* Late */}
+                                        <button
+                                            disabled={isPastDate}
+                                            onClick={() => setStatus(student.id, "late")}
+                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                    ? student.status === "late" ? "bg-amber-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                    : student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                                                }`}
+                                        >
+                                            <Clock className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Late</span>
+                                        </button>
+
+                                        {/* Absent */}
+                                        <button
+                                            disabled={isPastDate}
+                                            onClick={() => setStatus(student.id, "absent")}
+                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                    ? student.status === "absent" ? "bg-red-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                    : student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                }`}
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Absent</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Save Button — hidden for past dates */}
+            {students.length > 0 && !isPastDate && (
+                <div className="sticky bottom-4 z-20">
+                    <Button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className={`w-full py-6 text-base font-bold rounded-2xl shadow-lg transition-all ${saved
+                            ? "bg-emerald-500 hover:bg-emerald-500"
+                            : "bg-navy hover:bg-navy-light"
+                            } text-white`}
+                    >
+                        {saving ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : saved ? (
+                            "✓ Attendance Saved!"
+                        ) : existingDocId ? (
+                            "Update Attendance"
+                        ) : (
+                            "Save Attendance"
+                        )}
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}

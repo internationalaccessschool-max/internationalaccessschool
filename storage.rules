@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      // Need to fetch firestore user role, but storage rules don't support get() easily without custom claims.
+      // For now, assuming only Auth check or rely on file path structure + auth
+      return isAuthenticated(); 
+    }
+    
+    // Students profile images
+    match /students/profile-images/{userId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if request.auth.uid == userId || isAdmin();
+    }
+    
+    // Admit cards
+    match /admit-cards/{userId}/{cardId} {
+      allow read: if request.auth.uid == userId || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Homework
+    match /homework/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Allow any auth user to write for now (teachers/admin)
+    }
+    
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
