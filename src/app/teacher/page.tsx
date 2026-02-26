@@ -7,10 +7,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, where, orderBy, limit, collectionGroup } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where, orderBy, limit, getCountFromServer } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getTimeAgo } from "@/lib/utils/date";
 
 const quickActions = [
     { label: "Mark Attendance", icon: CheckCircle2, href: "/teacher/attendance" },
@@ -18,18 +19,6 @@ const quickActions = [
     { label: "Post Homework", icon: PenLine, href: "/teacher/homework" },
     { label: "My Classes", icon: ClipboardList, href: "/teacher/classes" },
 ];
-
-function getTimeAgo(date: Date): string {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return "Just now";
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min${minutes > 1 ? "s" : ""} ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`;
-    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
 
 export default function TeacherDashboard() {
     const [userData, setUserData] = useState<any>(null);
@@ -77,8 +66,8 @@ export default function TeacherDashboard() {
                 }
 
                 // Total Homework assignments created by this teacher
-                const hwSnap = await getDocs(query(collection(db, "homework"), where("teacherId", "==", userData.uid)));
-                setTotalHomework(hwSnap.size);
+                const hwSnap = await getCountFromServer(query(collection(db, "homework"), where("teacherId", "==", userData.uid)));
+                setTotalHomework(hwSnap.data().count);
 
                 // Recent homework (for activity feed)
                 try {

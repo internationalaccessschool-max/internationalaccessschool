@@ -10,19 +10,7 @@ import { doc, getDoc, collection, getDocs, query, where, orderBy, limit, collect
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-function getTimeAgo(date: Date): string {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return "Just now";
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min${minutes > 1 ? "s" : ""} ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    const days = Math.floor(hours / 24);
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
+import { getTimeAgo } from "@/lib/utils/date";
 
 export default function StudentDashboard() {
     const [userData, setUserData] = useState<any>(null);

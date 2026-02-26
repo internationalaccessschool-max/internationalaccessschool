@@ -264,6 +264,9 @@ export default function TeacherMarksPage() {
         );
     }
 
+    const selectedExam = exams.find(e => e.id === selectedExamId);
+    const isExamPublished = selectedExam?.status === "Published";
+
     return (
         <div className="p-6 space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -273,11 +276,22 @@ export default function TeacherMarksPage() {
                         Class: <strong>{myClass?.className}</strong> — Section: <strong>{myClass?.section}</strong>
                     </p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving || students.length === 0 || !selectedExamId}>
-                    {isSaving
-                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-                        : <><Save className="mr-2 h-4 w-4" /> Save All Marks</>}
-                </Button>
+                <div className="flex items-center gap-3">
+                    {isExamPublished && (
+                        <span className="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-1.5">
+                            <ShieldAlert className="w-4 h-4" />
+                            Published exams cannot be edited by teachers
+                        </span>
+                    )}
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving || students.length === 0 || !selectedExamId || isExamPublished}
+                    >
+                        {isSaving
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+                            : <><Save className="mr-2 h-4 w-4" /> Save All Marks</>}
+                    </Button>
+                </div>
             </div>
 
             {/* Exam Selector */}
@@ -359,7 +373,8 @@ export default function TeacherMarksPage() {
                                                             placeholder="—"
                                                             value={val}
                                                             onChange={e => handleMarkChange(student.id, sub.id, e.target.value)}
-                                                            className={`w-full text-center h-9 ${isOver ? "text-red-500 border-red-400" : ""}`}
+                                                            disabled={isExamPublished}
+                                                            className={`w-full text-center h-9 ${isOver ? "text-red-500 border-red-400" : ""} ${isExamPublished ? "bg-muted cursor-not-allowed opacity-70" : ""}`}
                                                         />
                                                     </td>
                                                 );

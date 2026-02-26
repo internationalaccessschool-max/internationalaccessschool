@@ -12,11 +12,16 @@ import { z } from "zod";
 
 // ─── Schema ───────────────────────────────────────────────────────────────
 const studentRowSchema = z.object({
-    admissionNumber: z.string().min(1, "Admission Number is required"),
+    admissionNumber: z.string()
+        .min(1, "Admission Number is required")
+        .max(8, "Admission Number cannot exceed 8 digits")
+        .regex(/^\d+$/, "Admission Number must contain only digits"),
     firstName: z.string().min(1, "First Name is required"),
     middleName: z.string().optional(),
     lastName: z.string().optional(),
-    dob: z.string().min(1, "Date of Birth is required"),
+    dob: z.string()
+        .min(1, "Date of Birth is required")
+        .regex(/^\d{2}-\d{2}-\d{4}$/, "DOB must be strictly in DD-MM-YYYY format (e.g. 15-05-2010)"),
     gender: z.string().min(1, "Gender is required"),
     bloodGroup: z.string().optional(),
     category: z.string().optional(),

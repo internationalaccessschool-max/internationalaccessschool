@@ -2,8 +2,9 @@
 
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where, orderBy, limit, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit, collectionGroup, getCountFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { getTimeAgo } from "@/lib/utils/date";
 import Link from "next/link";
 import {
     Users, GraduationCap, DollarSign, CalendarCheck,
@@ -30,34 +31,25 @@ export default function AdminDashboard() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                // Total Students via nested profiles
-                const studentsSnap = await getDocs(collectionGroup(db, "profiles"));
+                // Total Students via nested profiles count
+                const studentsSnap = await getCountFromServer(collectionGroup(db, "profiles"));
+                setTotalStudents(studentsSnap.data().count);
 
-                // Deduplicate by ID in case any phantom duplicates exist
-                const uniqueIds = new Set();
-                const validDocs = studentsSnap.docs.filter(d => {
-                    if (uniqueIds.has(d.id)) return false;
-                    uniqueIds.add(d.id);
-                    return true;
-                });
-
-                setTotalStudents(validDocs.length);
-
-                // Total Teachers
-                const teachersSnap = await getDocs(
+                // Total Teachers count
+                const teachersSnap = await getCountFromServer(
                     query(collection(db, "users"), where("role", "==", "teacher"))
                 );
-                setTotalTeachers(teachersSnap.size);
+                setTotalTeachers(teachersSnap.data().count);
 
-                // Pending Admissions
-                const admissionsSnap = await getDocs(
+                // Pending Admissions count
+                const admissionsSnap = await getCountFromServer(
                     query(collection(db, "admission_requests"), where("status", "==", "pending"))
                 );
-                setPendingAdmissions(admissionsSnap.size);
+                setPendingAdmissions(admissionsSnap.data().count);
 
-                // Total Homework Posted
-                const homeworkSnap = await getDocs(collection(db, "homework"));
-                setTotalHomework(homeworkSnap.size);
+                // Total Homework Posted count
+                const homeworkSnap = await getCountFromServer(collection(db, "homework"));
+                setTotalHomework(homeworkSnap.data().count);
 
                 // Build recent activity from real data
                 const activityList: any[] = [];
@@ -249,7 +241,6 @@ export default function AdminDashboard() {
                                 href="/admin/admissions"
                                 className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors"
                             >
-                                Review Now <ArrowUpRight className="w-3.5 h-3.5" />
                             </Link>
                         </div>
                     )}
@@ -257,17 +248,4 @@ export default function AdminDashboard() {
             </div>
         </div>
     );
-}
-
-// Helper: "5 mins ago", "2 hours ago", etc.
-function getTimeAgo(date: Date): string {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return "Just now";
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min${minutes > 1 ? "s" : ""} ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`;
-    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }

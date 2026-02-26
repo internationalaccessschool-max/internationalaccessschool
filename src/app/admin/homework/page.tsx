@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
 import { Trash2, Calendar, BookOpen, ChevronDown, X } from "lucide-react";
 import { FileViewerTrigger } from "@/components/ui/file-viewer";
+import { toast } from "react-hot-toast";
 
 interface Homework {
     id: string;
@@ -84,7 +85,12 @@ export default function HomeworkAdminPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.className) { alert("Please select a class."); return; }
+        if (!formData.className) {
+            toast.error("Please select a class.");
+            return;
+        }
+
+        const loadingToast = toast.loading("Creating assignment...");
         try {
             await addDoc(collection(db, "homework"), {
                 ...formData,
@@ -95,16 +101,43 @@ export default function HomeworkAdminPage() {
                 title: "", description: "", className: "", section: "A", subject: "", dueDate: "", fileUrl: "", fileName: "",
                 assignedDate: todayStr, assignedDay: todayDay,
             });
+            toast.success("Assignment created successfully!", { id: loadingToast });
         } catch (error) {
             console.error(error);
-            alert("Failed to create assignment");
+            toast.error("Failed to create assignment", { id: loadingToast });
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm("Delete this assignment?")) {
-            await deleteDoc(doc(db, "homework", id));
-        }
+        toast((t) => (
+            <div className="flex flex-col gap-3">
+                <span className="font-semibold text-gray-800">Delete this assignment?</span>
+                <div className="flex gap-2">
+                    <button
+                        onClick={async () => {
+                            toast.dismiss(t.id);
+                            const loadingToast = toast.loading("Deleting...");
+                            try {
+                                await deleteDoc(doc(db, "homework", id));
+                                toast.success("Assignment deleted", { id: loadingToast });
+                            } catch (error) {
+                                console.error(error);
+                                toast.error("Failed to delete", { id: loadingToast });
+                            }
+                        }}
+                        className="px-3 py-1.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={() => toast.dismiss(t.id)}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        ), { duration: 5000 });
     };
 
     const filtered = filterClass === "All" ? homeworks : homeworks.filter(h => h.className === filterClass);
