@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,25 +9,22 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        let uid: string;
-
-        try {
-            // Try to create a new Firebase Auth user
-            const userRecord = await adminAuth.createUser({ email, password, displayName });
-            uid = userRecord.uid;
-        } catch (createError: any) {
-            if (createError.code === "auth/email-already-exists") {
-                // Reuse the existing Firebase Auth account
-                const existingUser = await adminAuth.getUserByEmail(email);
-                uid = existingUser.uid;
-                // Update displayName in case it changed
-                await adminAuth.updateUser(uid, { displayName });
-            } else {
-                throw createError;
-            }
+        // ── Duplicate email check across ALL roles ────────────────────────────
+        const usersRef = adminDb.collection("users");
+        const existing = await usersRef.where("email", "==", email.toLowerCase().trim()).get();
+        if (!existing.empty) {
+            const existingRole = existing.docs[0].data().role || "user";
+            return NextResponse.json(
+                { error: `This email is already registered as a ${existingRole}. Each account must have a unique email.` },
+                { status: 409 }
+            );
         }
+        // ─────────────────────────────────────────────────────────────────────
 
-        return NextResponse.json({ uid });
+        // Create new Firebase Auth user
+        const userRecord = await adminAuth.createUser({ email, password, displayName });
+        return NextResponse.json({ uid: userRecord.uid });
+
     } catch (error: any) {
         console.error("Create supervisor error:", error);
         return NextResponse.json({ error: error.message || "Failed to create user" }, { status: 500 });
