@@ -182,13 +182,27 @@ export default function AdminTeachersPage() {
             setFormError("Please select at least one subject.");
             setCreating(false); return;
         }
-        const appName = `secondary_${Date.now()}`;
-        let secondaryApp: any = null;
+
         try {
-            secondaryApp = initializeApp(firebaseConfig, appName);
-            const secondaryAuth = getAuth(secondaryApp);
-            const cred = await createUserWithEmailAndPassword(secondaryAuth, data.email, data.password);
-            const uid = cred.user.uid;
+            // Use the admin API which handles duplicate email checks across roles
+            const res = await fetch("/api/admin/create-teacher", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: data.email,
+                    password: data.password,
+                    displayName: `${data.firstName} ${data.lastName}`
+                }),
+            });
+            const apiData = await res.json();
+
+            if (!res.ok) {
+                throw new Error(apiData.error || "Failed to create teacher account.");
+            }
+
+            const uid = apiData.uid;
+
+            // Create Firestore documents
             const teacherDoc = {
                 uid, firstName: data.firstName, lastName: data.lastName,
                 email: data.email, phone: data.phone,
@@ -197,43 +211,40 @@ export default function AdminTeachersPage() {
                 assignment: emptyAssignment(),
                 createdAt: serverTimestamp(),
             };
+
             await setDoc(doc(db, "teachers", uid), teacherDoc);
             await setDoc(doc(db, "users", uid), { ...teacherDoc, name: `${data.firstName} ${data.lastName}` });
+
             setCreatedInfo({ name: `${data.firstName} ${data.lastName}`, email: data.email, password: data.password });
             reset(); setSelectedSubjects([]); setShowForm(false);
         } catch (err: any) {
-            setFormError(err.code === "auth/email-already-in-use"
-                ? "A teacher with this email already exists."
-                : "Failed to create account. Ensure Email/Password sign-in is enabled in Firebase.");
+            setFormError(err.message || "Failed to create account.");
         } finally {
-            if (secondaryApp) await deleteApp(secondaryApp);
             setCreating(false);
         }
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Delete teacher ${name}? This will also remove their login access.`)) return;
+        if (!confirm(`Delete teacher ${name}?\n\nThis will permanently remove their login access.`)) return;
 
         try {
-            // First, delete from Firebase Auth via Admin API
+            // Step 1: Remove from Firebase Auth — revokes login immediately
             const res = await fetch("/api/admin/delete-user", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ uid: id })
+                body: JSON.stringify({ uid: id }),
             });
-
             const data = await res.json();
             if (!res.ok) {
-                console.error("Auth deletion failed:", data.error);
-                alert(`Warning: Could not delete from Auth: ${data.error}`);
+                throw new Error(`Could not remove login access: ${data.error}`);
             }
 
-            // Then delete from Firestore
+            // Step 2: Remove from Firestore only after Auth is cleared
             await deleteDoc(doc(db, "teachers", id));
             await deleteDoc(doc(db, "users", id));
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error deleting teacher:", error);
-            alert("Failed to delete the teacher fully.");
+            alert("Error deleting teacher: " + error.message);
         }
     };
 
