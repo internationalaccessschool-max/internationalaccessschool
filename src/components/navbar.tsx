@@ -223,6 +223,14 @@ export function Navbar() {
                     </button>
                 </div>
                 <nav className="flex flex-col p-4 gap-1 h-[calc(100vh-80px)] overflow-y-auto">
+                    <div className="mb-4 pb-4 border-b border-gray-100">
+                        <Link
+                            href="/login"
+                            className="block w-full text-center px-5 py-3 rounded-xl bg-navy text-white font-semibold text-sm hover:bg-navy-light transition-colors"
+                        >
+                            Login
+                        </Link>
+                    </div>
                     <Link href="/" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Home</Link>
                     <Link href="/about" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">About</Link>
 
@@ -244,15 +252,6 @@ export function Navbar() {
                     <Link href="/admissions" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Admissions</Link>
                     <Link href="/gallery" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Gallery</Link>
                     <Link href="/contact" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Contact</Link>
-
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                        <Link
-                            href="/login"
-                            className="block w-full text-center px-5 py-3 rounded-xl bg-navy text-white font-semibold text-sm hover:bg-navy-light transition-colors"
-                        >
-                            Login
-                        </Link>
-                    </div>
                 </nav>
             </div>
         </>
