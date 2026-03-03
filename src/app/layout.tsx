@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   description:
     "International Access School provides world-class education focused on academic excellence, innovation, and holistic development. Apply now for admissions.",
   keywords: ["international school", "education", "admissions", "academics", "global leaders"],
+  icons: {
+    icon: '/LOGO.png',
+    apple: '/LOGO.png',
+  },
 };
 
 export default function RootLayout({
