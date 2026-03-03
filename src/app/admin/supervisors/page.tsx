@@ -169,9 +169,9 @@ export default function AdminSupervisorsPage() {
     };
 
     const handleDelete = async (sup: SupervisorProfile) => {
-        if (!window.confirm(`Delete supervisor "${sup.displayName}"?`)) return;
+        if (!window.confirm(`Delete supervisor "${sup.displayName}"?\n\nThis will permanently remove their login access.`)) return;
         try {
-            // Remove from Firebase Auth first
+            // Step 1: Remove from Firebase Auth first
             const res = await fetch("/api/admin/delete-user", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -179,15 +179,14 @@ export default function AdminSupervisorsPage() {
             });
             const data = await res.json();
             if (!res.ok) {
-                console.error("Auth deletion failed:", data.error);
-                // Still proceed to delete Firestore docs even if auth fails
+                throw new Error(`Could not remove login access: ${data.error}`);
             }
-            // Remove Firestore docs
+            // Step 2: Remove Firestore docs only after Auth is cleared
             await deleteDoc(doc(db, "supervisors", sup.uid));
             await deleteDoc(doc(db, "users", sup.uid));
             fetchSupervisors();
         } catch (err: any) {
-            alert("Error: " + err.message);
+            alert("Error deleting supervisor: " + err.message);
         }
     };
 
