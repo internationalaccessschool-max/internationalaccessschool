@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -85,7 +86,7 @@ export function HeroSlider() {
     const slide = slides[current];
 
     return (
-        <section className="relative h-screen w-full overflow-hidden bg-navy">
+        <section className="relative min-h-[500px] h-[100dvh] w-full overflow-hidden bg-navy">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={current}
@@ -96,12 +97,15 @@ export function HeroSlider() {
                     className="absolute inset-0"
                 >
                     {/* Background Image */}
-                    <div
-                        className="absolute inset-0 bg-cover bg-center"
-                        style={{ backgroundImage: `url(${slide.imageUrl})` }}
+                    <Image
+                        src={slide.imageUrl}
+                        alt="Hero Background"
+                        fill
+                        priority={current === 0}
+                        className="object-cover object-center"
                     />
                     {/* Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-black/70" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-black/70 pointer-events-none" />
                 </motion.div>
             </AnimatePresence>
 
@@ -117,7 +121,7 @@ export function HeroSlider() {
                         <h1 className="text-5xl md:text-7xl font-bold text-white mb-4 leading-tight">
                             {slide.title}
                         </h1>
-                        <p className="text-xl md:text-2xl text-gray-200 mb-8 max-w-2xl mx-auto">
+                        <p className="text-xl md:text-2xl text-[clamp(1rem,4vw,1.5rem)] text-gray-200 mb-6 lg:mb-8 max-w-2xl mx-auto px-4">
                             {slide.subtitle}
                         </p>
                         <Link
