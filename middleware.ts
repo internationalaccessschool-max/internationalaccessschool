@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
     // The main protection is for the dashboard segments.
 
     // Quick escape for standard public routes
-    if (!pathname.startsWith("/student") && !pathname.startsWith("/teacher") && !pathname.startsWith("/admin") && !pathname.startsWith("/supervisor")) {
+    if (!pathname.startsWith("/student") && !pathname.startsWith("/teacher") && !pathname.startsWith("/admin") && !pathname.startsWith("/supervisor") && !pathname.startsWith("/accountant")) {
         return NextResponse.next();
     }
 
@@ -56,11 +56,15 @@ export function middleware(request: NextRequest) {
         if (roleCookie !== "supervisor") {
             return NextResponse.redirect(new URL("/login", request.url));
         }
+    } else if (pathname.startsWith("/accountant")) {
+        if (roleCookie !== "accountant") {
+            return NextResponse.redirect(new URL("/login", request.url));
+        }
     }
 
     return NextResponse.next();
 }
 
 export const config = {
-    matcher: ["/student/:path*", "/teacher/:path*", "/admin/:path*", "/supervisor/:path*"],
+    matcher: ["/student/:path*", "/teacher/:path*", "/admin/:path*", "/supervisor/:path*", "/accountant/:path*"],
 };
