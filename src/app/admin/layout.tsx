@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -62,9 +62,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ],
         },
         {
+            section: "Finance",
+            items: [
+                { href: "/admin/fees", label: "Fee Overview", icon: BarChart3 },
+            ],
+        },
+        {
             section: "System",
             items: [
                 { href: "/admin/supervisors", label: "Supervisors", icon: ShieldCheck },
+                { href: "/admin/accountants", label: "Accountants", icon: Banknote },
                 { href: "/admin/settings", label: "Settings", icon: Settings },
             ],
         },
