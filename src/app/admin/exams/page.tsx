@@ -24,7 +24,11 @@ import {
     Dialog, DialogContent, DialogDescription, DialogHeader,
     DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock } from "lucide-react";
+import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck } from "lucide-react";
+import {
+    collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
+    query, orderBy, collectionGroup, getDocs, writeBatch, setDoc
+} from "firebase/firestore";
 
 // Fixed canonical class list — always show NUR, LKG, UKG, 1-12
 const FIXED_CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -49,6 +53,8 @@ export default function AdminExamsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isGenerating, setIsGenerating] = useState<string | null>(null);
+    const [generateMsg, setGenerateMsg] = useState("");
 
     // Form state
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -166,6 +172,45 @@ export default function AdminExamsPage() {
             await deleteDoc(doc(db, "exams", id));
         } catch (err: any) {
             alert("Failed to delete: " + err.message);
+        }
+    };
+
+    const handleGenerateAdmitCards = async (exam: Exam) => {
+        if (!window.confirm(`Generate admit cards for all students in "${exam.name}"? This will overwrite existing admit cards for this exam.`)) return;
+        setIsGenerating(exam.id!);
+        setGenerateMsg("");
+        try {
+            // Fetch all student profiles
+            const snap = await getDocs(collectionGroup(db, "profiles"));
+            let count = 0;
+            const applicable = exam.classesApplicable ?? [];
+            for (const d of snap.docs) {
+                const data = d.data();
+                const cls = normaliseClass(String(data.className || data.currentClass || ""));
+                if (!applicable.includes(cls)) continue;
+                const uid = d.id;
+                const admitCardId = `${exam.id}_${uid}`;
+                await setDoc(doc(db, "admitCards", admitCardId), {
+                    examId: exam.id,
+                    examName: exam.name,
+                    startDate: exam.startDate,
+                    endDate: exam.endDate,
+                    studentId: uid,
+                    admissionNumber: data.admissionNumber || "",
+                    studentName: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+                    className: cls,
+                    section: data.section || "",
+                    dob: data.dob || "",
+                    fatherName: data.fatherName || "",
+                    generatedAt: Date.now(),
+                }, { merge: true });
+                count++;
+            }
+            setGenerateMsg(`✅ ${count} admit card${count !== 1 ? "s" : ""} generated for "${exam.name}"`);
+        } catch (err: any) {
+            setGenerateMsg(`❌ Failed: ${err.message}`);
+        } finally {
+            setIsGenerating(null);
         }
     };
 
