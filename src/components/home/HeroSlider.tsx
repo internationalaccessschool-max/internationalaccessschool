@@ -46,7 +46,7 @@ const FALLBACK_SLIDES: HeroSlide[] = [
 ];
 
 export function HeroSlider() {
-    const [slides, setSlides] = useState<HeroSlide[]>([]);
+    const [slides, setSlides] = useState<HeroSlide[]>(FALLBACK_SLIDES);
     const [current, setCurrent] = useState(0);
 
     // Fetch slides from Firestore; fall back to static data
@@ -81,8 +81,7 @@ export function HeroSlider() {
     const nextSlide = () => setCurrent((prev) => (prev + 1) % slides.length);
     const prevSlide = () => setCurrent((prev) => (prev - 1 + slides.length) % slides.length);
 
-    if (slides.length === 0) return <section className="h-screen bg-navy" />;
-
+    if (slides.length === 0) return null; // Should never hit this given fallback, but just in case
     const slide = slides[current];
 
     return (
