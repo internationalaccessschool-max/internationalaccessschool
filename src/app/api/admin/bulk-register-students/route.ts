@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import { customInitApp } from "@/lib/firebase-admin"; // Assume this initializes firebase-admin securely
+import { customInitApp } from "@/lib/firebase-admin";
 
 export async function POST(request: Request) {
     try {
-        // In a real application, you should verify the admin token here
-        // const authHeader = request.headers.get("authorization");
-        // verifyAdminToken(authHeader)...
-
         const body = await request.json();
         const { students } = body;
 
@@ -21,151 +17,197 @@ export async function POST(request: Request) {
         const auth = getAuth();
 
         let successCount = 0;
-        let errors: any[] = [];
+        const errors: any[] = [];
 
-        // We process sequentially or in small parallel batches to avoid rate limits
         for (const student of students) {
             try {
-                // Email: admissionNumber@ias.edu (8-digit number as-is)
-                const email = `${student.admissionNumber.trim()}@ias.edu`;
+                // ── Resolve class: new imports use currentClass, old use className ──
+                const resolvedClass = (
+                    student.currentClass ||
+                    student.className ||
+                    student.classAtAdmission ||
+                    "Unassigned"
+                ).toString().trim();
 
-                // Password = DOB in DD-MM-YYYY format (as-is from CSV)
-                // CSV already has DD-MM-YYYY, keep it
-                const password = student.dob.trim();
-                // Keep dob as-is in DB too (DD-MM-YYYY)
+                const resolvedSection = (student.section || "Unassigned").toString().trim();
 
-                if (!password || password.length < 8) {
-                    throw new Error(`DOB password too short for ${student.admissionNumber}`);
+                // ── Resolve name ──
+                let firstName = student.firstName || "";
+                let lastName = student.lastName || "";
+                if (!firstName && student.name) {
+                    const parts = student.name.trim().split(/\s+/);
+                    lastName = parts.length > 1 ? parts.pop()! : "";
+                    firstName = parts.join(" ");
                 }
+                const displayName = `${firstName} ${lastName}`.trim() || student.name || "Student";
+
+                // ── Auth credentials ──
+                const admNo = String(student.admissionNumber || "").trim();
+                const email = `${admNo}@ias.edu`;
+
+                // Password = DOB (DD-MM-YYYY, at least 8 chars) or fallback
+                const rawDob = (student.dob || "").toString().trim();
+                const password = rawDob.length >= 8 ? rawDob : `ias${admNo}2025`;
 
                 let uid: string;
-
-                // 2. Try to create the Auth User
                 try {
                     const userRecord = await auth.createUser({
-                        email: email,
-                        password: password,
-                        displayName: `${student.firstName} ${student.lastName || ""}`.trim(),
+                        email,
+                        password,
+                        displayName,
                     });
                     uid = userRecord.uid;
                 } catch (authError: any) {
-                    // If user already exists (e.g., email already in use), we might want to update or skip.
-                    if (authError.code === 'auth/email-already-exists') {
-                        // Find existing user by email
-                        const existingUser = await auth.getUserByEmail(email);
-                        uid = existingUser.uid;
-                        // For this demo, we can just proceed to update their firestore doc.
+                    if (authError.code === "auth/email-already-exists") {
+                        const existing = await auth.getUserByEmail(email);
+                        uid = existing.uid;
                     } else {
-                        throw authError; // Re-throw other auth errors
+                        throw authError;
                     }
                 }
 
-                // 3. Create or Update Global User Document
-                const studentData = {
+                // ── Build full student document ──
+                const studentData: Record<string, any> = {
                     role: "student",
-                    email: email,
-                    admissionNumber: student.admissionNumber,
+                    uid,
+                    email,
 
-                    // Personal & Category
-                    firstName: student.firstName,
+                    // Identity
+                    name: student.name || displayName,
+                    firstName,
+                    lastName,
                     middleName: student.middleName || "",
-                    lastName: student.lastName || "",
-                    dob: student.dob,
+                    admissionNumber: admNo,
+                    serialNumber: student.serialNumber || "",
+
+                    // Status
+                    status: (student.status || "ACTIVE").toString().toUpperCase(),
+                    session: student.session || "",
+                    dateOfAdmission: student.dateOfAdmission || "",
+                    branch: student.branch || "",
+
+                    // Personal
+                    dob: rawDob,
                     gender: student.gender || "",
                     bloodGroup: student.bloodGroup || "",
                     category: student.category || "",
-                    physicallyDisabled: student.physicallyDisabled || "No",
+                    religion: student.religion || "",
+                    nationality: student.nationality || "Indian",
+                    house: student.house || "",
+                    freeScheme: student.freeScheme || "",
+                    economicallyWeakSection: student.economicallyWeakSection || "",
+                    minorityStatus: student.minorityStatus || "",
+
+                    // Academic
+                    className: resolvedClass,           // used by existing queries
+                    currentClass: resolvedClass,        // new field
+                    classAtAdmission: student.classAtAdmission || "",
+                    section: resolvedSection,
+                    rollNumber: student.rollNumber || "",
+                    stream: student.stream || "",
+                    udise: student.udise || "",
+                    cbseEnrolmentNo: student.cbseEnrolmentNo || "",
                     aadharNo: student.aadharNo || "",
-                    mobileNo: student.mobileNo || "",
                     pen: student.pen || "",
                     aparId: student.aparId || "",
 
-                    // Academic
-                    className: student.className,
-                    section: student.section || "",
-                    session: student.session || "",
+                    // Contact
+                    mobileNo: student.mobileNo || "",
+                    contact2: student.contact2 || "",
+                    contact3: student.contact3 || "",
+                    email: email,
+                    address: student.address || student.localAddress || "",
+                    localAddress: student.localAddress || student.address || "",
+                    permanentAddress: student.permanentAddress || "",
+                    pinCode: student.pinCode || "",
+                    transport: student.transport || "",
 
-                    // Parents
+                    // Family
                     fatherName: student.fatherName || "",
                     fatherQualification: student.fatherQualification || "",
                     fatherOccupation: student.fatherOccupation || "",
-                    fatherPhone: student.fatherPhone || "",
-                    fatherAadharNo: student.fatherAadharNo || "",
-
+                    fatherMobile: student.fatherMobile || "",
                     motherName: student.motherName || "",
                     motherQualification: student.motherQualification || "",
                     motherOccupation: student.motherOccupation || "",
-                    motherAadharNo: student.motherAadharNo || "",
-
-                    // Family History
-                    noOfBrothers: student.noOfBrothers || "0",
-                    noOfSisters: student.noOfSisters || "0",
+                    motherMobile: student.motherMobile || "",
+                    guardianName: student.guardianName || "",
+                    guardianRelation: student.guardianRelation || "",
+                    guardianQualification: student.guardianQualification || "",
                     annualIncome: student.annualIncome || "",
 
-                    // Address
-                    localAddress: student.localAddress || "",
-                    permanentAddress: student.permanentAddress || "",
-
-                    // Bank Details
-                    accountNumber: student.accountNumber || "",
-                    accountHolderName: student.accountHolderName || "",
-                    ifscCode: student.ifscCode || "",
+                    // Left / TC details
+                    lastClass: student.lastClass || "",
+                    lastDate: student.lastDate || "",
+                    leftYear: student.leftYear || "",
+                    tcNumber: student.tcNumber || "",
+                    block: student.block || "",
+                    previousSchool: student.previousSchool || "",
+                    previousSchoolAddress: student.previousSchoolAddress || "",
+                    remarks: student.remarks || "",
 
                     // Medical
                     height: student.height || "",
                     weight: student.weight || "",
-                    allergies: student.allergies || "None",
+                    allergies: student.allergies || "",
+                    physicallyDisabled: student.physicallyDisabled || "No",
 
-                    // Default missing images to empty string, waiting for student self-upload
-                    childPhotoUrl: "",
+                    // Bank
+                    accountNumber: student.accountNumber || "",
+                    accountHolderName: student.accountHolderName || "",
+                    ifscCode: student.ifscCode || "",
+                    bankName: student.bankName || "",
+
+                    // Documents (empty, to be uploaded by student)
+                    childPhotoUrl: student.childPhotoUrl || "",
                     parentPhotoUrl: "",
                     aadharUrl: "",
                     aparUrl: "",
                     fatherAadharUrl: "",
                     motherAadharUrl: "",
+
                     createdAt: new Date(),
-                    updatedAt: new Date()
+                    updatedAt: new Date(),
                 };
 
-                // Remove A and B, replace with Single deeply nested structure:
-                // users -> classes -> {className} -> sections -> {section} -> students -> {uid} -> Full Student Data
-                const sectionName = studentData.section || "Unassigned";
-                const studentDocRef = db
-                    .collection("users")
-                    .doc("classes")
-                    .collection(studentData.className)
-                    .doc("sections")
-                    .collection(sectionName)
-                    .doc("students")
-                    .collection("profiles")
-                    .doc(uid);
+                // ── Firestore path ──
+                // users → classes → {className} → sections → {section} → students → profiles → {uid}
+                const rootRef = db.collection("users").doc("classes");
+                const classRef = rootRef.collection(resolvedClass).doc("sections");
+                const sectionRef = classRef.collection(resolvedSection).doc("students");
+                const profileRef = sectionRef.collection("profiles").doc(uid);
 
-                // Ensure parent documents exist for console visibility
-                await db.collection("users").doc("classes").set({ description: "Root for classes", updatedAt: new Date() }, { merge: true });
-                await db.collection("users").doc("classes").collection(studentData.className).doc("sections").set({ description: `Root for sections in ${studentData.className}`, updatedAt: new Date() }, { merge: true });
-                await db.collection("users").doc("classes").collection(studentData.className).doc("sections").collection(sectionName).doc("students").set({ description: `Root for students in ${studentData.className} - ${sectionName}`, updatedAt: new Date() }, { merge: true });
+                // Ensure parent stubs exist (so Firestore console shows tree)
+                await rootRef.set({ updatedAt: new Date() }, { merge: true });
+                await classRef.set({ class: resolvedClass, updatedAt: new Date() }, { merge: true });
+                await sectionRef.set({ section: resolvedSection, class: resolvedClass, updatedAt: new Date() }, { merge: true });
 
-                // Save full data to nested class/section path
-                await studentDocRef.set(studentData, { merge: true });
+                // Save student
+                await profileRef.set(studentData, { merge: true });
+
+                // Also save a lightweight lookup doc at top-level for quick queries
+                await db.collection("studentLookup").doc(uid).set({
+                    uid,
+                    admissionNumber: admNo,
+                    name: studentData.name,
+                    className: resolvedClass,
+                    section: resolvedSection,
+                    status: studentData.status,
+                    mobileNo: studentData.mobileNo,
+                    email,
+                }, { merge: true });
 
                 successCount++;
             } catch (err: any) {
                 console.error(`Failed to import student ${student.admissionNumber}:`, err);
-                errors.push({
-                    admissionNumber: student.admissionNumber,
-                    error: err.message
-                });
+                errors.push({ admissionNumber: student.admissionNumber, error: err.message });
             }
         }
 
-        return NextResponse.json({
-            success: true,
-            successCount,
-            errors
-        });
+        return NextResponse.json({ success: true, successCount, errors });
 
     } catch (error: any) {
-        console.error("Bulk import failed at route level:", error);
+        console.error("Bulk import failed:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
