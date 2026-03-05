@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, CheckSquare, GraduationCap,
-    BookOpen, User, Settings, Loader2
+    BookOpen, User, Settings, Loader2, Clock
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -38,6 +38,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 { href: "/teacher/attendance", label: "Attendance", icon: CheckSquare },
                 { href: "/teacher/marks", label: "Marks", icon: GraduationCap },
                 { href: "/teacher/homework", label: "Homework", icon: BookOpen },
+                { href: "/teacher/timetable", label: "My Timetable", icon: Clock },
             ],
         },
         {
