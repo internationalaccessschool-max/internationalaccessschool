@@ -21,6 +21,7 @@ const TABS = [
     { id: "medical", label: "Medical", icon: Heart },
     { id: "bank", label: "Bank", icon: Banknote },
     { id: "academic", label: "Academic", icon: BookOpen },
+    { id: "other", label: "Other", icon: FileText },
     { id: "documents", label: "Documents", icon: ImageIcon },
 ];
 
@@ -154,6 +155,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
             case "personal":
                 return (
                     <div className="grid sm:grid-cols-2 gap-4">
+                        <F label="Full Name" field="name" />
                         <F label="First Name" field="firstName" />
                         <F label="Middle Name" field="middleName" />
                         <F label="Last Name" field="lastName" />
@@ -164,20 +166,28 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                         <F label="Nationality" field="nationality" />
                         <F label="Category" field="category" options={CATEGORY_OPTIONS} />
                         <F label="Mother Tongue" field="motherTongue" />
+                        <F label="House" field="house" />
+                        <F label="Free Scheme" field="freeScheme" />
+                        <F label="EWS" field="economicallyWeakSection" />
+                        <F label="Minority Status" field="minorityStatus" />
                     </div>
                 );
             case "contact":
                 return (
                     <div className="grid sm:grid-cols-2 gap-4">
-                        <F label="Mobile No" field="mobileNo" type="tel" />
+                        <F label="Mobile No (Primary)" field="mobileNo" type="tel" />
+                        <F label="Contact 2" field="contact2" type="tel" />
+                        <F label="Contact 3" field="contact3" type="tel" />
                         <F label="Father's Mobile" field="fatherMobile" type="tel" />
                         <F label="Mother's Mobile" field="motherMobile" type="tel" />
                         <F label="Email" field="email" type="email" />
+                        <div className="sm:col-span-2"><F label="Address" field="address" /></div>
                         <div className="sm:col-span-2"><F label="Present Address" field="presentAddress" /></div>
                         <div className="sm:col-span-2"><F label="Permanent Address" field="permanentAddress" /></div>
                         <F label="City" field="city" />
                         <F label="State" field="state" />
                         <F label="Pin Code" field="pinCode" />
+                        <F label="Transport" field="transport" />
                     </div>
                 );
             case "family":
@@ -186,11 +196,14 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                         <F label="Father's Name" field="fatherName" />
                         <F label="Father's Occupation" field="fatherOccupation" />
                         <F label="Father's Education" field="fatherEducation" />
+                        <F label="Father's Qualification" field="fatherQualification" />
                         <F label="Mother's Name" field="motherName" />
                         <F label="Mother's Occupation" field="motherOccupation" />
                         <F label="Mother's Education" field="motherEducation" />
+                        <F label="Mother's Qualification" field="motherQualification" />
                         <F label="Guardian Name" field="guardianName" />
                         <F label="Guardian Relation" field="guardianRelation" />
+                        <F label="Guardian Qualification" field="guardianQualification" />
                         <F label="Guardian Mobile" field="guardianMobile" type="tel" />
                         <F label="Annual Family Income" field="annualIncome" />
                     </div>
@@ -219,24 +232,47 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
             case "academic":
                 return (
                     <div className="grid sm:grid-cols-2 gap-4">
-                        <F label="Admission Number" field="admissionNumber" />
-                        <F label="Class" field="className" options={role === "admin" ? CLASSES : undefined} />
+                        <F label="S.N (Serial No)" field="serialNumber" />
+                        <F label="Admission Number (ENR)" field="admissionNumber" />
+                        <F label="Status" field="status" options={["ACTIVE", "LEFT"]} />
+                        <F label="Session" field="session" />
+                        <F label="Date of Admission" field="dateOfAdmission" />
+                        <F label="Class at Admission" field="classAtAdmission" />
+                        <F label="Current Class" field="currentClass" options={role === "admin" ? ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"] : undefined} />
+                        <F label="Class (DB)" field="className" options={role === "admin" ? ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"] : undefined} />
                         <F label="Section" field="section" options={role === "admin" ? SECTIONS : undefined} />
-                        <F label="Session / Year" field="session" />
                         <F label="Roll Number" field="rollNumber" />
                         <F label="Stream" field="stream" options={["General", "Science", "Commerce", "Arts", "Vocational"]} />
                         <F label="Aadhaar Number" field="aadharNo" />
                         <F label="PEN" field="pen" />
                         <F label="APAR ID" field="aparId" />
+                        <F label="UDISE" field="udise" />
+                        <F label="CBSE Enrolment No" field="cbseEnrolmentNo" />
+                        <F label="Branch" field="branch" />
+                        <F label="Block" field="block" />
+                        <F label="TC Number" field="tcNumber" />
                         <F label="Previous School" field="previousSchool" />
-                        <div className="sm:col-span-2">
-                            {role === "teacher" && (
-                                <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3">
-                                    <Lock className="w-3.5 h-3.5 shrink-0" />
-                                    Fields like Admission No, Class, Section, and IDs are managed by Admin only.
-                                </div>
-                            )}
-                        </div>
+                        <F label="Prev. School Address" field="previousSchoolAddress" />
+                        <F label="Last Class" field="lastClass" />
+                        <F label="Last Date" field="lastDate" />
+                        <F label="Left Year" field="leftYear" />
+                        {role === "teacher" && (
+                            <div className="sm:col-span-2 mt-2 flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3">
+                                <Lock className="w-3.5 h-3.5 shrink-0" />
+                                Fields like Admission No, Class, Section, and IDs are managed by Admin only.
+                            </div>
+                        )}
+                    </div>
+                );
+            case "other":
+                return (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2"><F label="Remarks" field="remarks" /></div>
+                        <F label="House" field="house" />
+                        <F label="Free Scheme" field="freeScheme" />
+                        <F label="EWS" field="economicallyWeakSection" />
+                        <F label="Minority Status" field="minorityStatus" />
+                        <F label="Transport" field="transport" />
                     </div>
                 );
             case "documents":
