@@ -67,21 +67,38 @@ export default function AdminTeachersPage() {
     const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
 
     const [assigningTeacher, setAssigningTeacher] = useState<Teacher | null>(null);
-    const [assignment, setAssignment] = useState<Assignment>(emptyAssignment());
+    // periodSchedule: { "1": { className, section, subject }, "2": {...}, ... }
+    const [periodSchedule, setPeriodSchedule] = useState<Record<string, { className: string; section: string; subject: string }>>({});
+    const [activePeriod, setActivePeriod] = useState<string>("1");
+    const [periodClassSubjects, setPeriodClassSubjects] = useState<string[]>([]);
+    const [loadingPeriodSubjects, setLoadingPeriodSubjects] = useState(false);
     const [savingAssign, setSavingAssign] = useState(false);
 
     // Edit Teacher
     const EMPTY_EDIT = {
+        // Basic + Personal (merged)
         firstName: "", lastName: "", phone: "", qualification: "", subjects: [] as string[],
-        dob: "", gender: "", bloodGroup: "", socialCategory: "", fatherName: "", permanentAddress: "", emergencyContact: "",
+        designation: "", joiningDate: "",
+        dob: "", gender: "", bloodGroup: "", socialCategory: "",
+        fatherName: "", permanentAddress: "", emergencyContact: "",
+        // Salary
+        basicSalary: "", hra: "", da: "", otherAllowances: "",
+        // Bank
+        bankName: "", branchName: "", cinNumber: "", bankAccountNumber: "", ifscCode: "",
+        // Documents
         panNumber: "", aadhaarNumber: "",
-        panCardUrl: "", panCardName: "", aadhaarUrl: "", aadhaarName: "",
-        bankName: "", bankAccountNumber: "", ifscCode: "", uanNumber: "", epfNumber: "",
-        designation: "", joiningDate: "", basicSalary: "",
+        panCardUrl: "", panCardName: "",
+        aadhaarUrl: "", aadhaarName: "",
+        drivingLicenceUrl: "", drivingLicenceName: "",
+        passportUrl: "", passportName: "",
+        // PF & ESIC
+        uanNumber: "", epfAccountNumber: "", pfJoiningDate: "", pfExitDate: "",
+        esicIpNumber: "", esicJoiningDate: "", esicExitDate: "", esicDispensary: "",
+        // Credentials
         newEmail: "", newPassword: "",
     };
     const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
-    const [editTab, setEditTab] = useState<"basic" | "personal" | "documents" | "bank" | "credentials">("basic");
+    const [editTab, setEditTab] = useState<"basic" | "salary" | "bank" | "documents" | "pf" | "credentials">("basic");
     const [editData, setEditData] = useState(EMPTY_EDIT);
     const [savingEdit, setSavingEdit] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
@@ -96,6 +113,8 @@ export default function AdminTeachersPage() {
             phone: d.phone || "",
             qualification: d.qualification || "",
             subjects: d.subjects || [],
+            designation: d.designation || "",
+            joiningDate: d.joiningDate || "",
             dob: d.dob || "",
             gender: d.gender || "",
             bloodGroup: d.bloodGroup || "",
@@ -103,20 +122,37 @@ export default function AdminTeachersPage() {
             fatherName: d.fatherName || "",
             permanentAddress: d.permanentAddress || "",
             emergencyContact: d.emergencyContact || "",
+            // Salary
+            basicSalary: d.basicSalary || "",
+            hra: d.hra || "",
+            da: d.da || "",
+            otherAllowances: d.otherAllowances || "",
+            // Bank
+            bankName: d.bankName || "",
+            branchName: d.branchName || "",
+            cinNumber: d.cinNumber || "",
+            bankAccountNumber: d.bankAccountNumber || "",
+            ifscCode: d.ifscCode || "",
+            // Documents
             panNumber: d.panNumber || "",
             aadhaarNumber: d.aadhaarNumber || "",
             panCardUrl: d.panCardUrl || "",
             panCardName: d.panCardName || "",
             aadhaarUrl: d.aadhaarUrl || "",
             aadhaarName: d.aadhaarName || "",
-            bankName: d.bankName || "",
-            bankAccountNumber: d.bankAccountNumber || "",
-            ifscCode: d.ifscCode || "",
+            drivingLicenceUrl: d.drivingLicenceUrl || "",
+            drivingLicenceName: d.drivingLicenceName || "",
+            passportUrl: d.passportUrl || "",
+            passportName: d.passportName || "",
+            // PF & ESIC
             uanNumber: d.uanNumber || "",
-            epfNumber: d.epfNumber || "",
-            designation: d.designation || "",
-            joiningDate: d.joiningDate || "",
-            basicSalary: d.basicSalary || "",
+            epfAccountNumber: d.epfAccountNumber || d.epfNumber || "",
+            pfJoiningDate: d.pfJoiningDate || "",
+            pfExitDate: d.pfExitDate || "",
+            esicIpNumber: d.esicIpNumber || "",
+            esicJoiningDate: d.esicJoiningDate || "",
+            esicExitDate: d.esicExitDate || "",
+            esicDispensary: d.esicDispensary || "",
             newEmail: "",
             newPassword: "",
         });
@@ -248,62 +284,48 @@ export default function AdminTeachersPage() {
         }
     };
 
-    // ── Assignment helpers ────────────────────────────────────────────────
+    // ── Period Schedule helpers ────────────────────────────────────────────
     const startAssign = (teacher: Teacher) => {
         setAssigningTeacher(teacher);
-        // Migrate old flat format if needed
-        const a = teacher.assignment as any;
-        if (a && !a.classSections && a.classes) {
-            const cs: ClassSectionMap = {};
-            (a.classes || []).forEach((c: string) => { cs[c] = a.sections || []; });
-            setAssignment({ classSections: cs, subjects: a.subjects || [], streams: a.streams || [] });
-        } else {
-            setAssignment(a && a.classSections ? a : emptyAssignment());
-        }
+        const ps = (teacher as any).periodSchedule || {};
+        setPeriodSchedule(ps);
+        setActivePeriod("1");
+        // Load subjects for period 1's class if already set
+        const p1 = ps["1"];
+        if (p1?.className) loadPeriodSubjects(p1.className);
+        else setPeriodClassSubjects([]);
     };
 
-    const toggleSection = (cls: string, sec: string) => {
-        setAssignment(prev => {
-            const current = prev.classSections[cls] || [];
-            const updated = current.includes(sec) ? current.filter(s => s !== sec) : [...current, sec];
-            const newMap = { ...prev.classSections };
-            if (updated.length === 0) delete newMap[cls]; else newMap[cls] = updated;
-            return { ...prev, classSections: newMap };
+    const loadPeriodSubjects = (className: string) => {
+        if (!className) { setPeriodClassSubjects([]); return; }
+        setLoadingPeriodSubjects(true);
+        import("firebase/firestore").then(({ doc: fsDoc, getDoc }) =>
+            getDoc(fsDoc(db, "classSubjects", className)).then(snap => {
+                setPeriodClassSubjects(snap.exists() ? (snap.data().subjects || []) : []);
+                setLoadingPeriodSubjects(false);
+            })
+        );
+    };
+
+    const updatePeriodField = (period: string, field: "className" | "section" | "subject", value: string) => {
+        setPeriodSchedule(prev => {
+            const entry = { ...(prev[period] || { className: "", section: "", subject: "" }), [field]: value };
+            if (field === "className") { entry.section = ""; entry.subject = ""; loadPeriodSubjects(value); }
+            if (field === "section") { entry.subject = ""; }
+            return { ...prev, [period]: entry };
         });
     };
-
-    const toggleClass = (cls: string) => {
-        setAssignment(prev => {
-            const newMap = { ...prev.classSections };
-            if (newMap[cls]) delete newMap[cls]; else newMap[cls] = [];
-            return { ...prev, classSections: newMap };
-        });
-    };
-
-    const toggleSubject = (s: string) =>
-        setAssignment(prev => ({
-            ...prev, subjects: prev.subjects.includes(s)
-                ? prev.subjects.filter(x => x !== s) : [...prev.subjects, s]
-        }));
-
-    const toggleStream = (s: string) =>
-        setAssignment(prev => ({
-            ...prev, streams: prev.streams.includes(s)
-                ? prev.streams.filter(x => x !== s) : [...prev.streams, s]
-        }));
 
     const saveAssignment = async () => {
         if (!assigningTeacher) return;
         setSavingAssign(true);
-        await updateDoc(doc(db, "teachers", assigningTeacher.id), { assignment });
-        await updateDoc(doc(db, "users", assigningTeacher.id), { assignment });
+        await updateDoc(doc(db, "teachers", assigningTeacher.id), { periodSchedule });
+        await updateDoc(doc(db, "users", assigningTeacher.id), { periodSchedule });
         setSavingAssign(false);
         setAssigningTeacher(null);
     };
 
-    const hasSeniorClass = Object.keys(assignment.classSections).some(c => SENIOR_CLASSES.includes(c));
-    const assignedClassCount = Object.keys(assignment.classSections).length;
-    const assignedSectionCount = Object.values(assignment.classSections).reduce((a, s) => a + s.length, 0);
+    const assignedPeriodsCount = Object.values(periodSchedule).filter(p => p?.className && p?.subject).length;
 
     const filtered = teachers.filter(t =>
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
@@ -396,19 +418,18 @@ export default function AdminTeachersPage() {
                                     {teacher.qualification && <div className="flex items-center gap-2"><GraduationCap className="w-3.5 h-3.5 shrink-0" />{teacher.qualification}</div>}
                                 </div>
 
-                                {/* Assignment chips */}
+                                {/* Period summary chips on card */}
                                 <div className="flex flex-wrap gap-1.5 mb-4 min-h-[24px]">
-                                    {classCount > 0 ? (
-                                        <>
-                                            <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{classCount} class{classCount > 1 ? "es" : ""}</span>
-                                            {sectionCount > 0 && <span className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{sectionCount} section{sectionCount > 1 ? "s" : ""}</span>}
-                                            {(a?.subjects || []).slice(0, 2).map((s: string) => (
-                                                <span key={s} className="text-[11px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{s}</span>
-                                            ))}
-                                        </>
-                                    ) : (
-                                        <span className="text-[11px] text-gray-300 italic">No classes assigned yet</span>
-                                    )}
+                                    {(() => {
+                                        const ps = (teacher as any).periodSchedule || {};
+                                        const filled = Object.entries(ps).filter(([, v]: any) => v?.className && v?.subject);
+                                        if (filled.length === 0) return <span className="text-[11px] text-gray-300 italic">No periods assigned yet</span>;
+                                        return filled.slice(0, 3).map(([period, v]: any) => (
+                                            <span key={period} className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                                P{period}: {v.subject} · {v.className}-{v.section}
+                                            </span>
+                                        ));
+                                    })()}
                                 </div>
 
                                 <div className="flex gap-2 pt-3 border-t border-gray-50">
@@ -490,298 +511,352 @@ export default function AdminTeachersPage() {
                 </div>
             )}
 
-            {/* ── Assignment Modal ─────────────────────────────────────────── */}
+            {/* ── Period-Based Assignment Modal ─────────────────────────────── */}
             {assigningTeacher && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setAssigningTeacher(null)}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
                         <div className="gradient-navy px-6 py-5 flex items-center justify-between shrink-0">
                             <div>
-                                <h2 className="font-bold text-white text-lg">Assign — {assigningTeacher.firstName} {assigningTeacher.lastName}</h2>
-                                <p className="text-white/50 text-xs mt-0.5">Select classes, sections, and subjects</p>
+                                <h2 className="font-bold text-white text-lg">Assign Periods — {assigningTeacher.firstName} {assigningTeacher.lastName}</h2>
+                                <p className="text-white/50 text-xs mt-0.5">{assignedPeriodsCount}/8 periods assigned · Click a period tab then set Class, Section, Subject</p>
                             </div>
                             <button onClick={() => setAssigningTeacher(null)} className="text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-7">
-                            {/* Stats */}
-                            {(assignedClassCount > 0 || assignment.subjects.length > 0) && (
-                                <div className="flex gap-3 flex-wrap">
-                                    {assignedClassCount > 0 && <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-full font-semibold">{assignedClassCount} classe{assignedClassCount > 1 ? "s" : ""} · {assignedSectionCount} section{assignedSectionCount !== 1 ? "s" : ""}</span>}
-                                    {assignment.subjects.length > 0 && <span className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-3 py-1 rounded-full font-semibold">{assignment.subjects.length} subject{assignment.subjects.length !== 1 ? "s" : ""}</span>}
-                                </div>
-                            )}
+                        {/* Period tabs */}
+                        <div className="flex border-b border-gray-100 shrink-0 px-4 pt-3 gap-1 overflow-x-auto">
+                            {["1", "2", "3", "4", "5", "6", "7", "8"].map(p => {
+                                const entry = periodSchedule[p];
+                                const filled = entry?.className && entry?.subject;
+                                return (
+                                    <button key={p} onClick={() => { setActivePeriod(p); if (entry?.className) loadPeriodSubjects(entry.className); }}
+                                        className={`relative flex-shrink-0 min-w-[64px] px-3 pb-3 text-sm font-bold rounded-t-xl transition-all ${activePeriod === p
+                                            ? "bg-navy text-white"
+                                            : "text-gray-400 hover:text-navy hover:bg-gray-50"
+                                            }`}>
+                                        Period {p}
+                                        {filled && (
+                                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                            {/* Classes & Sections */}
-                            <div>
-                                <p className="text-sm font-bold text-navy mb-3 flex items-center gap-2">
-                                    <span className="text-base">📚</span> Classes & Sections
-                                    <span className="text-xs text-gray-400 font-normal">(click class to add, then pick sections)</span>
-                                </p>
-                                <div className="space-y-3">
-                                    {CLASSES.map(cls => {
-                                        const isClassSelected = !!assignment.classSections[cls];
-                                        const selectedSections = assignment.classSections[cls] || [];
-                                        return (
-                                            <div key={cls} className={`rounded-xl border transition-all ${isClassSelected ? "border-blue-200 bg-blue-50" : "border-gray-100 bg-gray-50"}`}>
-                                                <button type="button" onClick={() => toggleClass(cls)}
-                                                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold rounded-xl transition-all ${isClassSelected ? "text-blue-700" : "text-gray-500 hover:text-gray-700"}`}>
-                                                    <span className="flex items-center gap-2">
-                                                        {isClassSelected && <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center">✓</span>}
+                        {/* Period editor */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {["1", "2", "3", "4", "5", "6", "7", "8"].map(p => {
+                                if (p !== activePeriod) return null;
+                                const entry = periodSchedule[p] || { className: "", section: "", subject: "" };
+                                return (
+                                    <div key={p} className="space-y-5">
+                                        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                                            <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Period {p} Assignment</p>
+                                            {entry.className && entry.subject ? (
+                                                <p className="text-sm text-indigo-800 mt-1 font-medium">
+                                                    Class {entry.className} – Sec {entry.section} · {entry.subject}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-indigo-400 mt-1">Not assigned yet</p>
+                                            )}
+                                        </div>
+
+                                        {/* Step 1: Class */}
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">1. Select Class</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"].map(cls => (
+                                                    <button key={cls} type="button"
+                                                        onClick={() => updatePeriodField(p, "className", cls)}
+                                                        className={`w-11 h-11 rounded-xl text-sm font-bold border transition-all ${entry.className === cls
+                                                            ? "bg-navy text-white border-navy"
+                                                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-navy/30"
+                                                            }`}>
                                                         {cls}
-                                                    </span>
-                                                    {isClassSelected && selectedSections.length > 0 && (
-                                                        <span className="text-[11px] text-blue-500">Sec: {selectedSections.join(", ")}</span>
-                                                    )}
-                                                </button>
-                                                {isClassSelected && (
-                                                    <div className="flex gap-2 px-4 pb-3">
-                                                        {SECTIONS.map(sec => (
-                                                            <button key={sec} type="button" onClick={() => toggleSection(cls, sec)}
-                                                                className={`w-9 h-9 rounded-lg text-xs font-bold border transition-all ${selectedSections.includes(sec) ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-400 border-gray-200 hover:border-blue-300"}`}>
-                                                                {sec}
+                                                    </button>
+                                                ))}
+                                                {entry.className && (
+                                                    <button type="button" onClick={() => updatePeriodField(p, "className", "")}
+                                                        className="w-11 h-11 rounded-xl text-xs text-red-400 border border-red-100 hover:bg-red-50">✕</button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Step 2: Section */}
+                                        {entry.className && (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">2. Select Section</label>
+                                                <div className="flex gap-2">
+                                                    {["A", "B", "C", "D", "E"].map(sec => (
+                                                        <button key={sec} type="button"
+                                                            onClick={() => updatePeriodField(p, "section", sec)}
+                                                            className={`w-11 h-11 rounded-xl text-sm font-bold border transition-all ${entry.section === sec
+                                                                ? "bg-indigo-600 text-white border-indigo-600"
+                                                                : "bg-gray-50 text-gray-500 border-gray-200 hover:border-indigo-300"
+                                                                }`}>
+                                                            {sec}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Step 3: Subject */}
+                                        {entry.className && (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">3. Select Subject</label>
+                                                {loadingPeriodSubjects ? (
+                                                    <div className="flex items-center gap-2 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading subjects...</div>
+                                                ) : periodClassSubjects.length === 0 ? (
+                                                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
+                                                        ⚠️ No subjects configured for Class {entry.className}. Go to <strong>Manage Subjects</strong> first.
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {periodClassSubjects.map(subj => (
+                                                            <button key={subj} type="button"
+                                                                onClick={() => updatePeriodField(p, "subject", subj)}
+                                                                className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${entry.subject === subj
+                                                                    ? "bg-emerald-600 text-white border-emerald-600"
+                                                                    : "bg-gray-50 text-gray-500 border-gray-200 hover:border-emerald-300"
+                                                                    }`}>
+                                                                {entry.subject === subj && "✓ "}{subj}
                                                             </button>
                                                         ))}
-                                                        <span className="self-center text-xs text-gray-400 ml-1">
-                                                            {selectedSections.length === 0 ? "Select sections →" : `${selectedSections.length} selected`}
-                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Subjects */}
-                            <div>
-                                <p className="text-sm font-bold text-navy mb-3">📖 Subjects Taught</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {SUBJECTS.map(s => (
-                                        <button key={s} type="button" onClick={() => toggleSubject(s)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${assignment.subjects.includes(s) ? "bg-purple-50 border-purple-200 text-purple-700" : "bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300"}`}>
-                                            {assignment.subjects.includes(s) && "✓ "}{s}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Stream — only show if Class 11 or 12 selected */}
-                            {hasSeniorClass && (
-                                <div>
-                                    <p className="text-sm font-bold text-navy mb-2">🎓 Stream <span className="text-xs text-amber-600 font-normal">(for Class 11/12)</span></p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {STREAMS.map(s => (
-                                            <button key={s} type="button" onClick={() => toggleStream(s)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${assignment.streams.includes(s) ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300"}`}>
-                                                {assignment.streams.includes(s) && "✓ "}{s}
-                                            </button>
-                                        ))}
+                                        )}
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
 
-                        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end bg-gray-50 shrink-0">
-                            <button onClick={() => setAssigningTeacher(null)} className="px-5 py-2.5 rounded-xl border text-sm text-gray-500">Cancel</button>
-                            <button onClick={saveAssignment} disabled={savingAssign}
-                                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60">
-                                {savingAssign ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                {savingAssign ? "Saving..." : "Save Assignment"}
-                            </button>
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
+                            <p className="text-xs text-gray-400">{assignedPeriodsCount} of 8 periods configured</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setAssigningTeacher(null)} className="px-5 py-2.5 rounded-xl border text-sm text-gray-500">Cancel</button>
+                                <button onClick={saveAssignment} disabled={savingAssign}
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60">
+                                    {savingAssign ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    {savingAssign ? "Saving..." : "Save Schedule"}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
+
 
             {/* ── Edit Teacher Modal ── */}
-            {editingTeacher && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setEditingTeacher(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-                            <div>
-                                <h2 className="font-bold text-navy text-lg">Edit Teacher</h2>
-                                <p className="text-xs text-gray-400">{editingTeacher.email}</p>
+            {
+                editingTeacher && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setEditingTeacher(null)}>
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+                                <div>
+                                    <h2 className="font-bold text-navy text-lg">Edit Teacher</h2>
+                                    <p className="text-xs text-gray-400">{editingTeacher.email}</p>
+                                </div>
+                                <button onClick={() => setEditingTeacher(null)} className="p-2 rounded-xl hover:bg-gray-50 text-gray-400"><X className="w-5 h-5" /></button>
                             </div>
-                            <button onClick={() => setEditingTeacher(null)} className="p-2 rounded-xl hover:bg-gray-50 text-gray-400"><X className="w-5 h-5" /></button>
-                        </div>
-                        {/* Tab Nav */}
-                        <div className="flex border-b border-gray-100 shrink-0 px-6 overflow-x-auto">
-                            {(["basic", "personal", "documents", "bank", "credentials"] as const).map(tab => (
-                                <button key={tab} onClick={() => setEditTab(tab)}
-                                    className={`px-4 py-3 text-xs font-semibold capitalize border-b-2 transition-colors -mb-px whitespace-nowrap ${editTab === tab
-                                        ? tab === "credentials" ? "border-amber-500 text-amber-600" : "border-navy text-navy"
-                                        : "border-transparent text-gray-400 hover:text-gray-600"
-                                        }`}>{tab === "credentials" ? "🔑 Credentials" : tab}</button>
-                            ))}
-                        </div>
-                        {/* Body */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                            {editTab === "basic" && (<>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField label="First Name"><input value={editData.firstName} onChange={e => setEditData(p => ({ ...p, firstName: e.target.value }))} className={inputCls} placeholder="First name" /></FormField>
-                                    <FormField label="Last Name"><input value={editData.lastName} onChange={e => setEditData(p => ({ ...p, lastName: e.target.value }))} className={inputCls} placeholder="Last name" /></FormField>
-                                    <FormField label="Phone"><input value={editData.phone} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} className={inputCls} placeholder="Mobile" /></FormField>
-                                    <FormField label="Qualification"><input value={editData.qualification} onChange={e => setEditData(p => ({ ...p, qualification: e.target.value }))} className={inputCls} placeholder="e.g. B.Ed" /></FormField>
-                                    <FormField label="Designation"><input value={editData.designation} onChange={e => setEditData(p => ({ ...p, designation: e.target.value }))} className={inputCls} placeholder="e.g. PGT, TGT" /></FormField>
-                                    <FormField label="Joining Date"><input type="date" value={editData.joiningDate} onChange={e => setEditData(p => ({ ...p, joiningDate: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="Basic Salary"><input value={editData.basicSalary} onChange={e => setEditData(p => ({ ...p, basicSalary: e.target.value }))} className={inputCls} placeholder="e.g. 25000" /></FormField>
-                                </div>
-                                <FormField label="Subjects Taught">
-                                    <div className="flex flex-wrap gap-2">
-                                        {SUBJECTS.map(s => (
-                                            <button key={s} type="button"
-                                                onClick={() => setEditData(p => ({ ...p, subjects: p.subjects.includes(s) ? p.subjects.filter(x => x !== s) : [...p.subjects, s] }))}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editData.subjects.includes(s) ? "bg-purple-50 border-purple-200 text-purple-700" : "bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300"
-                                                    }`}>
-                                                {editData.subjects.includes(s) && "✓ "}{s}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {editData.subjects.length > 0 && <p className="text-xs text-purple-600 mt-1">{editData.subjects.length} selected</p>}
-                                </FormField>
-                            </>)}
-                            {editTab === "personal" && (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField label="Date of Birth"><input type="date" value={editData.dob} onChange={e => setEditData(p => ({ ...p, dob: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="Gender">
-                                        <select value={editData.gender} onChange={e => setEditData(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
-                                            <option value="">Select</option>
-                                            {["Male", "Female", "Other"].map(o => <option key={o}>{o}</option>)}
-                                        </select>
-                                    </FormField>
-                                    <FormField label="Blood Group">
-                                        <select value={editData.bloodGroup} onChange={e => setEditData(p => ({ ...p, bloodGroup: e.target.value }))} className={inputCls}>
-                                            <option value="">Select</option>
-                                            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(o => <option key={o}>{o}</option>)}
-                                        </select>
-                                    </FormField>
-                                    <FormField label="Social Category">
-                                        <select value={editData.socialCategory} onChange={e => setEditData(p => ({ ...p, socialCategory: e.target.value }))} className={inputCls}>
-                                            <option value="">Select</option>
-                                            {["General", "OBC", "SC", "ST", "Other"].map(o => <option key={o}>{o}</option>)}
-                                        </select>
-                                    </FormField>
-                                    <FormField label="Father's Name"><input value={editData.fatherName} onChange={e => setEditData(p => ({ ...p, fatherName: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="Emergency Contact"><input value={editData.emergencyContact} onChange={e => setEditData(p => ({ ...p, emergencyContact: e.target.value }))} className={inputCls} /></FormField>
-                                    <div className="col-span-2">
-                                        <FormField label="Permanent Address"><input value={editData.permanentAddress} onChange={e => setEditData(p => ({ ...p, permanentAddress: e.target.value }))} className={inputCls} /></FormField>
-                                    </div>
-                                </div>
-                            )}
-                            {editTab === "documents" && (
-                                <div className="space-y-5">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormField label="PAN Number"><input value={editData.panNumber} onChange={e => setEditData(p => ({ ...p, panNumber: e.target.value }))} className={inputCls} placeholder="ABCDE1234F" /></FormField>
-                                        <FormField label="Aadhaar Number"><input value={editData.aadhaarNumber} onChange={e => setEditData(p => ({ ...p, aadhaarNumber: e.target.value }))} className={inputCls} placeholder="12 digits" /></FormField>
+                            {/* Tab Nav */}
+                            <div className="flex border-b border-gray-100 shrink-0 px-2 overflow-x-auto">
+                                {(["basic", "salary", "bank", "documents", "pf", "credentials"] as const).map(tab => (
+                                    <button key={tab} onClick={() => setEditTab(tab)}
+                                        className={`px-3 py-3 text-xs font-semibold capitalize border-b-2 transition-colors -mb-px whitespace-nowrap ${editTab === tab
+                                            ? tab === "credentials" ? "border-amber-500 text-amber-600" : tab === "pf" ? "border-indigo-500 text-indigo-600" : "border-navy text-navy"
+                                            : "border-transparent text-gray-400 hover:text-gray-600"
+                                            }`}>
+                                        {tab === "credentials" ? "🔑 Login" : tab === "pf" ? "📋 PF & ESIC" : tab === "salary" ? "💰 Salary" : tab === "basic" ? "👤 Basic & Personal" : tab === "bank" ? "🏦 Bank" : "📄 Documents"}
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+                                {/* ── Tab: Basic & Personal (merged) ── */}
+                                {editTab === "basic" && (<>
+                                    <div className="col-span-2 mb-1">
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">Professional Info</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {/* PAN Card Upload */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">PAN Card Upload</label>
-                                            {editData.panCardUrl ? (
-                                                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-medium text-green-800 truncate">{editData.panCardName || "PAN Card"}</p>
-                                                        <p className="text-[10px] text-green-600 mt-0.5">Uploaded ✓</p>
-                                                    </div>
-                                                    <div className="flex gap-1 shrink-0">
-                                                        <FileViewerTrigger url={editData.panCardUrl} fileName={editData.panCardName || "pan-card"} label="View" className="text-xs" />
-                                                        <button type="button" onClick={() => setEditData(p => ({ ...p, panCardUrl: "", panCardName: "" }))} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove</button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <CloudinaryUpload
-                                                    folder="admin-docs"
-                                                    subFolder="staff-docs"
-                                                    onUpload={(url, _id, name) => setEditData(p => ({ ...p, panCardUrl: url, panCardName: name }))}
-                                                    acceptedFileTypes="all"
-                                                    maxSizeMB={2}
-                                                />
-                                            )}
-                                        </div>
-                                        {/* Aadhaar Upload */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Aadhaar Upload</label>
-                                            {editData.aadhaarUrl ? (
-                                                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-medium text-green-800 truncate">{editData.aadhaarName || "Aadhaar"}</p>
-                                                        <p className="text-[10px] text-green-600 mt-0.5">Uploaded ✓</p>
-                                                    </div>
-                                                    <div className="flex gap-1 shrink-0">
-                                                        <FileViewerTrigger url={editData.aadhaarUrl} fileName={editData.aadhaarName || "aadhaar"} label="View" className="text-xs" />
-                                                        <button type="button" onClick={() => setEditData(p => ({ ...p, aadhaarUrl: "", aadhaarName: "" }))} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove</button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <CloudinaryUpload
-                                                    folder="admin-docs"
-                                                    subFolder="staff-docs"
-                                                    onUpload={(url, _id, name) => setEditData(p => ({ ...p, aadhaarUrl: url, aadhaarName: name }))}
-                                                    acceptedFileTypes="all"
-                                                    maxSizeMB={2}
-                                                />
-                                            )}
+                                        <FormField label="First Name"><input value={editData.firstName} onChange={e => setEditData(p => ({ ...p, firstName: e.target.value }))} className={inputCls} placeholder="First name" /></FormField>
+                                        <FormField label="Last Name"><input value={editData.lastName} onChange={e => setEditData(p => ({ ...p, lastName: e.target.value }))} className={inputCls} placeholder="Last name" /></FormField>
+                                        <FormField label="Phone"><input value={editData.phone} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} className={inputCls} placeholder="Mobile" /></FormField>
+                                        <FormField label="Qualification"><input value={editData.qualification} onChange={e => setEditData(p => ({ ...p, qualification: e.target.value }))} className={inputCls} placeholder="e.g. B.Ed, M.Sc" /></FormField>
+                                        <FormField label="Designation"><input value={editData.designation} onChange={e => setEditData(p => ({ ...p, designation: e.target.value }))} className={inputCls} placeholder="e.g. PGT, TGT, Lecturer" /></FormField>
+                                        <FormField label="Joining Date"><input type="date" value={editData.joiningDate} onChange={e => setEditData(p => ({ ...p, joiningDate: e.target.value }))} className={inputCls} /></FormField>
+                                    </div>
+
+                                    <div className="mt-2">
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1 mb-3">Personal Details</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField label="Date of Birth"><input type="date" value={editData.dob} onChange={e => setEditData(p => ({ ...p, dob: e.target.value }))} className={inputCls} /></FormField>
+                                        <FormField label="Gender">
+                                            <select value={editData.gender} onChange={e => setEditData(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
+                                                <option value="">Select</option>
+                                                {["Male", "Female", "Other"].map(o => <option key={o}>{o}</option>)}
+                                            </select>
+                                        </FormField>
+                                        <FormField label="Blood Group">
+                                            <select value={editData.bloodGroup} onChange={e => setEditData(p => ({ ...p, bloodGroup: e.target.value }))} className={inputCls}>
+                                                <option value="">Select</option>
+                                                {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(o => <option key={o}>{o}</option>)}
+                                            </select>
+                                        </FormField>
+                                        <FormField label="Social Category">
+                                            <select value={editData.socialCategory} onChange={e => setEditData(p => ({ ...p, socialCategory: e.target.value }))} className={inputCls}>
+                                                <option value="">Select</option>
+                                                {["General", "OBC", "SC", "ST", "Other"].map(o => <option key={o}>{o}</option>)}
+                                            </select>
+                                        </FormField>
+                                        <FormField label="Father's Name"><input value={editData.fatherName} onChange={e => setEditData(p => ({ ...p, fatherName: e.target.value }))} className={inputCls} /></FormField>
+                                        <FormField label="Emergency Contact"><input value={editData.emergencyContact} onChange={e => setEditData(p => ({ ...p, emergencyContact: e.target.value }))} className={inputCls} /></FormField>
+                                        <div className="col-span-2">
+                                            <FormField label="Permanent Address"><input value={editData.permanentAddress} onChange={e => setEditData(p => ({ ...p, permanentAddress: e.target.value }))} className={inputCls} /></FormField>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                            {editTab === "bank" && (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField label="Bank Name"><input value={editData.bankName} onChange={e => setEditData(p => ({ ...p, bankName: e.target.value }))} className={inputCls} placeholder="e.g. SBI" /></FormField>
-                                    <FormField label="Account Number"><input value={editData.bankAccountNumber} onChange={e => setEditData(p => ({ ...p, bankAccountNumber: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="IFSC Code"><input value={editData.ifscCode} onChange={e => setEditData(p => ({ ...p, ifscCode: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="UAN Number"><input value={editData.uanNumber} onChange={e => setEditData(p => ({ ...p, uanNumber: e.target.value }))} className={inputCls} /></FormField>
-                                    <FormField label="EPF Number"><input value={editData.epfNumber} onChange={e => setEditData(p => ({ ...p, epfNumber: e.target.value }))} className={inputCls} /></FormField>
-                                </div>
-                            )}
-                            {editTab === "credentials" && (
-                                <div className="space-y-5">
-                                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-                                        ⚠️ Changes here update the teacher's <strong>Firebase login credentials</strong>. Leave a field blank to keep it unchanged.
+                                </>)}
+
+                                {/* ── Tab: Salary ── */}
+                                {editTab === "salary" && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1 mb-3">Monthly Salary Breakdown</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField label="Basic Salary (₹)"><input value={editData.basicSalary} onChange={e => setEditData(p => ({ ...p, basicSalary: e.target.value }))} className={inputCls} placeholder="e.g. 25000" /></FormField>
+                                            <FormField label="HRA – House Rent Allowance (₹)"><input value={editData.hra} onChange={e => setEditData(p => ({ ...p, hra: e.target.value }))} className={inputCls} placeholder="e.g. 5000" /></FormField>
+                                            <FormField label="DA – Dearness Allowance (₹)"><input value={editData.da} onChange={e => setEditData(p => ({ ...p, da: e.target.value }))} className={inputCls} placeholder="e.g. 2000" /></FormField>
+                                            <FormField label="Other Allowances (₹)"><input value={editData.otherAllowances} onChange={e => setEditData(p => ({ ...p, otherAllowances: e.target.value }))} className={inputCls} placeholder="Medical, transport, etc." /></FormField>
+                                        </div>
+                                        {/* Gross Total preview */}
+                                        {(editData.basicSalary || editData.hra || editData.da || editData.otherAllowances) && (
+                                            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                                                <p className="text-xs text-emerald-600 font-semibold">Gross Monthly Salary</p>
+                                                <p className="text-2xl font-bold text-emerald-700 mt-0.5">
+                                                    ₹{(
+                                                        (Number(editData.basicSalary) || 0) +
+                                                        (Number(editData.hra) || 0) +
+                                                        (Number(editData.da) || 0) +
+                                                        (Number(editData.otherAllowances) || 0)
+                                                    ).toLocaleString("en-IN")}
+                                                </p>
+                                                <p className="text-[10px] text-emerald-500 mt-1">Basic + HRA + DA + Other Allowances</p>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Current Email</p>
-                                        <p className="text-sm font-medium text-navy">{editingTeacher.email}</p>
+                                )}
+
+                                {/* ── Tab: Bank ── */}
+                                {editTab === "bank" && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="col-span-2">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">Bank Account Details</p>
+                                        </div>
+                                        <FormField label="Bank Name"><input value={editData.bankName} onChange={e => setEditData(p => ({ ...p, bankName: e.target.value }))} className={inputCls} placeholder="e.g. State Bank of India" /></FormField>
+                                        <FormField label="Branch Name"><input value={editData.branchName} onChange={e => setEditData(p => ({ ...p, branchName: e.target.value }))} className={inputCls} placeholder="e.g. Connaught Place, New Delhi" /></FormField>
+                                        <FormField label="Account Number"><input value={editData.bankAccountNumber} onChange={e => setEditData(p => ({ ...p, bankAccountNumber: e.target.value }))} className={inputCls} placeholder="Bank account number" /></FormField>
+                                        <FormField label="IFSC Code"><input value={editData.ifscCode} onChange={e => setEditData(p => ({ ...p, ifscCode: e.target.value }))} className={inputCls} placeholder="e.g. SBIN0001234" /></FormField>
+                                        <FormField label="CIN / Customer ID"><input value={editData.cinNumber} onChange={e => setEditData(p => ({ ...p, cinNumber: e.target.value }))} className={inputCls} placeholder="Bank Customer ID No." /></FormField>
                                     </div>
-                                    <FormField label="New Email Address">
-                                        <input
-                                            type="email"
-                                            value={editData.newEmail}
-                                            onChange={e => setEditData(p => ({ ...p, newEmail: e.target.value }))}
-                                            className={inputCls}
-                                            placeholder="Leave blank to keep current email"
-                                        />
-                                    </FormField>
-                                    <FormField label="New Password">
-                                        <div className="relative">
+                                )}
+
+                                {/* ── Tab: Documents ── */}
+                                {editTab === "documents" && (
+                                    <div className="space-y-5">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField label="PAN Number"><input value={editData.panNumber} onChange={e => setEditData(p => ({ ...p, panNumber: e.target.value }))} className={inputCls} placeholder="ABCDE1234F" /></FormField>
+                                            <FormField label="Aadhaar Number"><input value={editData.aadhaarNumber} onChange={e => setEditData(p => ({ ...p, aadhaarNumber: e.target.value }))} className={inputCls} placeholder="12-digit Aadhaar" /></FormField>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <DocUploadSlot label="PAN Card" url={editData.panCardUrl} name={editData.panCardName || "pan-card"} onUpload={(url, name) => setEditData(p => ({ ...p, panCardUrl: url, panCardName: name }))} onRemove={() => setEditData(p => ({ ...p, panCardUrl: "", panCardName: "" }))} />
+                                            <DocUploadSlot label="Aadhaar Card" url={editData.aadhaarUrl} name={editData.aadhaarName || "aadhaar"} onUpload={(url, name) => setEditData(p => ({ ...p, aadhaarUrl: url, aadhaarName: name }))} onRemove={() => setEditData(p => ({ ...p, aadhaarUrl: "", aadhaarName: "" }))} />
+                                            <DocUploadSlot label="Driving Licence" url={editData.drivingLicenceUrl} name={editData.drivingLicenceName || "driving-licence"} onUpload={(url, name) => setEditData(p => ({ ...p, drivingLicenceUrl: url, drivingLicenceName: name }))} onRemove={() => setEditData(p => ({ ...p, drivingLicenceUrl: "", drivingLicenceName: "" }))} />
+                                            <DocUploadSlot label="Passport" url={editData.passportUrl} name={editData.passportName || "passport"} onUpload={(url, name) => setEditData(p => ({ ...p, passportUrl: url, passportName: name }))} onRemove={() => setEditData(p => ({ ...p, passportUrl: "", passportName: "" }))} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Tab: PF & ESIC ── */}
+                                {editTab === "pf" && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="col-span-2">
+                                            <p className="text-xs font-bold text-indigo-500 uppercase tracking-wider border-b border-indigo-100 pb-1">🏦 Provident Fund (PF / EPF)</p>
+                                            <p className="text-[10px] text-gray-400 mt-1">UAN is the 12-digit portable ID. EPF Account No. is employer-linked (e.g. DL/CPM/0012345/000/0000001). These are different numbers.</p>
+                                        </div>
+                                        <FormField label="UAN Number"><input value={editData.uanNumber} onChange={e => setEditData(p => ({ ...p, uanNumber: e.target.value }))} className={inputCls} placeholder="12-digit e.g. 100234567890" /></FormField>
+                                        <FormField label="EPF Account Number"><input value={editData.epfAccountNumber} onChange={e => setEditData(p => ({ ...p, epfAccountNumber: e.target.value }))} className={inputCls} placeholder="e.g. DL/CPM/0012345/000/0000001" /></FormField>
+                                        <div className="col-span-2 mt-1">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">PF Dates</p>
+                                        </div>
+                                        <FormField label="PF Joining Date"><input type="date" value={editData.pfJoiningDate} onChange={e => setEditData(p => ({ ...p, pfJoiningDate: e.target.value }))} className={inputCls} /></FormField>
+                                        <FormField label="PF Exit Date (if applicable)"><input type="date" value={editData.pfExitDate} onChange={e => setEditData(p => ({ ...p, pfExitDate: e.target.value }))} className={inputCls} /></FormField>
+                                        <div className="col-span-2 mt-3">
+                                            <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider border-b border-emerald-100 pb-1">🏥 ESIC (Employee State Insurance)</p>
+                                            <p className="text-[10px] text-gray-400 mt-1">IP Number is the 17-digit Insured Person number. ESIC applies if gross salary ≤ ₹21,000/month.</p>
+                                        </div>
+                                        <FormField label="ESIC IP Number"><input value={editData.esicIpNumber} onChange={e => setEditData(p => ({ ...p, esicIpNumber: e.target.value }))} className={inputCls} placeholder="17-digit IP Number" /></FormField>
+                                        <FormField label="ESIC Dispensary / Hospital"><input value={editData.esicDispensary} onChange={e => setEditData(p => ({ ...p, esicDispensary: e.target.value }))} className={inputCls} placeholder="Assigned ESIC clinic name" /></FormField>
+                                        <div className="col-span-2">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">ESIC Dates</p>
+                                        </div>
+                                        <FormField label="ESIC Joining Date"><input type="date" value={editData.esicJoiningDate} onChange={e => setEditData(p => ({ ...p, esicJoiningDate: e.target.value }))} className={inputCls} /></FormField>
+                                        <FormField label="ESIC Exit Date (if applicable)"><input type="date" value={editData.esicExitDate} onChange={e => setEditData(p => ({ ...p, esicExitDate: e.target.value }))} className={inputCls} /></FormField>
+                                    </div>
+                                )}
+                                {editTab === "credentials" && (
+                                    <div className="space-y-5">
+                                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                                            ⚠️ Changes here update the teacher's <strong>Firebase login credentials</strong>. Leave a field blank to keep it unchanged.
+                                        </div>
+                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Current Email</p>
+                                            <p className="text-sm font-medium text-navy">{editingTeacher.email}</p>
+                                        </div>
+                                        <FormField label="New Email Address">
                                             <input
-                                                type="password"
-                                                value={editData.newPassword}
-                                                onChange={e => setEditData(p => ({ ...p, newPassword: e.target.value }))}
+                                                type="email"
+                                                value={editData.newEmail}
+                                                onChange={e => setEditData(p => ({ ...p, newEmail: e.target.value }))}
                                                 className={inputCls}
-                                                placeholder="Leave blank to keep current password"
+                                                placeholder="Leave blank to keep current email"
                                             />
-                                        </div>
-                                        <p className="text-xs text-gray-400 mt-1.5">Minimum 6 characters.</p>
-                                    </FormField>
-                                </div>
-                            )}
-                            {editError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl">{editError}</div>}
-                        </div>
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0 bg-gray-50">
-                            <button type="button" onClick={() => setEditingTeacher(null)} className="px-5 py-2.5 rounded-xl border text-sm text-gray-500">Cancel</button>
-                            <button onClick={handleSaveEdit} disabled={savingEdit}
-                                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60">
-                                {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                {savingEdit ? "Saving..." : "Save All Changes"}
-                            </button>
+                                        </FormField>
+                                        <FormField label="New Password">
+                                            <div className="relative">
+                                                <input
+                                                    type="password"
+                                                    value={editData.newPassword}
+                                                    onChange={e => setEditData(p => ({ ...p, newPassword: e.target.value }))}
+                                                    className={inputCls}
+                                                    placeholder="Leave blank to keep current password"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1.5">Minimum 6 characters.</p>
+                                        </FormField>
+                                    </div>
+                                )}
+                                {editError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl">{editError}</div>}
+                            </div>
+                            {/* Footer */}
+                            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0 bg-gray-50">
+                                <button type="button" onClick={() => setEditingTeacher(null)} className="px-5 py-2.5 rounded-xl border text-sm text-gray-500">Cancel</button>
+                                <button onClick={handleSaveEdit} disabled={savingEdit}
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60">
+                                    {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    {savingEdit ? "Saving..." : "Save All Changes"}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div>
     );
 }
@@ -796,3 +871,36 @@ function FormField({ label, error, children }: { label: string; error?: string; 
         </div>
     );
 }
+
+function DocUploadSlot({ label, url, name, onUpload, onRemove }: {
+    label: string; url: string; name: string;
+    onUpload: (url: string, name: string) => void;
+    onRemove: () => void;
+}) {
+    return (
+        <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
+            {url ? (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-green-800 truncate">{name}</p>
+                        <p className="text-[10px] text-green-600 mt-0.5">Uploaded ✓</p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                        <FileViewerTrigger url={url} fileName={name} label="View" className="text-xs" />
+                        <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove</button>
+                    </div>
+                </div>
+            ) : (
+                <CloudinaryUpload
+                    folder="admin-docs"
+                    subFolder="staff-docs"
+                    onUpload={(u, _id, n) => onUpload(u, n ?? "")}
+                    acceptedFileTypes="all"
+                    maxSizeMB={5}
+                />
+            )}
+        </div>
+    );
+}
+
