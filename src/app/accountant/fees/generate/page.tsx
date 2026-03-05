@@ -33,7 +33,8 @@ export default function GenerateFeesPage() {
             let skipped = 0;
 
             for (const student of students) {
-                const classId = student.class?.toString() || "";
+                // Student profiles store class as "className" (e.g. "7", "10")
+                const classId = student.className?.toString() || student.class?.toString() || "";
                 if (!classId) { skipped++; continue; }
 
                 // Get fee structure for this class
@@ -58,14 +59,22 @@ export default function GenerateFeesPage() {
                     continue;
                 }
 
+                // Build student name — profiles store firstName + lastName, not a combined "name" field
+                const studentFullName =
+                    student.name ||
+                    student.fullName ||
+                    `${student.firstName || ""} ${student.middleName || ""} ${student.lastName || ""}`.replace(/\s+/g, " ").trim() ||
+                    "Unknown";
+
                 // Create fee record
                 await setDoc(doc(db, "feeRecords", recordId), {
                     studentId: student.id,
-                    studentName: student.name || student.fullName || "Unknown",
-                    rollNo: student.rollNo || "",
-                    class: student.class || "",
+                    studentName: studentFullName,
+                    rollNo: student.rollNo || student.admissionNumber || "",
+                    class: classId,
                     section: student.section || "",
-                    parentEmail: student.parentEmail || student.email || "",
+                    // parentEmail: try all known fields where parent contact might be stored
+                    parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
                     amount,
                     month: selectedMonth + 1,
                     year: selectedYear,
