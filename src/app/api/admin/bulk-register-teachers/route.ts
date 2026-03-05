@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
-const SUBJECTS_MAP: Record<string, string[]> = {};
-
 export async function POST(req: NextRequest) {
     try {
         const { teachers } = await req.json();
@@ -15,7 +13,20 @@ export async function POST(req: NextRequest) {
 
         for (const teacher of teachers) {
             try {
-                const { firstName, lastName, email, phone, subjects, qualification, password } = teacher;
+                const {
+                    // Required
+                    firstName, lastName, email, phone, subjects, password,
+                    // Basic / Employment
+                    qualification, designation, joiningDate, basicSalary,
+                    // Personal
+                    dob, gender, bloodGroup, socialCategory,
+                    fatherName, emergencyContact, permanentAddress,
+                    // Documents
+                    panNumber, aadhaarNumber,
+                    // Bank
+                    bankName, bankAccountNumber, ifscCode, uanNumber, epfNumber,
+                    pfJoiningDate, esicJoiningDate,
+                } = teacher;
 
                 // Parse subjects string → array (split by semicolon or comma)
                 const subjectsArray = String(subjects || "")
@@ -34,17 +45,44 @@ export async function POST(req: NextRequest) {
 
                 const teacherDoc = {
                     uid,
-                    firstName,
-                    lastName,
+                    firstName: firstName || "",
+                    lastName: lastName || "",
                     name: `${firstName} ${lastName}`,
                     email,
-                    phone: String(phone),
+                    phone: String(phone || ""),
                     subjects: subjectsArray,
-                    qualification: qualification || "",
                     role: "teacher",
                     assignment: { classSections: {}, subjects: [], streams: [] },
                     status: "Active",
                     createdAt: new Date().toISOString(),
+
+                    // Basic / Employment
+                    qualification: qualification || "",
+                    designation: designation || "",
+                    joiningDate: joiningDate || "",
+                    basicSalary: basicSalary || "",
+
+                    // Personal
+                    dob: dob || "",
+                    gender: gender || "",
+                    bloodGroup: bloodGroup || "",
+                    socialCategory: socialCategory || "",
+                    fatherName: fatherName || "",
+                    emergencyContact: String(emergencyContact || ""),
+                    permanentAddress: permanentAddress || "",
+
+                    // Documents
+                    panNumber: panNumber || "",
+                    aadhaarNumber: String(aadhaarNumber || ""),
+
+                    // Bank
+                    bankName: bankName || "",
+                    bankAccountNumber: String(bankAccountNumber || ""),
+                    ifscCode: ifscCode || "",
+                    uanNumber: uanNumber || "",
+                    epfNumber: epfNumber || "",
+                    pfJoiningDate: pfJoiningDate || "",
+                    esicJoiningDate: esicJoiningDate || "",
                 };
 
                 await adminDb.collection("teachers").doc(uid).set(teacherDoc);
