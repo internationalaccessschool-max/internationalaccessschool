@@ -1,15 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Settings2, Save, Loader2, CheckCircle2 } from "lucide-react";
+import { Settings2, Save, Loader2, CheckCircle2, Info } from "lucide-react";
 import toast from "react-hot-toast";
 
-interface ClassInfo {
-    id: string;
-    name: string;
-}
+// These IDs MUST match the className stored on student profiles (e.g. "7", "10")
+const CLASS_LIST = [
+    { id: "1", name: "Class 1" },
+    { id: "2", name: "Class 2" },
+    { id: "3", name: "Class 3" },
+    { id: "4", name: "Class 4" },
+    { id: "5", name: "Class 5" },
+    { id: "6", name: "Class 6" },
+    { id: "7", name: "Class 7" },
+    { id: "8", name: "Class 8" },
+    { id: "9", name: "Class 9" },
+    { id: "10", name: "Class 10" },
+    { id: "11", name: "Class 11" },
+    { id: "12", name: "Class 12" },
+];
 
 interface FeeStructure {
     monthly: number;
@@ -17,7 +28,6 @@ interface FeeStructure {
 }
 
 export default function FeeStructurePage() {
-    const [classes, setClasses] = useState<ClassInfo[]>([]);
     const [structure, setStructure] = useState<Record<string, FeeStructure>>({});
     const [saving, setSaving] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -25,28 +35,17 @@ export default function FeeStructurePage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch all classes
-                const classSnap = await getDocs(collection(db, "classes"));
-                const classList: ClassInfo[] = classSnap.docs.map(d => ({
-                    id: d.id,
-                    name: d.data().name || `Class ${d.id}`,
-                }));
-                setClasses(classList.sort((a, b) => a.name.localeCompare(b.name)));
-
-                // Fetch existing fee structures
                 const structureMap: Record<string, FeeStructure> = {};
-                for (const cls of classList) {
+                for (const cls of CLASS_LIST) {
                     const feeDoc = await getDoc(doc(db, "fees", "structure", "classes", cls.id));
-                    if (feeDoc.exists()) {
-                        structureMap[cls.id] = feeDoc.data() as FeeStructure;
-                    } else {
-                        structureMap[cls.id] = { monthly: 0, dueDay: 10 };
-                    }
+                    structureMap[cls.id] = feeDoc.exists()
+                        ? (feeDoc.data() as FeeStructure)
+                        : { monthly: 0, dueDay: 10 };
                 }
                 setStructure(structureMap);
             } catch (err) {
                 console.error(err);
-                toast.error("Failed to load data");
+                toast.error("Failed to load fee structure");
             } finally {
                 setLoading(false);
             }
@@ -104,81 +103,88 @@ export default function FeeStructurePage() {
                 </div>
             </div>
 
-            {/* Fee Structure Table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100">
-                    <h2 className="font-semibold text-navy">Class-wise Fee Configuration</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Set the monthly fee and due day for each class.</p>
-                </div>
-
-                {classes.length === 0 ? (
-                    <div className="text-center py-16 text-gray-400">
-                        <Settings2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                        <p className="text-sm">No classes found. Add classes first from Admin panel.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-gray-50">
-                        {/* Column Headers */}
-                        <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                            <span>Class</span>
-                            <span>Monthly Fee (₹)</span>
-                            <span>Due Day (of month)</span>
-                            <span>Action</span>
-                        </div>
-
-                        {classes.map(cls => (
-                            <div key={cls.id} className="grid grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-gray-50/50 transition-colors">
-                                <div className="font-semibold text-navy">{cls.name}</div>
-
-                                <div>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={structure[cls.id]?.monthly || ""}
-                                        onChange={e => updateField(cls.id, "monthly", Number(e.target.value))}
-                                        placeholder="e.g. 5000"
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        max={28}
-                                        value={structure[cls.id]?.dueDay || 10}
-                                        onChange={e => updateField(cls.id, "dueDay", Number(e.target.value))}
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={() => handleSave(cls.id)}
-                                    disabled={saving === cls.id}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-navy text-white text-sm font-medium hover:bg-navy-light transition-all disabled:opacity-50"
-                                >
-                                    {saving === cls.id ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <Save className="w-4 h-4" />
-                                    )}
-                                    Save
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
             {/* Info Box */}
             <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-100">
-                <CheckCircle2 className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                 <div>
                     <p className="text-sm font-medium text-blue-800">How it works</p>
                     <p className="text-xs text-blue-600 mt-0.5">
                         Set the monthly fee for each class. The <strong>due day</strong> means fees are due on that day every month (e.g., 10 = 10th of each month).
                         After saving, go to <strong>Generate Monthly Fees</strong> to create fee records for all students.
+                        Students with <strong>monthly fee = 0</strong> will be skipped during generation.
                     </p>
+                </div>
+            </div>
+
+            {/* Fee Structure Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-navy">Class-wise Fee Configuration</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Set the monthly fee and due day for each class. Leave monthly fee as 0 to skip that class.</p>
+                </div>
+
+                <div className="divide-y divide-gray-50">
+                    {/* Column Headers */}
+                    <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                        <span>Class</span>
+                        <span>Monthly Fee (₹)</span>
+                        <span>Due Day (of month)</span>
+                        <span>Action</span>
+                    </div>
+
+                    {CLASS_LIST.map(cls => (
+                        <div key={cls.id} className="grid grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-gray-50/50 transition-colors">
+                            <div className="font-semibold text-navy">{cls.name}</div>
+
+                            <div>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={structure[cls.id]?.monthly || ""}
+                                    onChange={e => updateField(cls.id, "monthly", Number(e.target.value))}
+                                    placeholder="e.g. 5000"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={28}
+                                    value={structure[cls.id]?.dueDay || 10}
+                                    onChange={e => updateField(cls.id, "dueDay", Number(e.target.value))}
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
+                                />
+                            </div>
+
+                            <button
+                                onClick={() => handleSave(cls.id)}
+                                disabled={saving === cls.id}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-navy text-white text-sm font-medium hover:bg-navy-light transition-all disabled:opacity-50"
+                            >
+                                {saving === cls.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                                Save
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Workflow steps */}
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                <CheckCircle2 className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                    <p className="text-sm font-medium text-amber-800">Step-by-Step</p>
+                    <ol className="text-xs text-amber-700 mt-1 space-y-0.5 list-decimal list-inside">
+                        <li>Set monthly fee &amp; due day for each class here → <strong>Save</strong></li>
+                        <li>Go to <strong>Generate Monthly Fees</strong> → select month/year → Generate</li>
+                        <li>Go to <strong>Manage Fees</strong> → mark payments as Paid / Overdue / send reminders</li>
+                    </ol>
                 </div>
             </div>
         </div>
