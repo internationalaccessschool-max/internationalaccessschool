@@ -115,7 +115,6 @@ export async function POST(request: Request) {
                     mobileNo: student.mobileNo || "",
                     contact2: student.contact2 || "",
                     contact3: student.contact3 || "",
-                    email: email,
                     address: student.address || student.localAddress || "",
                     localAddress: student.localAddress || student.address || "",
                     permanentAddress: student.permanentAddress || "",
