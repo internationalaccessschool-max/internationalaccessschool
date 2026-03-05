@@ -7,6 +7,10 @@ import { AcademicsSection } from "@/components/home/AcademicsSection";
 import { FeaturesSection } from "@/components/home/FeaturesSection";
 import { TestimonialsSection } from "@/components/home/TestimonialsSection";
 import { GallerySection } from "@/components/home/GallerySection";
+import { AboutSection } from "@/components/home/AboutSection";
+import { AdmissionsSection } from "@/components/home/AdmissionsSection";
+import { CareerSection } from "@/components/home/CareerSection";
+import { ContactSection } from "@/components/home/ContactSection";
 
 export default function Home() {
   return (
@@ -15,10 +19,14 @@ export default function Home() {
 
       <main className="flex-1">
         <HeroSlider />
+        <AboutSection />
         <AcademicsSection />
+        <AdmissionsSection />
         <FeaturesSection />
         <GallerySection />
         <TestimonialsSection />
+        <CareerSection />
+        <ContactSection />
       </main>
 
       <Footer />
