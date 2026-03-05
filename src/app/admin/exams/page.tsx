@@ -26,8 +26,22 @@ import {
 } from "@/components/ui/dialog";
 import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock } from "lucide-react";
 
-const CLASSES = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6",
-    "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"];
+// Fixed canonical class list — always show NUR, LKG, UKG, 1-12
+const FIXED_CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+
+// Normalise "Class 7" → "7", leave "LKG" / "NUR" as-is
+function normaliseClass(raw: string): string {
+    return raw.replace(/^class\s*/i, "").trim();
+}
+
+function sortClasses(arr: string[]): string[] {
+    const order: Record<string, number> = { NUR: -3, LKG: -2, UKG: -1 };
+    return arr.sort((a, b) => {
+        const na = order[a.toUpperCase()] ?? (parseInt(a) || 99);
+        const nb = order[b.toUpperCase()] ?? (parseInt(b) || 99);
+        return na - nb;
+    });
+}
 
 export default function AdminExamsPage() {
     const [exams, setExams] = useState<Exam[]>([]);
@@ -56,26 +70,23 @@ export default function AdminExamsPage() {
         return () => unsub();
     }, []);
 
-    // Load all unique class names from student profiles, merged with fixed list
+    // Load all unique class names from student profiles, normalised and merged with fixed list
     useEffect(() => {
         const fetchClasses = async () => {
             try {
                 const snap = await getDocs(collectionGroup(db, "profiles"));
-                const classSet = new Set<string>(CLASSES); // always include all classes
+                // Start with canonical list
+                const classSet = new Set<string>(FIXED_CLASSES);
                 snap.docs.forEach(d => {
                     const data = d.data();
-                    if (data.className) classSet.add(data.className);
+                    // Normalise both className and currentClass
+                    [data.className, data.currentClass].forEach(raw => {
+                        if (raw) classSet.add(normaliseClass(String(raw)));
+                    });
                 });
-                setAllClasses(Array.from(classSet).sort(
-                    (a, b) => {
-                        const na = parseInt(a.replace("Class ", "")) || 99;
-                        const nb = parseInt(b.replace("Class ", "")) || 99;
-                        return na - nb;
-                    }
-                ));
-            } catch (err) {
-                // Fallback to static list if Firestore fails
-                setAllClasses(CLASSES);
+                setAllClasses(sortClasses(Array.from(classSet)));
+            } catch {
+                setAllClasses(sortClasses([...FIXED_CLASSES]));
             }
         };
         fetchClasses();
