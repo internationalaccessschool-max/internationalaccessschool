@@ -81,11 +81,77 @@ export default function StudentResultsPage() {
 
 
     const handleDownloadPDF = () => {
-        if (typeof window === "undefined") return;
+        if (typeof window === "undefined" || !selectedResult) return;
+        const { marks, totalObtained, totalMax, percentage, overallGrade, examDetails } = selectedResult;
+        const markEntries = Object.values(marks);
+        const studentName = user?.displayName || "Student";
 
-        // We can simply trigger the browser's print dialog to save as PDF
-        // A more advanced approach involves html2canvas and jsPDF, but browser print is often better for standard CSS formatting
-        window.print();
+        const rows = markEntries.map(m => {
+            const subName = subjects[m.subjectId]?.name || "Unknown Subject";
+            const obtained = m.obtained !== null ? String(m.obtained) : "ABSENT";
+            const color = m.obtained !== null ? "#1a2e4c" : "#dc2626";
+            return `<tr>
+                <td style="padding:10px 16px;border-bottom:1px solid #f0f0f0;">${subName}</td>
+                <td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;">${m.total}</td>
+                <td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;font-weight:700;color:${color}">${obtained}</td>
+            </tr>`;
+        }).join("");
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Report Card - ${studentName}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#fff;color:#111;}
+.hdr{background:#1a2e4c;color:#fff;padding:28px 36px;display:flex;align-items:center;gap:18px;}
+.logo{width:60px;height:60px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+.school{font-size:24px;font-weight:800;}
+.exam{font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
+.info{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:20px 36px;background:#f8fafc;border-bottom:1px solid #e5e7eb;}
+.info label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;display:block;margin-bottom:3px;}
+.info span{font-size:15px;font-weight:700;color:#1a2e4c;}
+.tbl{margin:20px 36px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+th{padding:10px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;background:#f8fafc;}
+th:not(:first-child){text-align:right;}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 36px 28px;}
+.sb{padding:18px;border-radius:10px;border:1px solid #e5e7eb;}
+.sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:5px;}
+.sv{font-size:30px;font-weight:900;color:#1a2e4c;}
+.sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:32px 36px 0;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;}
+.sline{border-bottom:2px dashed #d1d5db;margin:0 auto 8px;width:75%;height:36px;}
+.sname{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;}
+@page{size:A4 portrait;margin:8mm;}
+</style></head><body>
+<div class="hdr"><div class="logo">🏫</div>
+<div><div class="school">International Access School</div>
+<div class="exam">${examDetails?.name || "Report Card"}</div></div></div>
+<div class="info">
+<div><label>Student Name</label><span>${studentName}</span></div>
+<div><label>Class</label><span>${selectedResult.classId} – ${selectedResult.sectionId}</span></div>
+<div><label>Period</label><span>${examDetails?.startDate || ""}–${examDetails?.endDate || ""}</span></div>
+<div><label>Year</label><span>${new Date().getFullYear()}</span></div>
+</div>
+<div class="tbl"><table>
+<thead><tr><th>Subject</th><th style="text-align:right">Max Marks</th><th style="text-align:right">Obtained</th></tr></thead>
+<tbody>${rows}</tbody>
+</table></div>
+<div class="sum">
+<div class="sb"><div class="sl">Total Score</div><div class="sv">${totalObtained}<span style="font-size:16px;color:#9ca3af"> / ${totalMax}</span></div></div>
+<div class="sb"><div class="sl">Percentage</div><div class="sv">${percentage}%</div></div>
+<div class="sb"><div class="sl">Overall Grade</div><div class="sv">${overallGrade}</div></div>
+</div>
+<div class="sigs">
+<div><div class="sline"></div><div class="sname">Class Teacher</div></div>
+<div><div class="sline"></div><div class="sname">Principal</div></div>
+<div><div class="sline"></div><div class="sname">Parent / Guardian</div></div>
+</div></body></html>`;
+
+        const pw = window.open("", "_blank", "width=860,height=700");
+        if (!pw) { alert("Please allow popups to download as PDF"); return; }
+        pw.document.write(html);
+        pw.document.close();
+        pw.focus();
+        setTimeout(() => pw.print(), 600);
     };
 
     if (isLoading) {
