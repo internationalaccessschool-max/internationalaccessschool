@@ -12,6 +12,7 @@ import {
     orderBy,
     collectionGroup,
     getDocs,
+    setDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Exam } from "@/types";
@@ -25,10 +26,6 @@ import {
     DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck } from "lucide-react";
-import {
-    collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-    query, orderBy, collectionGroup, getDocs, writeBatch, setDoc
-} from "firebase/firestore";
 
 // Fixed canonical class list — always show NUR, LKG, UKG, 1-12
 const FIXED_CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
