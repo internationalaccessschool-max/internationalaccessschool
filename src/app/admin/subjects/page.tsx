@@ -21,6 +21,15 @@ type ClassSubjects = {
 };
 
 export default function ManageSubjectsPage() {
+    // Helper: Safe string render
+    const safeStr = (val: any): string => {
+        if (!val) return "";
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object') {
+            return val.name || val.label || val.id || JSON.stringify(val);
+        }
+        return String(val);
+    };
     const [selectedClass, setSelectedClass] = useState("1");
     const [subjects, setSubjects] = useState<string[]>([]);
     const [newSubject, setNewSubject] = useState("");
@@ -174,7 +183,7 @@ export default function ManageSubjectsPage() {
                                     <div key={s} className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-100 group">
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold text-gray-300 w-5">{i + 1}</span>
-                                            <span className="text-sm font-medium text-navy">{s}</span>
+                                            <span className="text-sm font-medium text-navy">{safeStr(s)}</span>
                                         </div>
                                         <button onClick={() => removeSubject(s)}
                                             className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
