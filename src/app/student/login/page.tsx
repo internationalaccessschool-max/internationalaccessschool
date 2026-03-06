@@ -15,6 +15,7 @@ const studentLoginSchema = z.object({
     admissionNo: z
         .string()
         .min(1, "Admission Number is required")
+        .max(8, "Admission Number can be at most 8 digits")
         .regex(/^\d+$/, "Only numbers allowed"),
     dob: z.string().min(1, "Date of Birth is required"),
 });
