@@ -182,7 +182,7 @@ export default function AdvancedAdmitCardManagerPage() {
                 // If no timetable exists (no subjects added for this class), we probably shouldn't generate an empty card
                 // but let's generate it anyway with basic info in case the school is lazy
 
-                await setDoc(doc(db, "admitCards", admitCardId), {
+                await setDoc(doc(db, "exams", exam.id!, "admitCards", uid), {
                     examId: exam.id,
                     examName: exam.name,
                     startDate: exam.startDate,
