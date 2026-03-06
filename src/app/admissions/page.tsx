@@ -102,7 +102,10 @@ export default function AdmissionsPage() {
 
             // Save to Firestore
             await addDoc(collection(db, "admission_requests"), {
-                ...data, // includes transformed numbers
+                ...data, // includes firstName, lastName, middleName, etc.
+                // Computed combined name for admin display
+                studentName: `${data.firstName} ${data.middleName ? data.middleName + " " : ""}${data.lastName}`.replace(/\s+/g, " ").trim(),
+                imageUrl: childPhotoUrl,
                 childPhotoUrl,
                 aparUrl,
                 fatherAadharUrl,
