@@ -7,7 +7,8 @@ import {
     AlertTriangle, FileDown, PowerOff, RotateCcw
 } from "lucide-react";
 import {
-    collectionGroup, getDocs, doc, updateDoc
+    collectionGroup, getDocs, doc, updateDoc,
+    query, where, limit, startAfter, getCountFromServer, orderBy
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
@@ -64,49 +65,109 @@ export default function AdminStudentsPage() {
     const [reactivateTarget, setReactivateTarget] = useState<Student | null>(null);
     const [isReactivating, setIsReactivating] = useState(false);
 
+    const [lastVisible, setLastVisible] = useState<any>(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [totalActive, setTotalActive] = useState(0);
+    const [totalLeft, setTotalLeft] = useState(0);
+
+    // Static values for filters since we aren't loading all data
+    const CLASSES = ["All", "Preschool", "Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+    const SECTIONS = ["All", "A", "B", "C", "D", "E"];
+
+    // Fetch total counts on mount
     useEffect(() => {
-        const fetchStudents = async () => {
-            setIsLoading(true);
+        const fetchCounts = async () => {
             try {
-                const snap = await getDocs(collectionGroup(db, "profiles"));
-                let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-                // Deduplicate
-                const seen = new Set<string>();
-                data = data.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
-                setStudents(data);
-            } catch (err) { console.error(err); }
-            finally { setIsLoading(false); }
+                const profilesRef = collectionGroup(db, "profiles");
+                // Active count
+                const activeQuery = query(profilesRef, where("status", "in", ["ACTIVE", "Active", "active"]));
+                const activeSnap = await getCountFromServer(activeQuery);
+
+                // Left count
+                const leftQuery = query(profilesRef, where("status", "==", "LEFT"));
+                const leftSnap = await getCountFromServer(leftQuery);
+
+                setTotalActive(activeSnap.data().count);
+                setTotalLeft(leftSnap.data().count);
+            } catch (err) { console.error("Error fetching counts:", err); }
         };
-        fetchStudents();
+        fetchCounts();
     }, []);
 
-    // Split into active / left
-    const activeStudents = students.filter(s => (s.status || "").toUpperCase() !== "LEFT");
-    const leftStudents = students.filter(s => (s.status || "").toUpperCase() === "LEFT");
+    const buildQuery = (isNextPage = false) => {
+        const profilesRef = collectionGroup(db, "profiles");
+        let queryConstraints: any[] = [];
 
-    const classes = ["All", ...Array.from(new Set(
-        (activeTab === "active" ? activeStudents : leftStudents)
-            .map(s => getClass(s)).filter(Boolean)
-    )).sort()];
+        // Tab Filter
+        if (activeTab === "active") {
+            queryConstraints.push(where("status", "in", ["ACTIVE", "Active", "active"]));
+        } else {
+            queryConstraints.push(where("status", "==", "LEFT"));
+        }
 
-    const sections = ["All", ...Array.from(new Set(
-        (activeTab === "active" ? activeStudents : leftStudents)
-            .filter(s => selectedClass === "All" || getClass(s) === selectedClass)
-            .map(s => (s.section || "").trim())
-            .filter(Boolean)
-    )).sort()];
+        // Class Filter
+        if (selectedClass !== "All") {
+            queryConstraints.push(where("className", "==", selectedClass));
+        }
 
-    const filterList = (list: Student[]) =>
-        list.filter(s => {
-            const name = getDisplayName(s).toLowerCase();
-            const matchSearch = name.includes(searchTerm.toLowerCase()) ||
-                (s.admissionNumber || "").toLowerCase().includes(searchTerm.toLowerCase());
-            const matchClass = selectedClass === "All" || getClass(s) === selectedClass;
-            const matchSection = selectedSection === "All" || (s.section || "").trim() === selectedSection;
-            return matchSearch && matchClass && matchSection;
-        });
+        // Section Filter
+        if (selectedSection !== "All") {
+            queryConstraints.push(where("section", "==", selectedSection));
+        }
 
-    const filtered = filterList(activeTab === "active" ? activeStudents : leftStudents);
+        // Note: Firestore requires ordering by the same field used in an inequality filter,
+        // so we order by admissionNumber by default to have a consistent order for pagination.
+        queryConstraints.push(orderBy("admissionNumber", "asc"));
+        queryConstraints.push(limit(50));
+
+        if (isNextPage && lastVisible) {
+            queryConstraints.push(startAfter(lastVisible));
+        }
+
+        return query(profilesRef, ...queryConstraints);
+    };
+
+    const fetchStudents = async (isNextPage = false) => {
+        setIsLoading(true);
+        if (!isNextPage) {
+            setStudents([]);
+            setLastVisible(null);
+            setHasMore(true);
+        }
+        try {
+            const finalQuery = buildQuery(isNextPage);
+            const snap = await getDocs(finalQuery);
+
+            let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+
+            // Client-side search filtering (since Firestore doesn't support substring search well)
+            if (searchTerm.trim()) {
+                const term = searchTerm.toLowerCase().trim();
+                data = data.filter(s =>
+                    getDisplayName(s).toLowerCase().includes(term) ||
+                    (s.admissionNumber || "").toLowerCase().includes(term)
+                );
+            }
+
+            if (data.length < 50) setHasMore(false);
+            if (snap.docs.length > 0) setLastVisible(snap.docs[snap.docs.length - 1]);
+
+            setStudents(prev => isNextPage ? [...prev, ...data] : data);
+        } catch (err) {
+            console.error("Error fetching students:", err);
+            toast.error("Failed to load students");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Re-fetch when filters change (debounced for search)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            fetchStudents(false);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [activeTab, selectedClass, selectedSection, searchTerm]);
 
     const handleSaved = (updated: Student) =>
         setStudents(prev => prev.map(s => s.id === updated.id ? updated : s));
@@ -157,63 +218,98 @@ export default function AdminStudentsPage() {
     };
 
     // ─── Export ───
-    const exportToExcel = (list: Student[]) => {
-        if (list.length === 0) return;
-        const rows = list.map((s, i) => ({
-            "S.N": s.serialNumber || (i + 1),
-            "STAT": s.status || "ACTIVE",
-            "SESS": s.session || "",
-            "ENR": s.admissionNumber || "",
-            "Name": getDisplayName(s),
-            "D.O.B": s.dob || "",
-            "Gender": s.gender || "",
-            "Class": getClass(s),
-            "Section": s.section || "",
-            "Contact": s.mobileNo || "",
-            "Contact 2": s.contact2 || "",
-            "Contact 3": s.contact3 || "",
-            "Aadhaar": s.aadharNo || "",
-            "APAR ID": s.aparId || "",
-            "PEN": s.pen || "",
-            "Category": s.category || "",
-            "Religion": s.religion || "",
-            "Blood Group": s.bloodGroup || "",
-            "Father Name": s.fatherName || "",
-            "Father Occ.": s.fatherOccupation || "",
-            "F. Qual.": s.fatherQualification || "",
-            "Mother Name": s.motherName || "",
-            "M. Qual.": s.motherQualification || "",
-            "Guardian": s.guardianName || "",
-            "Relation": s.guardianRelation || "",
-            "G. Qual.": s.guardianQualification || "",
-            "Income": s.annualIncome || "",
-            "Address": s.address || "",
-            "Pin": s.pinCode || "",
-            "House": s.house || "",
-            "Transport": s.transport || "",
-            "UDISE": s.udise || "",
-            "CBSE": s.cbseEnrolmentNo || "",
-            "Free Scheme": s.freeScheme || "",
-            "EWS": s.economicallyWeakSection || "",
-            "Minority": s.minorityStatus || "",
-            "Class at Adm.": s.classAtAdmission || "",
-            "Date of Adm.": s.dateOfAdmission || "",
-            "Branch": s.branch || "",
-            "Block": s.block || "",
-            "TC No.": s.tcNumber || "",
-            "Prev. School": s.previousSchool || "",
-            "Last Class": s.lastClass || "",
-            "Last Date": s.lastDate || "",
-            "Left Year": s.leftYear || "",
-            "Remarks": s.remarks || "",
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws["!cols"] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, activeTab === "active" ? "Active Students" : "Left Students");
-        const today = new Date().toISOString().slice(0, 10);
-        const classTag = selectedClass !== "All" ? `_Class${selectedClass}` : "";
-        XLSX.writeFile(wb, `students_${activeTab}${classTag}_${today}.xlsx`);
+    const [isExporting, setIsExporting] = useState(false);
+    const exportToExcel = async () => {
+        setIsExporting(true);
+        try {
+            // Re-build query without limit and pagination for export
+            const profilesRef = collectionGroup(db, "profiles");
+            let queryConstraints: any[] = [];
+            if (activeTab === "active") queryConstraints.push(where("status", "in", ["ACTIVE", "Active", "active"]));
+            else queryConstraints.push(where("status", "==", "LEFT"));
+            if (selectedClass !== "All") queryConstraints.push(where("className", "==", selectedClass));
+            if (selectedSection !== "All") queryConstraints.push(where("section", "==", selectedSection));
+
+            const finalQuery = query(profilesRef, ...queryConstraints);
+            const snap = await getDocs(finalQuery);
+            let exportData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+
+            // Apply search filtering
+            if (searchTerm.trim()) {
+                const term = searchTerm.toLowerCase().trim();
+                exportData = exportData.filter(s =>
+                    getDisplayName(s).toLowerCase().includes(term) ||
+                    (s.admissionNumber || "").toLowerCase().includes(term)
+                );
+            }
+
+            if (exportData.length === 0) {
+                toast.error("No students to export matching current filters");
+                return;
+            }
+
+            const rows = exportData.map((s, i) => ({
+                "S.N": s.serialNumber || (i + 1),
+                "STAT": s.status || "ACTIVE",
+                "SESS": s.session || "",
+                "ENR": s.admissionNumber || "",
+                "Name": getDisplayName(s),
+                "D.O.B": s.dob || "",
+                "Gender": s.gender || "",
+                "Class": getClass(s),
+                "Section": s.section || "",
+                "Contact": s.mobileNo || "",
+                "Contact 2": s.contact2 || "",
+                "Contact 3": s.contact3 || "",
+                "Aadhaar": s.aadharNo || "",
+                "APAR ID": s.aparId || "",
+                "PEN": s.pen || "",
+                "Category": s.category || "",
+                "Religion": s.religion || "",
+                "Blood Group": s.bloodGroup || "",
+                "Father Name": s.fatherName || "",
+                "Father Occ.": s.fatherOccupation || "",
+                "F. Qual.": s.fatherQualification || "",
+                "Mother Name": s.motherName || "",
+                "M. Qual.": s.motherQualification || "",
+                "Guardian": s.guardianName || "",
+                "Relation": s.guardianRelation || "",
+                "G. Qual.": s.guardianQualification || "",
+                "Income": s.annualIncome || "",
+                "Address": s.address || "",
+                "Pin": s.pinCode || "",
+                "House": s.house || "",
+                "Transport": s.transport || "",
+                "UDISE": s.udise || "",
+                "CBSE": s.cbseEnrolmentNo || "",
+                "Free Scheme": s.freeScheme || "",
+                "EWS": s.economicallyWeakSection || "",
+                "Minority": s.minorityStatus || "",
+                "Class at Adm.": s.classAtAdmission || "",
+                "Date of Adm.": s.dateOfAdmission || "",
+                "Branch": s.branch || "",
+                "Block": s.block || "",
+                "TC No.": s.tcNumber || "",
+                "Prev. School": s.previousSchool || "",
+                "Last Class": s.lastClass || "",
+                "Last Date": s.lastDate || "",
+                "Left Year": s.leftYear || "",
+                "Remarks": s.remarks || "",
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            ws["!cols"] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, activeTab === "active" ? "Active Students" : "Left Students");
+            const today = new Date().toISOString().slice(0, 10);
+            const classTag = selectedClass !== "All" ? `_Class${selectedClass}` : "";
+            XLSX.writeFile(wb, `students_${activeTab}${classTag}_${today}.xlsx`);
+        } catch (err) {
+            console.error("Export error:", err);
+            toast.error("Failed to export data");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -226,17 +322,20 @@ export default function AdminStudentsPage() {
                         <p className="text-white/50 text-sm font-medium">Admin Console</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Student Directory</h1>
                         <p className="text-white/40 text-sm mt-1">
-                            <span className="text-green-300 font-semibold">{activeStudents.length} active</span>
+                            <span className="text-green-300 font-semibold">{totalActive} active</span>
                             <span className="mx-2 text-white/30">·</span>
-                            <span className="text-red-300 font-semibold">{leftStudents.length} left</span>
+                            <span className="text-red-300 font-semibold">{totalLeft} left</span>
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-3">
                         <button
-                            onClick={() => exportToExcel(filtered)}
-                            disabled={filtered.length === 0}
+                            onClick={exportToExcel}
+                            disabled={isExporting}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors disabled:opacity-40"
-                        ><FileDown className="w-4 h-4" /> Export Excel ({filtered.length})</button>
+                        >
+                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                            Export Data
+                        </button>
                         <Link href="/admin/students/import" className="px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors">
                             Bulk Import
                         </Link>
@@ -250,8 +349,8 @@ export default function AdminStudentsPage() {
             {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 {[
-                    { key: "active", label: `Active Students (${activeStudents.length})` },
-                    { key: "left", label: `Left Students (${leftStudents.length})` },
+                    { key: "active", label: `Active Students (${totalActive})` },
+                    { key: "left", label: `Left Students (${totalLeft})` },
                 ].map(tab => (
                     <button
                         key={tab.key}
@@ -272,10 +371,10 @@ export default function AdminStudentsPage() {
                 <div className="flex items-center gap-2 shrink-0">
                     <Filter className="w-4 h-4 text-gray-400" />
                     <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
-                        {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
+                        {CLASSES.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
                     </select>
                     <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
-                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Section ${s}`}</option>)}
+                        {SECTIONS.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Section ${s}`}</option>)}
                     </select>
                 </div>
             </div>
@@ -301,12 +400,12 @@ export default function AdminStudentsPage() {
                                 <tr><td colSpan={9} className="p-16 text-center text-gray-400">
                                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-navy" />Loading...
                                 </td></tr>
-                            ) : filtered.length === 0 ? (
+                            ) : students.length === 0 ? (
                                 <tr><td colSpan={9} className="p-16 text-center">
                                     <UserCircle2 className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                                     <p className="text-gray-400 text-sm font-medium">No students found</p>
                                 </td></tr>
-                            ) : filtered.map((student, idx) => (
+                            ) : students.map((student, idx) => (
                                 <tr key={student.id} className="hover:bg-gray-50/60 transition-colors">
                                     <td className="px-4 py-3 text-gray-400 text-xs font-mono">
                                         {student.serialNumber || idx + 1}
@@ -362,6 +461,18 @@ export default function AdminStudentsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Load More Button */}
+            {!isLoading && hasMore && students.length > 0 && (
+                <div className="flex justify-center pt-4">
+                    <button
+                        onClick={() => fetchStudents(true)}
+                        className="px-6 py-2.5 rounded-xl bg-white border border-gray-200 text-navy font-semibold text-sm hover:bg-gray-50 shadow-sm transition-colors"
+                    >
+                        Load More Students
+                    </button>
+                </div>
+            )}
 
             {/* Edit Modal */}
             {editingStudent && (
