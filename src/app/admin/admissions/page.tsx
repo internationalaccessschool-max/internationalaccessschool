@@ -41,6 +41,9 @@ type AcceptFormValues = z.infer<typeof acceptSchema>;
 interface AdmissionRequest {
     id: string;
     studentName: string;
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
     gender: string;
     aadhaarNo?: string;
     enrollmentClass: string;
@@ -221,165 +224,185 @@ export default function AdminAdmissionsPage() {
 
         let secondaryApp;
         try {
-            // 1. Create Auth User (AdmissionNo + DOB)
-            secondaryApp = initializeApp(firebaseConfig, "Secondary");
+            // 1. Create Auth User (AdmissionNo + DOB as password)
+            secondaryApp = initializeApp(firebaseConfig, `adm_${Date.now()}`);
             const secondaryAuth = getAuth(secondaryApp);
             const email = `${data.admissionNo}@ias.edu`;
 
-            // Convert DOB from YYYY-MM-DD to DD-MM-YY perfectly
-            const rawDob = selectedRequest.dob; // e.g. "2009-01-01"
+            // Convert DOB from YYYY-MM-DD → DD-MM-YY for password
+            const rawDob = selectedRequest.dob;
             let dobFormatted = rawDob;
             if (rawDob && rawDob.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 const [y, m, d] = rawDob.split("-");
                 dobFormatted = `${d}-${m}-${y.slice(-2)}`;
             }
-            // Fallback for empty/undefined strings
-            if (!dobFormatted || typeof dobFormatted !== "string" || dobFormatted.trim() === "") {
-                dobFormatted = `DOB${Math.floor(100 + Math.random() * 900)}`;
+            if (!dobFormatted || !dobFormatted.trim()) {
+                dobFormatted = `ias${data.admissionNo}2025`;
             }
             const password = dobFormatted;
 
             const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
             const user = userCredential.user;
 
-            // 2. Create User Doc
-            const userPayload = Object.fromEntries(
-                Object.entries({
-                    uid: user.uid,
-                    email: email,
-                    role: "student",
-                    name: selectedRequest.studentName,
-                    createdAt: serverTimestamp(),
-                }).filter(([_, v]) => v !== undefined)
-            );
-            await setDoc(doc(db, "users", user.uid), userPayload);
+            // 2. Normalise class name — strip any "Class " prefix, keep plain "1", "NUR" etc.
+            const rawClass = data.class.trim();
+            const normClass = rawClass.replace(/^class\s*/i, "").trim();
 
-            // Format class perfectly to 'Class X'
-            const formattedClass = data.class.toLowerCase().startsWith("class")
-                ? data.class.replace(/^class\s*/i, "Class ")
-                : `Class ${data.class}`;
-
-            // Split name nicely
-            const studentNameStr = selectedRequest.studentName || "Student";
-            const nameParts = studentNameStr.trim().split(" ");
+            // Build full name — try studentName first, then firstName+lastName from form
+            const fullName = (
+                selectedRequest.studentName ||
+                `${selectedRequest.firstName || ""} ${selectedRequest.middleName || ""} ${selectedRequest.lastName || ""}`.replace(/\s+/g, " ").trim()
+            ).trim() || "Student";
+            const nameParts = fullName.split(" ");
             const firstName = nameParts[0] || "Unknown";
-            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+            const lastName = nameParts.slice(1).join(" ");
+            const sectionStr = data.section || "A";
 
-            const studentPayload = Object.fromEntries(
-                Object.entries({
-                    id: user.uid,
-                    uid: user.uid,
-                    firstName: firstName,
-                    lastName: lastName,
-                    admissionNumber: data.admissionNo,
-                    className: formattedClass,
-                    section: data.section || "Unassigned",
-                    dob: dobFormatted,
-                    guardianName: selectedRequest.fatherName || selectedRequest.motherName || "Guardian",
-                    mobileNo: selectedRequest.mobileNo,
-                    presentAddress: selectedRequest.localAddress,
-                    permanentAddress: selectedRequest.permanentAddress,
-                    gender: selectedRequest.gender,
-                    motherName: selectedRequest.motherName,
-                    motherOccupation: selectedRequest.motherOccupation,
-                    motherEducation: selectedRequest.motherQualification,
-                    fatherName: selectedRequest.fatherName,
-                    fatherOccupation: selectedRequest.fatherOccupation,
-                    fatherEducation: selectedRequest.fatherQualification,
-                    noOfBrothers: selectedRequest.noOfBrothers,
-                    noOfSisters: selectedRequest.noOfSisters,
-                    annualIncome: selectedRequest.annualIncome,
-                    category: selectedRequest.category,
-                    bloodGroup: selectedRequest.bloodGroup,
-                    aadharNo: selectedRequest.aadhaarNo,
-                    physicallyDisabled: selectedRequest.physicallyDisabled,
-                    allergies: selectedRequest.allergies,
-                    height: selectedRequest.height,
-                    weight: selectedRequest.weight,
-                    bankName: "", // Form doesn't ask for bank name, just IFSC
-                    accountHolderName: selectedRequest.accountHolderName,
-                    bankAccountNumber: selectedRequest.accountNumber,
-                    ifscCode: selectedRequest.ifscCode,
-                    session: selectedRequest.session,
-                    role: "student",
-                    admissionRequestId: selectedRequest.id,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                    childPhotoUrl: selectedRequest.imageUrl || "",
-                    // Default empty fields for docs
-                    aadharUrl: "",
-                    aparUrl: "",
-                    fatherAadharUrl: "",
-                    motherAadharUrl: "",
-                    parentPhotoUrl: "",
-                    pen: "",
-                    aparId: "",
-                }).filter(([_, v]) => v !== undefined)
-            );
+            // 3. Save to users doc (lightweight)
+            await setDoc(doc(db, "users", user.uid), {
+                uid: user.uid,
+                email,
+                role: "student",
+                name: fullName,
+                firstName,
+                lastName,
+                className: normClass,
+                currentClass: normClass,
+                section: sectionStr,
+                createdAt: serverTimestamp(),
+            });
 
-            const sectionStr = data.section || "Unassigned";
-            const profileRef = doc(db, "users", "classes", formattedClass, "sections", sectionStr, "students", "profiles", user.uid);
+            // 4. Save full profile in nested path (new schema)
+            const studentPayload = {
+                id: user.uid,
+                uid: user.uid,
+                email,
+                role: "student",
+                // Name fields
+                name: fullName,
+                firstName,
+                lastName,
+                // Class fields — new schema uses plain class names
+                className: normClass,
+                currentClass: normClass,
+                classAtAdmission: normClass,
+                section: sectionStr,
+                // Admission
+                admissionNumber: data.admissionNo,
+                serialNumber: "",
+                session: selectedRequest.session || "",
+                dateOfAdmission: new Date().toISOString().split("T")[0],
+                status: "ACTIVE",
+                // Personal
+                dob: rawDob || "",
+                gender: selectedRequest.gender || "",
+                bloodGroup: selectedRequest.bloodGroup || "",
+                category: selectedRequest.category || "",
+                physicallyDisabled: selectedRequest.physicallyDisabled || "No",
+                religion: "",
+                // Contact
+                mobileNo: selectedRequest.mobileNo || "",
+                contact2: "",
+                contact3: "",
+                // Parent info
+                fatherName: selectedRequest.fatherName || "",
+                fatherOccupation: selectedRequest.fatherOccupation || "",
+                fatherQualification: selectedRequest.fatherQualification || "",
+                motherName: selectedRequest.motherName || "",
+                motherOccupation: selectedRequest.motherOccupation || "",
+                motherQualification: selectedRequest.motherQualification || "",
+                guardianName: selectedRequest.fatherName || selectedRequest.motherName || "",
+                guardianQualification: "",
+                noOfBrothers: selectedRequest.noOfBrothers || 0,
+                noOfSisters: selectedRequest.noOfSisters || 0,
+                annualIncome: selectedRequest.annualIncome || "",
+                // Address
+                presentAddress: selectedRequest.localAddress || "",
+                permanentAddress: selectedRequest.permanentAddress || "",
+                // Identity docs
+                aadharNo: selectedRequest.aadhaarNo || "",
+                pen: "",
+                aparId: "",
+                udise: "",
+                cbseEnrolmentNo: "",
+                // Medical
+                height: selectedRequest.height || "",
+                weight: selectedRequest.weight || "",
+                allergies: selectedRequest.allergies || "",
+                // School specifics
+                house: "",
+                transport: "",
+                branch: "",
+                block: "",
+                freeScheme: "",
+                economicallyWeakSection: "No",
+                minorityStatus: "",
+                // Bank
+                accountHolderName: selectedRequest.accountHolderName || "",
+                bankAccountNumber: selectedRequest.accountNumber || "",
+                ifscCode: selectedRequest.ifscCode || "",
+                bankName: "",
+                // Photo
+                childPhotoUrl: selectedRequest.imageUrl || "",
+                // Identifiers
+                admissionRequestId: selectedRequest.id,
+                // Timestamps
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            };
+
+            const profileRef = doc(db, "users", "classes", normClass, "sections", sectionStr, "students", "profiles", user.uid);
             await setDoc(profileRef, studentPayload);
 
-            // Scaffold the path for UI/Console visibility just like StudentEditModal
-            await setDoc(doc(db, "users", "classes"), { description: "Root for classes", updatedAt: serverTimestamp() }, { merge: true });
-            await setDoc(doc(db, "users", "classes", formattedClass, "sections"), { description: `Root for sections in ${formattedClass}`, updatedAt: serverTimestamp() }, { merge: true });
-            await setDoc(doc(db, "users", "classes", formattedClass, "sections", sectionStr, "students"), { description: `Root for students in ${formattedClass} - ${sectionStr}`, updatedAt: serverTimestamp() }, { merge: true });
+            // Scaffold hierarchy markers
+            await setDoc(doc(db, "users", "classes"), { _marker: true }, { merge: true });
+            await setDoc(doc(db, "users", "classes", normClass, "sections"), { _marker: true }, { merge: true });
+            await setDoc(doc(db, "users", "classes", normClass, "sections", sectionStr, "students"), { _marker: true }, { merge: true });
 
-            // 4. Update Request Status
+            // 5. Add to studentLookup for fast queries (same as bulk-import)
+            await setDoc(doc(db, "studentLookup", user.uid), {
+                uid: user.uid,
+                admissionNumber: data.admissionNo,
+                name: fullName,
+                className: normClass,
+                section: sectionStr,
+                status: "ACTIVE",
+                mobileNo: selectedRequest.mobileNo || "",
+                email,
+            });
+
+            // 6. Mark admission request as accepted
             await updateDoc(doc(db, "admission_requests", selectedRequest.id), {
                 status: "accepted",
                 studentId: user.uid,
                 assignedAdmissionNo: data.admissionNo,
-                assignedClass: formattedClass,
-                assignedSection: data.section
+                assignedClass: normClass,
+                assignedSection: sectionStr,
             });
 
-            // Send Email
-            const subject = `Welcome to International Access School - ${selectedRequest.studentName}`;
-            const html = `
-                <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto;">
-                    <h2 style="color: #1a365d;">Admissions Completed - Welcome!</h2>
-                    <p>Dear ${selectedRequest.fatherName || selectedRequest.motherName || 'Parent'},</p>
-                    <p>Congratulations! Your child, <strong>${selectedRequest.studentName}</strong>, has been officially admitted to International Access School.</p>
-                    <br/>
-                    <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                        <h3 style="margin-top: 0; color: #0f172a;">Student Portal Credentials</h3>
-                        <p>You can use these credentials to log in to the student portal and view their profile, homework, and fees.</p>
-                        <p><strong>URL:</strong> https://ias.edu/student/login</p>
-                        <p><strong>Registration Number:</strong> ${data.admissionNo}</p>
-                        <p><strong>Password:</strong> ${dobFormatted} (Format: DD-MM-YY)</p>
-                    </div>
-                    <br/>
-                    <p>Best regards,</p>
-                    <p><strong>Admissions Office</strong><br/>International Access School</p>
-                </div>
-            `;
-            const mockEmail = `${(selectedRequest.studentName || "parent").split(' ')[0].toLowerCase()}@parent.com`;
-            await sendStatusEmail(mockEmail, subject, html);
-
+            // Cleanup
             await deleteApp(secondaryApp);
-
-            // Cleanup local state
             setRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
             setSelectedRequest(null);
             setIsAccepting(false);
             reset();
+            alert(`✅ Admission confirmed!\nEmail: ${email}\nPassword: ${password}\nClass: ${normClass} - ${sectionStr}`);
 
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/email-already-in-use') {
-                setError("A student with this Admission Number already exists.");
+            if (err.code === "auth/email-already-in-use") {
+                setError("A student with this Admission Number already exists. Try a different number.");
             } else {
-                setError("Failed to create student account. Please try again.");
+                setError("Failed to create student account: " + (err.message || "Please try again."));
             }
         } finally {
             if (secondaryApp) {
-                try { await deleteApp(secondaryApp).catch(() => { }); } catch (e) { }
+                try { await deleteApp(secondaryApp).catch(() => { }); } catch { }
             }
             setIsLoading(false);
         }
     };
+
 
     const filteredRequests = requests.filter(req =>
         req.studentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
