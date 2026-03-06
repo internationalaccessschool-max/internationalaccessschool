@@ -191,7 +191,7 @@ export function CloudinaryUpload({
                                             : "PDF, Images, Documents"}{" "}
                                     · Max {maxSizeMB}MB
                                 </div>
-                                <div className="text-xs text-gray-300 font-mono mt-1">
+                                <div className="text-[10px] text-gray-300 font-mono mt-2 truncate w-full max-w-[90%] mx-auto">
                                     📁 ias-school/{folder}{subFolder ? `/${subFolder}` : ""}
                                 </div>
                             </>
