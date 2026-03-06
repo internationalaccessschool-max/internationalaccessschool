@@ -236,37 +236,37 @@ export default function StudentProfilePage() {
                     {/* ── PERSONAL INFO ── */}
                     {activeTab === "personal" && (
                         <div className="space-y-6">
-                            <SectionNote text="These are your personal details. Fields marked with a lock are managed by admin." />
+                            <SectionNote text="These are your personal details. This information is locked and can only be changed by the school administration." />
                             <div className="grid sm:grid-cols-2 gap-5">
-                                <Field label="First Name" field="firstName" value={formData.firstName} onChange={handleChange} />
-                                <Field label="Middle Name" field="middleName" value={formData.middleName} onChange={handleChange} />
-                                <Field label="Last Name" field="lastName" value={formData.lastName} onChange={handleChange} />
-                                <Field label="Date of Birth" field="dob" value={formData.dob} onChange={handleChange} type="date" />
+                                <Field label="First Name" field="firstName" value={formData.firstName} onChange={handleChange} readOnly />
+                                <Field label="Middle Name" field="middleName" value={formData.middleName} onChange={handleChange} readOnly />
+                                <Field label="Last Name" field="lastName" value={formData.lastName} onChange={handleChange} readOnly />
+                                <Field label="Date of Birth" field="dob" value={formData.dob} onChange={handleChange} type="date" readOnly />
                                 <SelectField
                                     label="Gender" field="gender" value={formData.gender} onChange={handleChange}
-                                    options={["Male", "Female", "Other"]}
+                                    options={["Male", "Female", "Other"]} readOnly
                                 />
                                 <SelectField
                                     label="Blood Group" field="bloodGroup" value={formData.bloodGroup} onChange={handleChange}
-                                    options={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]}
+                                    options={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]} readOnly
                                 />
                                 <SelectField
                                     label="Category" field="category" value={formData.category} onChange={handleChange}
-                                    options={["General", "OBC", "SC", "ST", "EWS"]}
+                                    options={["General", "OBC", "SC", "ST", "EWS"]} readOnly
                                 />
                                 <SelectField
                                     label="Physically Disabled" field="physicallyDisabled" value={formData.physicallyDisabled} onChange={handleChange}
-                                    options={["No", "Yes"]}
+                                    options={["No", "Yes"]} readOnly
                                 />
-                                <Field label="Aadhaar No" field="aadharNo" value={formData.aadharNo} onChange={handleChange} />
-                                <Field label="Mobile No" field="mobileNo" value={formData.mobileNo} onChange={handleChange} type="tel" />
+                                <Field label="Aadhaar No" field="aadharNo" value={formData.aadharNo} onChange={handleChange} readOnly />
+                                <Field label="Mobile No" field="mobileNo" value={formData.mobileNo} onChange={handleChange} type="tel" readOnly />
                                 <Field label="PEN" field="pen" value={formData.pen} onChange={handleChange} readOnly />
                                 <Field label="APAR ID" field="aparId" value={formData.aparId} onChange={handleChange} readOnly />
                                 <div className="sm:col-span-2">
-                                    <Field label="Local Address" field="localAddress" value={formData.localAddress} onChange={handleChange} textarea />
+                                    <Field label="Local Address" field="localAddress" value={formData.localAddress} onChange={handleChange} textarea readOnly />
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <Field label="Permanent Address" field="permanentAddress" value={formData.permanentAddress} onChange={handleChange} textarea />
+                                    <Field label="Permanent Address" field="permanentAddress" value={formData.permanentAddress} onChange={handleChange} textarea readOnly />
                                 </div>
                             </div>
                         </div>
@@ -290,35 +290,35 @@ export default function StudentProfilePage() {
                     {/* ── FAMILY DETAILS ── */}
                     {activeTab === "parents" && (
                         <div className="space-y-8">
-                            <SectionNote text="Please provide accurate family details. This information is used for official school records." />
+                            <SectionNote text="These family details are locked and can only be changed by the school administration." />
 
                             <div>
                                 <h3 className="text-base font-bold text-navy border-b border-gray-100 pb-3 mb-5">Father's Details</h3>
                                 <div className="grid sm:grid-cols-2 gap-5">
-                                    <Field label="Father's Name" field="fatherName" value={formData.fatherName} onChange={handleChange} />
-                                    <Field label="Qualification" field="fatherQualification" value={formData.fatherQualification} onChange={handleChange} />
-                                    <Field label="Occupation" field="fatherOccupation" value={formData.fatherOccupation} onChange={handleChange} />
-                                    <Field label="Mobile No" field="fatherPhone" value={formData.fatherPhone} onChange={handleChange} type="tel" />
-                                    <Field label="Aadhaar No" field="fatherAadharNo" value={formData.fatherAadharNo} onChange={handleChange} />
+                                    <Field label="Father's Name" field="fatherName" value={formData.fatherName} onChange={handleChange} readOnly />
+                                    <Field label="Qualification" field="fatherQualification" value={formData.fatherQualification} onChange={handleChange} readOnly />
+                                    <Field label="Occupation" field="fatherOccupation" value={formData.fatherOccupation} onChange={handleChange} readOnly />
+                                    <Field label="Mobile No" field="fatherPhone" value={formData.fatherPhone} onChange={handleChange} type="tel" readOnly />
+                                    <Field label="Aadhaar No" field="fatherAadharNo" value={formData.fatherAadharNo} onChange={handleChange} readOnly />
                                 </div>
                             </div>
 
                             <div>
                                 <h3 className="text-base font-bold text-navy border-b border-gray-100 pb-3 mb-5">Mother's Details</h3>
                                 <div className="grid sm:grid-cols-2 gap-5">
-                                    <Field label="Mother's Name" field="motherName" value={formData.motherName} onChange={handleChange} />
-                                    <Field label="Qualification" field="motherQualification" value={formData.motherQualification} onChange={handleChange} />
-                                    <Field label="Occupation" field="motherOccupation" value={formData.motherOccupation} onChange={handleChange} />
-                                    <Field label="Aadhaar No" field="motherAadharNo" value={formData.motherAadharNo} onChange={handleChange} />
+                                    <Field label="Mother's Name" field="motherName" value={formData.motherName} onChange={handleChange} readOnly />
+                                    <Field label="Qualification" field="motherQualification" value={formData.motherQualification} onChange={handleChange} readOnly />
+                                    <Field label="Occupation" field="motherOccupation" value={formData.motherOccupation} onChange={handleChange} readOnly />
+                                    <Field label="Aadhaar No" field="motherAadharNo" value={formData.motherAadharNo} onChange={handleChange} readOnly />
                                 </div>
                             </div>
 
                             <div>
                                 <h3 className="text-base font-bold text-navy border-b border-gray-100 pb-3 mb-5">Household Information</h3>
                                 <div className="grid sm:grid-cols-3 gap-5">
-                                    <Field label="No. of Brothers" field="noOfBrothers" value={formData.noOfBrothers} onChange={handleChange} type="number" />
-                                    <Field label="No. of Sisters" field="noOfSisters" value={formData.noOfSisters} onChange={handleChange} type="number" />
-                                    <Field label="Annual Income (₹)" field="annualIncome" value={formData.annualIncome} onChange={handleChange} type="number" />
+                                    <Field label="No. of Brothers" field="noOfBrothers" value={formData.noOfBrothers} onChange={handleChange} type="number" readOnly />
+                                    <Field label="No. of Sisters" field="noOfSisters" value={formData.noOfSisters} onChange={handleChange} type="number" readOnly />
+                                    <Field label="Annual Income (₹)" field="annualIncome" value={formData.annualIncome} onChange={handleChange} type="number" readOnly />
                                 </div>
                             </div>
                         </div>
@@ -352,13 +352,13 @@ export default function StudentProfilePage() {
                     {/* ── BANK DETAILS ── */}
                     {activeTab === "bank" && (
                         <div className="space-y-6">
-                            <SectionNote text="Bank details are used for scholarship disbursements and fee refunds. Please ensure accuracy." />
+                            <SectionNote text="Bank details are locked and can only be changed by the school administration." />
                             <div className="grid sm:grid-cols-2 gap-5">
                                 <div className="sm:col-span-2">
-                                    <Field label="Account Holder's Name" field="accountHolderName" value={formData.accountHolderName} onChange={handleChange} />
+                                    <Field label="Account Holder's Name" field="accountHolderName" value={formData.accountHolderName} onChange={handleChange} readOnly />
                                 </div>
-                                <Field label="Account Number" field="accountNumber" value={formData.accountNumber} onChange={handleChange} />
-                                <Field label="IFSC Code" field="ifscCode" value={formData.ifscCode} onChange={handleChange} />
+                                <Field label="Account Number" field="accountNumber" value={formData.accountNumber} onChange={handleChange} readOnly />
+                                <Field label="IFSC Code" field="ifscCode" value={formData.ifscCode} onChange={handleChange} readOnly />
                             </div>
                         </div>
                     )}
@@ -392,7 +392,7 @@ export default function StudentProfilePage() {
                     )}
 
                     {/* ── Save Button (not shown for read-only or documents tabs) ── */}
-                    {activeTab !== "documents" && activeTab !== "academic" && (
+                    {activeTab === "medical" && (
                         <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between">
                             <p className="text-xs text-gray-400">Changes are saved to your school profile record.</p>
                             <button
@@ -476,17 +476,24 @@ function Field({ label, field, value, onChange, type = "text", readOnly = false,
     );
 }
 
-function SelectField({ label, field, value, onChange, options }: {
+function SelectField({ label, field, value, onChange, options, readOnly = false }: {
     label: string; field: string; value?: string;
-    onChange: (field: string, value: string) => void; options: string[];
+    onChange: (field: string, value: string) => void; options: string[]; readOnly?: boolean;
 }) {
     return (
         <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
+                {readOnly && <Lock className="w-3 h-3 text-gray-300" />}
+                {label}
+            </label>
             <select
                 value={value ?? ""}
-                onChange={(e) => onChange(field, e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-navy bg-white focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
+                onChange={(e) => !readOnly && onChange(field, e.target.value)}
+                disabled={readOnly}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm transition-all focus:outline-none ${readOnly
+                    ? "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed appearance-none"
+                    : "bg-white border-gray-200 text-navy focus:border-navy focus:ring-2 focus:ring-navy/10"
+                    }`}
             >
                 <option value="">Select {label}</option>
                 {options.map((opt) => (
@@ -547,7 +554,7 @@ function DocumentCard({ title, url, onUpload, onRemove, folder, uid, acceptedFil
                         subFolder={uid}
                         onUpload={(url) => onUpload(url)}
                         acceptedFileTypes={acceptedFileTypes}
-                        maxSizeMB={5}
+                        maxSizeMB={1}
                         label={`Upload ${title}`}
                     />
                 </div>
