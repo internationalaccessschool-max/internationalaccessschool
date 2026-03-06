@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 interface AuthContextType {
@@ -27,36 +27,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        let unsubscribeDoc: () => void;
+
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             if (user) {
                 setUser(user);
                 // Set generic auth cookie
                 document.cookie = "auth=true; path=/; max-age=86400";
                 document.cookie = `email=${user.email}; path=/; max-age=86400`;
 
-                // Fetch user role from Firestore
-                const userDoc = await getDoc(doc(db, "users", user.uid));
-                if (userDoc.exists()) {
-                    const userRole = userDoc.data().role;
-                    console.log("AuthContext: User role fetched:", userRole, "UID:", user.uid);
-                    setRole(userRole);
-                    document.cookie = `role=${userRole}; path=/; max-age=86400`;
-                } else {
-                    console.error("AuthContext: userDoc DOES NOT EXIST for UID:", user.uid);
-                    setRole(null);
-                    document.cookie = "role=; path=/; max-age=0"; // Clear role cookie
-                }
+                // Listen to user document in real-time to solve self-heal race conditions
+                unsubscribeDoc = onSnapshot(doc(db, "users", user.uid), (userDoc) => {
+                    if (userDoc.exists()) {
+                        const userRole = userDoc.data().role;
+                        setRole(userRole);
+                        document.cookie = `role=${userRole}; path=/; max-age=86400`;
+                    } else {
+                        console.warn("AuthContext: userDoc DOES NOT EXIST yet for UID:", user.uid);
+                        setRole(null);
+                        document.cookie = "role=; path=/; max-age=0";
+                    }
+                    setLoading(false);
+                });
             } else {
                 setUser(null);
                 setRole(null);
-                document.cookie = "auth=; path=/; max-age=0"; // Clear auth cookie
-                document.cookie = "email=; path=/; max-age=0"; // Clear email cookie
-                document.cookie = "role=; path=/; max-age=0"; // Clear role cookie
+                document.cookie = "auth=; path=/; max-age=0";
+                document.cookie = "email=; path=/; max-age=0";
+                document.cookie = "role=; path=/; max-age=0";
+                setLoading(false);
             }
-            setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeDoc) unsubscribeDoc();
+        };
     }, []);
 
     return (
