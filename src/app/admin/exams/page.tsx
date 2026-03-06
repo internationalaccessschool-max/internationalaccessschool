@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
     collection,
     addDoc,
@@ -180,47 +181,6 @@ export default function AdminExamsPage() {
         }
     };
 
-    const handleGenerateAdmitCards = async (exam: Exam) => {
-        if (!window.confirm(`Generate admit cards for all students in "${exam.name}"? This will overwrite existing admit cards for this exam.`)) return;
-        setIsGenerating(exam.id!);
-        setGenerateMsg("");
-        try {
-            // Fetch all student profiles
-            const snap = await getDocs(collectionGroup(db, "profiles"));
-            let count = 0;
-            const applicable = exam.classesApplicable ?? [];
-            for (const d of snap.docs) {
-                const data = d.data();
-                const cls = normaliseClass(String(data.className || data.currentClass || ""));
-                if (!applicable.includes(cls)) continue;
-                const uid = d.id;
-                const admitCardId = `${exam.id}_${uid}`;
-                await setDoc(doc(db, "admitCards", admitCardId), {
-                    examId: exam.id,
-                    examName: exam.name,
-                    startDate: exam.startDate,
-                    endDate: exam.endDate,
-                    timing: (exam as any).timing || "",
-                    instructions: (exam as any).instructions || "",
-                    studentId: uid,
-                    admissionNumber: data.admissionNumber || "",
-                    studentName: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
-                    className: cls,
-                    section: data.section || "",
-                    dob: data.dob || "",
-                    fatherName: data.fatherName || "",
-                    generatedAt: Date.now(),
-                }, { merge: true });
-                count++;
-            }
-            setGenerateMsg(`✅ ${count} admit card${count !== 1 ? "s" : ""} generated for "${exam.name}"`);
-        } catch (err: any) {
-            setGenerateMsg(`❌ Failed: ${err.message}`);
-        } finally {
-            setIsGenerating(null);
-        }
-    };
-
     const handleToggleStatus = async (exam: Exam) => {
         const newStatus = exam.status === "Published" ? "Draft" : "Published";
         try {
@@ -348,13 +308,13 @@ export default function AdminExamsPage() {
                                                             ? <><Lock className="h-3 w-3 mr-1" /> Unpublish</>
                                                             : <><Globe className="h-3 w-3 mr-1" /> Publish</>}
                                                     </Button>
-                                                    <Button variant="ghost" size="icon"
-                                                        onClick={() => handleGenerateAdmitCards(exam)}
-                                                        disabled={isGenerating === exam.id}
-                                                        className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50"
-                                                        title="Generate Admit Cards">
-                                                        {isGenerating === exam.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-                                                    </Button>
+                                                    <Link href={`/admin/exams/${exam.id}/admit-cards`}>
+                                                        <Button variant="ghost" size="icon"
+                                                            className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                                            title="Manage Admit Cards">
+                                                            <FileCheck className="h-4 w-4" />
+                                                        </Button>
+                                                    </Link>
                                                     <Button variant="ghost" size="icon"
                                                         onClick={() => openEditDialog(exam)}
                                                         className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
