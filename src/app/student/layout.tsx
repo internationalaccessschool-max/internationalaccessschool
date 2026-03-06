@@ -27,9 +27,22 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
     if (debugState) {
         return (
-            <div className="p-10 bg-red-50 text-red-900 min-h-screen">
-                <h1 className="text-2xl font-bold">Redirect Blocked for Debugging</h1>
-                <pre className="p-4 bg-white mt-4 border rounded">{JSON.stringify(debugState, null, 2)}</pre>
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center border border-gray-100">
+                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <User className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-navy mb-2">Session Expired</h2>
+                    <p className="text-gray-500 text-sm mb-6">
+                        Your session has expired or you do not have permission to access the student portal. Please log in again to continue.
+                    </p>
+                    <button
+                        onClick={() => router.push("/student/login")}
+                        className="w-full py-3 bg-navy text-white rounded-xl font-medium hover:bg-navy-light transition-colors shadow-lg shadow-navy/20"
+                    >
+                        Go to Login
+                    </button>
+                </div>
             </div>
         );
     }
