@@ -14,9 +14,8 @@ import Link from "next/link";
 const studentLoginSchema = z.object({
     admissionNo: z
         .string()
-        .min(8, "Admission Number must be 8 digits")
-        .max(8, "Admission Number must be 8 digits")
-        .regex(/^\d{8}$/, "Only numbers allowed — 8 digits"),
+        .min(1, "Admission Number is required")
+        .regex(/^\d+$/, "Only numbers allowed"),
     dob: z.string().min(1, "Date of Birth is required"),
 });
 
@@ -124,10 +123,10 @@ export default function StudentLoginPage() {
                             <label className="text-sm font-medium text-navy ml-1">Admission Number</label>
                             <input
                                 {...register("admissionNo")}
-                                type="number"
-                                maxLength={8}
+                                type="text"
+                                inputMode="numeric"
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all placeholder:text-gray-300 bg-gray-50/50 focus:bg-white"
-                                placeholder="e.g. 20250001"
+                                placeholder="e.g. 232902"
                             />
                             {errors.admissionNo && (
                                 <p className="text-red-500 text-xs ml-1">{errors.admissionNo.message}</p>
