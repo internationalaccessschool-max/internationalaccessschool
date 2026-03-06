@@ -58,6 +58,8 @@ export default function AdminExamsPage() {
     const [name, setName] = useState("");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [timing, setTiming] = useState("");
+    const [instructions, setInstructions] = useState("");
     const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
 
     // Schedule publish state: examId -> datetime string ("YYYY-MM-DDTHH:mm")
@@ -101,6 +103,8 @@ export default function AdminExamsPage() {
         setName("");
         setStartDate("");
         setEndDate("");
+        setTiming("");
+        setInstructions("");
         setSelectedClasses([]);
     };
 
@@ -114,6 +118,8 @@ export default function AdminExamsPage() {
         setName(exam.name);
         setStartDate(exam.startDate);
         setEndDate(exam.endDate);
+        setTiming((exam as any).timing || "");
+        setInstructions((exam as any).instructions || "");
         setSelectedClasses(exam.classesApplicable ?? []);
         setIsDialogOpen(true);
     };
@@ -140,6 +146,8 @@ export default function AdminExamsPage() {
                 name: name.trim(),
                 startDate,
                 endDate,
+                timing: timing.trim(),
+                instructions: instructions.trim(),
                 classesApplicable: selectedClasses,
                 updatedAt: Date.now(),
             };
@@ -192,6 +200,8 @@ export default function AdminExamsPage() {
                     examName: exam.name,
                     startDate: exam.startDate,
                     endDate: exam.endDate,
+                    timing: (exam as any).timing || "",
+                    instructions: (exam as any).instructions || "",
                     studentId: uid,
                     admissionNumber: data.admissionNumber || "",
                     studentName: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
@@ -465,6 +475,20 @@ export default function AdminExamsPage() {
                                 <Label>End Date <span className="text-red-500">*</span></Label>
                                 <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                             </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Exam Timing</Label>
+                            <Input placeholder="e.g. 09:00 AM - 12:00 PM" value={timing} onChange={e => setTiming(e.target.value)} />
+                            <p className="text-[10px] text-muted-foreground">Will be printed on the admit cards</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Important Instructions</Label>
+                            <textarea
+                                className="w-full flex min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                placeholder="Enter custom instructions for students. These will be printed on the admit cards. Leave blank to use default instructions."
+                                value={instructions}
+                                onChange={e => setInstructions(e.target.value)}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label>Applicable Classes <span className="text-red-500">*</span></Label>
