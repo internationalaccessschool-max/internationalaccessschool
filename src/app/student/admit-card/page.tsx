@@ -23,6 +23,7 @@ interface AdmitCard {
     fatherName: string;
     timing?: string;
     instructions?: string;
+    timetable?: { subject: string; date: string; startTime: string; endTime: string; roomNo: string; }[];
     generatedAt: number;
 }
 
@@ -81,6 +82,10 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
 .footer{border-top:1px solid #e5e7eb;margin-top:20px;padding-top:16px;display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:16px;}
 .sig-line{border-bottom:2px dashed #d1d5db;margin:0 auto 8px;width:75%;height:36px;}
 .sig-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;}
+.timetable{width:100%;border-collapse:collapse;margin:15px 0 20px;}
+.timetable th{background:#f0f4ff;color:#1a2e4c;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:8px;text-align:left;border:1px solid #e5e7eb;}
+.timetable td{padding:8px;font-size:12px;border:1px solid #e5e7eb;color:#374151;}
+.timetable tr:nth-child(even){background:#f8fafc;}
 @page{size:A4 portrait;margin:8mm;}
 </style></head><body>
 <div class="card">
@@ -107,6 +112,28 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
       <div class="exam-row"><span>End Date</span><span>${card.endDate}</span></div>
       ${card.timing ? `<div class="exam-row"><span>Timing</span><span>${card.timing}</span></div>` : ''}
     </div>
+    ${card.timetable && card.timetable.length > 0 ? `
+    <table class="timetable">
+      <thead>
+        <tr>
+          <th>Subject</th>
+          <th>Exam Date</th>
+          <th>Time</th>
+          <th>Room</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${card.timetable.map(t => `
+        <tr>
+          <td><strong>${t.subject}</strong></td>
+          <td>${t.date || '-'}</td>
+          <td>${t.startTime || '-'} ${t.endTime ? 'to ' + t.endTime : ''}</td>
+          <td>${t.roomNo || '-'}</td>
+        </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ` : ''}
     <div class="instructions">
       <strong>📋 Important Instructions:</strong>
       ${card.instructions
