@@ -179,10 +179,10 @@ export default function AdminExamsPage() {
             // Delete the exam document
             await deleteDoc(doc(db, "exams", id));
 
-            // Delete all associated admit cards
-            const q = query(collection(db, "admitCards"), where("examId", "==", id));
-            const snap = await getDocs(q);
-            const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "admitCards", d.id)));
+            // Delete all associated admit cards (they are now in a subcollection under this exam)
+            const subCol = collection(db, "exams", id, "admitCards");
+            const snap = await getDocs(subCol);
+            const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "exams", id, "admitCards", d.id)));
             await Promise.all(deletePromises);
         } catch (err: any) {
             alert("Failed to delete: " + err.message);
