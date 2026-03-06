@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, collectionGroup, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +37,7 @@ export default function StudentAdmitCardPage() {
         const fetchCards = async () => {
             try {
                 const q = query(
-                    collection(db, "admitCards"),
+                    collectionGroup(db, "admitCards"),
                     where("studentId", "==", user.uid)
                 );
                 const snap = await getDocs(q);
