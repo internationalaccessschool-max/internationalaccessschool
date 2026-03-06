@@ -41,12 +41,26 @@ interface Student {
     [key: string]: any;
 }
 
+// Helper: Safe string render
+const safeStr = (val: any): string => {
+    if (!val) return "";
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+        return val.name || val.label || val.id || JSON.stringify(val);
+    }
+    return String(val);
+};
+
 // Helper: get full display name
-const getDisplayName = (s: Student) =>
-    s.name || `${s.firstName || ""} ${s.middleName || ""} ${s.lastName || ""}`.trim();
+const getDisplayName = (s: Student) => {
+    const n = s.name || `${safeStr(s.firstName)} ${safeStr(s.middleName)} ${safeStr(s.lastName)}`.trim();
+    return safeStr(n) || "Unknown Student";
+};
 
 // Helper: get class display
-const getClass = (s: Student) => s.currentClass || s.className || "—";
+const getClass = (s: Student) => {
+    return safeStr(s.currentClass || s.className) || "—";
+};
 
 export default function AdminStudentsPage() {
     const [isLoading, setIsLoading] = useState(true);
@@ -422,21 +436,21 @@ export default function AdminStudentsPage() {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 font-mono">{student.admissionNumber || "—"}</span>
+                                        <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 font-mono">{safeStr(student.admissionNumber) || "—"}</span>
                                     </td>
                                     {activeTab === "active" ? (
                                         <>
-                                            <td className="px-4 py-3 text-gray-600">{getClass(student)} <span className="text-gray-400">·</span> {student.section || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{student.fatherName || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{student.mobileNo || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600">{getClass(student)} <span className="text-gray-400">·</span> {safeStr(student.section) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.fatherName) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.mobileNo) || "—"}</td>
                                         </>
                                     ) : (
                                         <>
-                                            <td className="px-4 py-3 text-gray-600">{student.lastClass || getClass(student) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{student.leftYear || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600 text-xs">{student.lastDate || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600 text-xs">{student.branch || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-500 text-xs max-w-[150px] truncate">{student.remarks || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.lastClass) || getClass(student) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.leftYear) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600 text-xs">{safeStr(student.lastDate) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-600 text-xs">{safeStr(student.branch) || "—"}</td>
+                                            <td className="px-4 py-3 text-gray-500 text-xs max-w-[150px] truncate">{safeStr(student.remarks) || "—"}</td>
                                         </>
                                     )}
                                     <td className="px-4 py-3 text-right">
