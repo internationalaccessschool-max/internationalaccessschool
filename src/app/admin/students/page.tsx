@@ -52,6 +52,7 @@ export default function AdminStudentsPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedClass, setSelectedClass] = useState("All");
+    const [selectedSection, setSelectedSection] = useState("All");
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [activeTab, setActiveTab] = useState<"active" | "left">("active");
 
@@ -88,13 +89,21 @@ export default function AdminStudentsPage() {
             .map(s => getClass(s)).filter(Boolean)
     )).sort()];
 
+    const sections = ["All", ...Array.from(new Set(
+        (activeTab === "active" ? activeStudents : leftStudents)
+            .filter(s => selectedClass === "All" || getClass(s) === selectedClass)
+            .map(s => (s.section || "").trim())
+            .filter(Boolean)
+    )).sort()];
+
     const filterList = (list: Student[]) =>
         list.filter(s => {
             const name = getDisplayName(s).toLowerCase();
             const matchSearch = name.includes(searchTerm.toLowerCase()) ||
                 (s.admissionNumber || "").toLowerCase().includes(searchTerm.toLowerCase());
             const matchClass = selectedClass === "All" || getClass(s) === selectedClass;
-            return matchSearch && matchClass;
+            const matchSection = selectedSection === "All" || (s.section || "").trim() === selectedSection;
+            return matchSearch && matchClass && matchSection;
         });
 
     const filtered = filterList(activeTab === "active" ? activeStudents : leftStudents);
@@ -246,7 +255,7 @@ export default function AdminStudentsPage() {
                 ].map(tab => (
                     <button
                         key={tab.key}
-                        onClick={() => { setActiveTab(tab.key as any); setSelectedClass("All"); setSearchTerm(""); }}
+                        onClick={() => { setActiveTab(tab.key as any); setSelectedClass("All"); setSelectedSection("All"); setSearchTerm(""); }}
                         className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.key ? "bg-white shadow-sm text-navy" : "text-gray-500 hover:text-gray-700"}`}
                     >
                         {tab.label}
@@ -262,8 +271,11 @@ export default function AdminStudentsPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     <Filter className="w-4 h-4 text-gray-400" />
-                    <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
+                    <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
                         {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
+                    </select>
+                    <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
+                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Section ${s}`}</option>)}
                     </select>
                 </div>
             </div>
