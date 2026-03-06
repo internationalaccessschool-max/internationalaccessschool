@@ -14,6 +14,7 @@ import {
     collectionGroup,
     getDocs,
     setDoc,
+    where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Exam } from "@/types";
@@ -173,9 +174,16 @@ export default function AdminExamsPage() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Delete exam "${name}"? This cannot be undone.`)) return;
+        if (!window.confirm(`Delete exam "${name}"? This will also delete all generated admit cards for this exam! This cannot be undone.`)) return;
         try {
+            // Delete the exam document
             await deleteDoc(doc(db, "exams", id));
+
+            // Delete all associated admit cards
+            const q = query(collection(db, "admitCards"), where("examId", "==", id));
+            const snap = await getDocs(q);
+            const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "admitCards", d.id)));
+            await Promise.all(deletePromises);
         } catch (err: any) {
             alert("Failed to delete: " + err.message);
         }
