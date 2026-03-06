@@ -18,8 +18,11 @@ import {
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -69,7 +72,10 @@ interface AdmissionRequest {
 
 const acceptSchema = z.object({
     admissionNo: z.string().min(1, "Admission Number is required"),
-    section: z.string().min(1, "Section is required"),
+    section: z.string()
+        .min(1, "Required")
+        .max(1, "1 letter only")
+        .regex(/^[A-Za-z]$/, "Letters only"),
     class: z.string().min(1, "Class is required"),
 });
 type AcceptFormValues = z.infer<typeof acceptSchema>;
@@ -101,9 +107,10 @@ export default function AdminAdmissionsPage() {
     const [isFetching, setIsFetching] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const [allClasses, setAllClasses] = useState<string[]>([]);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-    const { register, handleSubmit, formState: { errors }, setValue, reset } = useForm<AcceptFormValues>({
+    const { register, handleSubmit, control, formState: { errors }, setValue, reset } = useForm<AcceptFormValues>({
         resolver: zodResolver(acceptSchema),
     });
 
@@ -127,6 +134,31 @@ export default function AdminAdmissionsPage() {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 4000);
     };
+
+    // ── Fetch Classes for Dropdown ──
+    useEffect(() => {
+        const fetchClasses = async () => {
+            try {
+                const snap = await getDocs(collectionGroup(db, "profiles"));
+                const classSet = new Set<string>(["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]);
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    if (data.className) classSet.add(data.className);
+                });
+                // Sort custom to put NUR/LKG/UKG first, then numbers
+                const order: Record<string, number> = { NUR: -3, LKG: -2, UKG: -1 };
+                const sorted = Array.from(classSet).sort((a, b) => {
+                    const na = order[a.toUpperCase()] ?? (parseInt(a) || 99);
+                    const nb = order[b.toUpperCase()] ?? (parseInt(b) || 99);
+                    return na - nb;
+                });
+                setAllClasses(sorted);
+            } catch (err) {
+                setAllClasses(["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]);
+            }
+        };
+        fetchClasses();
+    }, []);
 
     // ── Filtered list for active tab ──
     const tabRequests = allRequests
@@ -208,7 +240,7 @@ export default function AdminAdmissionsPage() {
             const firstName = nameParts[0] || "Student";
             const lastName = nameParts.slice(1).join(" ");
             const normClass = data.class.trim().replace(/^class\s*/i, "").trim();
-            const sectionStr = data.section.trim() || "A";
+            const sectionStr = data.section.trim().toUpperCase() || "A";
 
             // users doc
             await setDoc(doc(db, "users", uid), {
@@ -532,12 +564,29 @@ export default function AdminAdmissionsPage() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <Label>Class *</Label>
-                                                <Input {...register("class")} className="mt-1" />
+                                                <div className="mt-1">
+                                                    <Controller
+                                                        name="class"
+                                                        control={control}
+                                                        render={({ field }) => (
+                                                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                                <SelectTrigger className="w-full bg-white">
+                                                                    <SelectValue placeholder="Select class" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {allClasses.map(cls => (
+                                                                        <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        )}
+                                                    />
+                                                </div>
                                                 {errors.class && <p className="text-red-500 text-xs mt-1">{errors.class.message}</p>}
                                             </div>
                                             <div>
                                                 <Label>Section *</Label>
-                                                <Input {...register("section")} placeholder="e.g. A" className="mt-1" />
+                                                <Input {...register("section")} placeholder="e.g. A" className="mt-1" maxLength={1} style={{ textTransform: "uppercase" }} />
                                                 {errors.section && <p className="text-red-500 text-xs mt-1">{errors.section.message}</p>}
                                             </div>
                                         </div>
