@@ -17,7 +17,7 @@ const PRESET_SUBJECTS = [
 ];
 
 type ClassSubjects = {
-    subjects: string[];
+    subjects: any[];
 };
 
 export default function ManageSubjectsPage() {
@@ -31,7 +31,7 @@ export default function ManageSubjectsPage() {
         return String(val);
     };
     const [selectedClass, setSelectedClass] = useState("1");
-    const [subjects, setSubjects] = useState<string[]>([]);
+    const [subjects, setSubjects] = useState<any[]>([]);
     const [newSubject, setNewSubject] = useState("");
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -61,7 +61,14 @@ export default function ManageSubjectsPage() {
         const ref = doc(db, "classSubjects", selectedClass);
         getDoc(ref).then(snap => {
             if (snap.exists()) {
-                setSubjects((snap.data() as ClassSubjects).subjects || []);
+                const raw = (snap.data() as ClassSubjects).subjects || [];
+                const normalized = raw.map((s: any) => {
+                    if (typeof s === "string") {
+                        return { id: s.toLowerCase().replace(/\s+/g, "_"), name: s, type: "Core", maxMarks: 100 };
+                    }
+                    return s;
+                });
+                setSubjects(normalized);
             } else {
                 setSubjects([]);
             }
@@ -72,14 +79,22 @@ export default function ManageSubjectsPage() {
 
     const addSubject = (name: string) => {
         const trimmed = name.trim();
-        if (!trimmed || subjects.includes(trimmed)) return;
-        setSubjects(prev => [...prev, trimmed]);
+        if (!trimmed) return;
+        const exists = subjects.some(s => (s.name || s).toLowerCase() === trimmed.toLowerCase());
+        if (exists) return;
+
+        setSubjects(prev => [...prev, {
+            id: trimmed.toLowerCase().replace(/\s+/g, "_"),
+            name: trimmed,
+            type: "Core",
+            maxMarks: 100
+        }]);
         setNewSubject("");
         setSaved(false);
     };
 
-    const removeSubject = (name: string) => {
-        setSubjects(prev => prev.filter(s => s !== name));
+    const removeSubject = (subjectObj: any) => {
+        setSubjects(prev => prev.filter(s => s.id !== subjectObj.id));
         setSaved(false);
     };
 
@@ -140,13 +155,13 @@ export default function ManageSubjectsPage() {
                     <div>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Add from preset subjects</p>
                         <div className="flex flex-wrap gap-2">
-                            {PRESET_SUBJECTS.filter(s => !subjects.includes(s)).map(s => (
+                            {PRESET_SUBJECTS.filter(s => !subjects.some(sub => (sub.name || sub) === s)).map(s => (
                                 <button key={s} onClick={() => addSubject(s)}
                                     className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 border border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-all">
                                     + {s}
                                 </button>
                             ))}
-                            {PRESET_SUBJECTS.filter(s => !subjects.includes(s)).length === 0 && (
+                            {PRESET_SUBJECTS.filter(s => !subjects.some(sub => (sub.name || sub) === s)).length === 0 && (
                                 <p className="text-xs text-gray-300">All presets added</p>
                             )}
                         </div>
@@ -180,10 +195,10 @@ export default function ManageSubjectsPage() {
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Configured subjects (drag to reorder coming soon)</p>
                             <div className="space-y-1.5">
                                 {subjects.map((s, i) => (
-                                    <div key={s} className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-100 group">
+                                    <div key={s.id || safeStr(s)} className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-100 group">
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold text-gray-300 w-5">{i + 1}</span>
-                                            <span className="text-sm font-medium text-navy">{safeStr(s)}</span>
+                                            <span className="text-sm font-medium text-navy">{safeStr(s.name || s)}</span>
                                         </div>
                                         <button onClick={() => removeSubject(s)}
                                             className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
