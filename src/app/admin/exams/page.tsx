@@ -339,8 +339,16 @@ export default function AdminExamsPage() {
                                                             : <><Globe className="h-3 w-3 mr-1" /> Publish</>}
                                                     </Button>
                                                     <Button variant="ghost" size="icon"
+                                                        onClick={() => handleGenerateAdmitCards(exam)}
+                                                        disabled={isGenerating === exam.id}
+                                                        className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                                        title="Generate Admit Cards">
+                                                        {isGenerating === exam.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon"
                                                         onClick={() => openEditDialog(exam)}
-                                                        className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50">
+                                                        className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                        title="Edit Exam">
                                                         <Edit2 className="h-4 w-4" />
                                                     </Button>
                                                     <Button variant="ghost" size="icon"
