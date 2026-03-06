@@ -21,6 +21,8 @@ interface AdmitCard {
     section: string;
     dob: string;
     fatherName: string;
+    timing?: string;
+    instructions?: string;
     generatedAt: number;
 }
 
@@ -103,16 +105,20 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
       <div class="exam-row"><span>Exam Name</span><span><strong>${card.examName}</strong></span></div>
       <div class="exam-row"><span>Start Date</span><span>${card.startDate}</span></div>
       <div class="exam-row"><span>End Date</span><span>${card.endDate}</span></div>
+      ${card.timing ? `<div class="exam-row"><span>Timing</span><span>${card.timing}</span></div>` : ''}
     </div>
     <div class="instructions">
       <strong>📋 Important Instructions:</strong>
-      <ul>
-        <li>This admit card must be presented at the examination hall.</li>
-        <li>Candidates should be seated 15 minutes before the exam starts.</li>
-        <li>Mobile phones and electronic gadgets are strictly prohibited.</li>
-        <li>This admit card is not transferable.</li>
-        <li>In case of any discrepancy, report to the school office immediately.</li>
-      </ul>
+      ${card.instructions
+                ? `<div style="white-space: pre-wrap; font-size: 11px;">${card.instructions}</div>`
+                : `<ul>
+            <li>This admit card must be presented at the examination hall.</li>
+            <li>Candidates should be seated 15 minutes before the exam starts.</li>
+            <li>Mobile phones and electronic gadgets are strictly prohibited.</li>
+            <li>This admit card is not transferable.</li>
+            <li>In case of any discrepancy, report to the school office immediately.</li>
+           </ul>`
+            }
     </div>
     <div class="footer">
       <div><div class="sig-line"></div><div class="sig-name">Candidate Signature</div></div>
@@ -180,10 +186,15 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
                                 </Badge>
                             </div>
                             <h3 className="text-lg font-bold text-foreground mb-1">{card.examName}</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
+                            <p className="text-sm text-muted-foreground mb-1">
                                 {card.startDate} — {card.endDate}
                             </p>
-                            <div className="grid grid-cols-2 gap-3 text-sm mb-5">
+                            {card.timing && (
+                                <p className="text-xs font-medium text-amber-600 mb-4 bg-amber-50 inline-block px-2 py-1 rounded w-fit">
+                                    ⏱ {card.timing}
+                                </p>
+                            )}
+                            <div className="grid grid-cols-2 gap-3 text-sm mb-5 mt-3">
                                 <div>
                                     <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Class</span>
                                     <p className="font-semibold">{card.className} – {card.section || "—"}</p>
