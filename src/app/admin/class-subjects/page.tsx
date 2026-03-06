@@ -25,6 +25,15 @@ interface ClassSubjectEntry {
 }
 
 export default function ClassSubjectMappingPage() {
+    // Helper: Safe string render
+    const safeStr = (val: any): string => {
+        if (!val) return "";
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object') {
+            return val.name || val.label || val.id || JSON.stringify(val);
+        }
+        return String(val);
+    };
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState("");
     const [subjects, setSubjects] = useState<ClassSubjectEntry[]>([]);
@@ -193,13 +202,13 @@ export default function ClassSubjectMappingPage() {
                                         <tbody className="divide-y">
                                             {subjects.map(sub => (
                                                 <tr key={sub.id} className="hover:bg-muted/10">
-                                                    <td className="px-6 py-3 font-medium">{sub.name}</td>
+                                                    <td className="px-6 py-3 font-medium">{safeStr(sub.name)}</td>
                                                     <td className="px-6 py-3">
                                                         <Badge variant={sub.type === "Core" ? "default" : sub.type === "Elective" ? "secondary" : "outline"}>
-                                                            {sub.type}
+                                                            {safeStr(sub.type)}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-6 py-3">{sub.maxMarks}</td>
+                                                    <td className="px-6 py-3">{safeStr(sub.maxMarks)}</td>
                                                     <td className="px-6 py-3 text-right">
                                                         <Button variant="ghost" size="icon"
                                                             onClick={() => handleRemoveSubject(sub.id)}
