@@ -14,6 +14,7 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
     doc, setDoc, serverTimestamp, collection,
+    collectionGroup,
     query, getDocs, orderBy, updateDoc, where,
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
