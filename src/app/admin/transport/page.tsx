@@ -94,10 +94,10 @@ export default function TransportAdminPage() {
     const assignForm = useForm<AssignFormValues>({ resolver: zodResolver(assignSchema) });
     const watchTransportMode = assignForm.watch("transportMode");
 
-    const showToast = (msg: string, type: "success" | "error" = "success") => {
+    const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 4000);
-    };
+    }, []);
 
     // ─── Fetch Data ────────────────────────────────────────────────────────
     const fetchData = useCallback(async () => {
