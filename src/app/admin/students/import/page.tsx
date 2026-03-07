@@ -211,7 +211,7 @@ const COLUMN_MAP: Record<string, string> = {
 const TEMPLATE_HEADERS = [
     "S.N", "STAT", "SESS", "ENR", "D. O. A", "NAME",
     "CONTACT", "CONTACT 2", "AADHAR", "APAAR ID", "P.E.N",
-    "FREE", "CAT", "REL", "GEN", "CL ADM", "2025", "SEC",
+    "FREE", "CAT", "REL", "GEN", "CL ADM", "CURRENT CLASS", "SEC",
     "HOUS", "UDISE", "E-S", "CBSE", "D.O.B",
     "TRP", "Address", "PIN",
     "Mother Name", "M QUAL",
@@ -251,7 +251,7 @@ function downloadTemplate() {
         ["L. DATE", "No", "Left/TC date: DD/MM/YYYY"],
         ["STAT", "No", "ACTIVE or LEFT"],
         ["SESS", "No", "Session year, e.g. 2025"],
-        ["2025", "No", "Current class (NUR, LKG, UKG, 1-12)"],
+        ["CURRENT CLASS", "No", "Current class (NUR, LKG, UKG, 1-12)"],
         ["SEC", "No", "Section (A, B, C...)"],
         ["CAT", "No", "GEN / OBC / SC / ST / EWS"],
         ["BL GP", "No", "A+ / A- / B+ / B- / AB+ / AB- / O+ / O-"],
