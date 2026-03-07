@@ -295,8 +295,8 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                <div className="w-full overflow-x-auto scrollbar-hide">
+            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col">
+                <div className="w-full overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                     <table className="w-full text-sm whitespace-nowrap">
                         <thead className="bg-slate-50/80 border-b border-slate-200/60">
                             <tr>
@@ -356,7 +356,7 @@ export default function AdminStudentsPage() {
                                         </>
                                     )}
                                     <td className="px-5 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center justify-end gap-2.5 transition-opacity">
                                             <button onClick={() => setEditingStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300">
                                                 <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} /> Edit
                                             </button>
