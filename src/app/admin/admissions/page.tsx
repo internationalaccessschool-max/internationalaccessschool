@@ -14,7 +14,7 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
     doc, setDoc, serverTimestamp, collection,
-    collectionGroup,
+    collectionGroup, getCountFromServer, // ADDED getCountFromServer
     query, getDocs, orderBy, updateDoc, where,
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
@@ -243,6 +243,11 @@ export default function AdminAdmissionsPage() {
             const normClass = data.class.trim().replace(/^class\s*/i, "").trim();
             const sectionStr = data.section.trim().toUpperCase() || "A";
 
+            // Determine chronological serial number based on total student count
+            const snapshot = await getCountFromServer(collectionGroup(db, "profiles"));
+            const totalStudents = snapshot.data().count;
+            const newSerialNumber = String(totalStudents + 1);
+
             // users doc
             await setDoc(doc(db, "users", uid), {
                 uid, email, role: "student",
@@ -293,7 +298,7 @@ export default function AdminAdmissionsPage() {
                     admissionRequestId: selectedRequest.id,
                     pen: "", aparId: "", udise: "", cbseEnrolmentNo: "",
                     house: "", transport: "", branch: "", block: "",
-                    serialNumber: "", religion: "", contact2: "", contact3: "",
+                    serialNumber: newSerialNumber, religion: "", contact2: "", contact3: "",
                     freeScheme: "", economicallyWeakSection: "No", minorityStatus: "",
                     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
                 }
