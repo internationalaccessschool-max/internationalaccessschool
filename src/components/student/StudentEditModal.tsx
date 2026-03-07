@@ -32,6 +32,54 @@ const GENDER_OPTIONS = ["Male", "Female", "Other"];
 const BLOOD_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const CATEGORY_OPTIONS = ["General", "OBC", "SC", "ST", "EWS", "Other"];
 
+// ─── Extracted Field Component to prevent re-renders on keystroke ────────────────
+const FieldRenderer = ({
+    label,
+    field,
+    type = "text",
+    options,
+    form,
+    set,
+    locked
+}: {
+    label: string;
+    field: string;
+    type?: string;
+    options?: string[];
+    form: any;
+    set: (key: string, value: any) => void;
+    locked: boolean;
+}) => {
+    return (
+        <div>
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                {label}
+                {locked && <span title="Admin only"><Lock className="w-3 h-3 text-slate-300 ml-1" /></span>}
+            </label>
+            {options ? (
+                <select
+                    value={form[field] || ""}
+                    onChange={e => !locked && set(field, e.target.value)}
+                    disabled={locked}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none transition-all duration-200 bg-white shadow-sm ${locked ? "border-slate-100/50 bg-slate-50/50 text-slate-400 cursor-not-allowed shadow-none" : "border-slate-200/60 text-slate-800 focus:border-black focus:ring-4 focus:ring-black/5 hover:border-slate-300"}`}
+                >
+                    <option value="" className="text-slate-400">Select {label}</option>
+                    {options.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+            ) : (
+                <input
+                    type={type}
+                    value={form[field] || ""}
+                    onChange={e => !locked && set(field, e.target.value)}
+                    readOnly={locked}
+                    placeholder={`Enter ${label.toLowerCase()}...`}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none transition-all duration-200 shadow-sm placeholder:text-slate-300 ${locked ? "bg-slate-50/50 border-slate-100/50 text-slate-400 cursor-not-allowed shadow-none" : "bg-white border-slate-200/60 text-slate-800 focus:border-black focus:ring-4 focus:ring-black/5 hover:border-slate-300"}`}
+                />
+            )}
+        </div>
+    );
+};
+
 export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: StudentEditModalProps) {
     const [activeTab, setActiveTab] = useState("personal");
     // Convert DOB from DD-MM-YYYY (DB) to YYYY-MM-DD (for date input) on load
@@ -119,42 +167,15 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
 
     const isAdminLocked = (field: string) => role === "teacher" && ["admissionNumber", "className", "section", "session", "aadharNo", "pen", "aparId"].includes(field);
 
-    const F = ({ label, field, type = "text", options }: { label: string; field: string; type?: string; options?: string[] }) => {
-        const locked = isAdminLocked(field);
-        return (
-            <div>
-                <label className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
-                    {label}
-                    {locked && <span title="Admin only"><Lock className="w-3 h-3 text-gray-300 ml-1" /></span>}
-                </label>
-                {options ? (
-                    <select
-                        value={form[field] || ""}
-                        onChange={e => !locked && set(field, e.target.value)}
-                        disabled={locked}
-                        className={`w-full px-3 py-2.5 rounded-xl border text-sm focus:outline-none transition-all bg-white ${locked ? "border-gray-100 text-gray-400 cursor-not-allowed" : "border-gray-200 focus:border-navy focus:ring-2 focus:ring-navy/10"}`}
-                    >
-                        <option value="">Select {label}</option>
-                        {options.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                ) : (
-                    <input
-                        type={type}
-                        value={form[field] || ""}
-                        onChange={e => !locked && set(field, e.target.value)}
-                        readOnly={locked}
-                        className={`w-full px-3 py-2.5 rounded-xl border text-sm focus:outline-none transition-all ${locked ? "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed" : "bg-white border-gray-200 focus:border-navy focus:ring-2 focus:ring-navy/10"}`}
-                    />
-                )}
-            </div>
-        );
-    };
+    const F = (props: { label: string; field: string; type?: string; options?: string[] }) => (
+        <FieldRenderer {...props} form={form} set={set} locked={isAdminLocked(props.field)} />
+    );
 
     const renderTab = () => {
         switch (activeTab) {
             case "personal":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="Full Name" field="name" />
                         <F label="First Name" field="firstName" />
                         <F label="Middle Name" field="middleName" />
@@ -174,7 +195,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "contact":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="Mobile No (Primary)" field="mobileNo" type="tel" />
                         <F label="Contact 2" field="contact2" type="tel" />
                         <F label="Contact 3" field="contact3" type="tel" />
@@ -192,7 +213,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "family":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="Father's Name" field="fatherName" />
                         <F label="Father's Occupation" field="fatherOccupation" />
                         <F label="Father's Education" field="fatherEducation" />
@@ -210,7 +231,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "medical":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="Height (cm)" field="height" type="number" />
                         <F label="Weight (kg)" field="weight" type="number" />
                         <F label="Medical Condition" field="medicalCondition" />
@@ -221,7 +242,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "bank":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="Bank Name" field="bankName" />
                         <F label="Account Number" field="bankAccountNumber" />
                         <F label="IFSC Code" field="ifscCode" />
@@ -231,7 +252,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "academic":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <F label="S.N (Serial No)" field="serialNumber" />
                         <F label="Admission Number (ENR)" field="admissionNumber" />
                         <F label="Status" field="status" options={["ACTIVE", "LEFT"]} />
@@ -266,7 +287,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "other":
                 return (
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <div className="sm:col-span-2"><F label="Remarks" field="remarks" /></div>
                         <F label="House" field="house" />
                         <F label="Free Scheme" field="freeScheme" />
@@ -335,40 +356,40 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-[2px] p-4 sm:p-6" onClick={onClose}>
+            <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden ring-1 ring-slate-900/5" onClick={e => e.stopPropagation()}>
                 {/* Header */}
-                <div className="gradient-navy px-6 py-5 flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center font-bold text-white">
+                <div className="gradient-navy px-7 py-5 flex items-center justify-between shrink-0 border-b border-black/10">
+                    <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center font-bold text-white shadow-inner border border-white/10">
                             {(form.firstName || "S").charAt(0)}
                         </div>
                         <div>
-                            <p className="font-bold text-white">{form.firstName} {form.middleName} {form.lastName}</p>
-                            <p className="text-white/50 text-xs">{form.admissionNumber} · {form.className} {form.section}</p>
+                            <p className="font-bold text-white tracking-wide text-lg">{form.firstName} {form.middleName} {form.lastName}</p>
+                            <p className="text-white/60 text-xs font-medium tracking-wide mt-0.5">{form.admissionNumber} · {form.className} {form.section}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-white/50 hover:text-white transition-colors">
+                    <button onClick={onClose} className="p-2 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-all">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex overflow-x-auto border-b border-gray-100 bg-white shrink-0 scrollbar-hide">
+                <div className="flex overflow-x-auto border-b border-slate-100 bg-white shrink-0 scrollbar-hide px-3 pt-3 pb-0 gap-1">
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition-all ${activeTab === tab.id ? "border-navy text-navy" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+                            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold rounded-t-xl transition-all duration-200 outline-none ${activeTab === tab.id ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"}`}
                         >
-                            <tab.icon className="w-3.5 h-3.5" />
+                            <tab.icon className="w-3.5 h-3.5" strokeWidth={activeTab === tab.id ? 2.5 : 2} />
                             {tab.label}
                         </button>
                     ))}
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-7 bg-[#fbfbfb]">
                     {renderTab()}
                 </div>
 
