@@ -262,7 +262,7 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            <div className="flex gap-1.5 p-1 rounded-2xl w-fit bg-slate-100/80 border border-slate-200/60 shadow-sm">
                 {[
                     { key: "active", label: `Active Students (${activeStudents.length})` },
                     { key: "left", label: `Left Students (${leftStudents.length})` },
@@ -270,7 +270,7 @@ export default function AdminStudentsPage() {
                     <button
                         key={tab.key}
                         onClick={() => { setActiveTab(tab.key as any); setSelectedClass("All"); setSelectedSection("All"); setSearchTerm(""); }}
-                        className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.key ? "bg-white shadow-sm text-navy" : "text-gray-500 hover:text-gray-700"}`}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 outline-none ${activeTab === tab.key ? "bg-white shadow-[0_2px_10px_rgb(0,0,0,0.06)] text-navy ring-1 ring-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"}`}
                     >
                         {tab.label}
                     </button>
@@ -278,94 +278,95 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-3 items-center bg-white p-4 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                 <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input type="search" placeholder="Search by name or admission number..." className="pl-10 border-gray-200 focus:border-navy focus:ring-navy/10 rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400" />
+                    <Input type="search" placeholder="Search by name or admission number..." className="pl-11 py-5 border-slate-200/60 focus:border-black focus:ring-4 focus:ring-black/5 rounded-2xl bg-slate-50/50 hover:bg-white text-[15px] placeholder:text-slate-400 transition-all font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <Filter className="w-4 h-4 text-gray-400" />
-                    <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
+                <div className="flex items-center gap-2.5 shrink-0">
+                    <Filter className="w-5 h-5 text-slate-400 hidden sm:block ml-2" />
+                    <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
                         {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
                     </select>
-                    <select className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:border-navy" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
+                    <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
                         {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Section ${s}`}</option>)}
                     </select>
                 </div>
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="w-full overflow-x-auto">
+            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                <div className="w-full overflow-x-auto scrollbar-hide">
                     <table className="w-full text-sm whitespace-nowrap">
-                        <thead className="bg-gray-50 border-b border-gray-100">
+                        <thead className="bg-slate-50/80 border-b border-slate-200/60">
                             <tr>
                                 {activeTab === "active"
                                     ? ["S.N", "Student", "ENR", "Class & Sec", "Father's Name", "Mobile", "Actions"].map(h => (
-                                        <th key={h} className={`h-12 px-4 text-left align-middle font-semibold text-navy text-xs uppercase tracking-wide ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
+                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
                                     ))
                                     : ["S.N", "Student", "ENR", "Last Class", "Left Year", "Last Date", "Branch", "Remarks", "Actions"].map(h => (
-                                        <th key={h} className={`h-12 px-4 text-left align-middle font-semibold text-navy text-xs uppercase tracking-wide ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
+                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
                                     ))
                                 }
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody className="divide-y divide-slate-100">
                             {isLoading ? (
-                                <tr><td colSpan={9} className="p-16 text-center text-gray-400">
-                                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-navy" />Loading...
+                                <tr><td colSpan={9} className="p-20 text-center text-slate-400">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-navy" />
+                                    <p className="font-semibold text-sm tracking-wide">Loading Directory...</p>
                                 </td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={9} className="p-16 text-center">
-                                    <UserCircle2 className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                                    <p className="text-gray-400 text-sm font-medium">No students found</p>
+                                <tr><td colSpan={9} className="p-20 text-center">
+                                    <UserCircle2 className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                    <p className="text-slate-500 text-sm font-bold tracking-wide">No students found</p>
                                 </td></tr>
                             ) : filtered.map((student, idx) => (
-                                <tr key={student.id} className="hover:bg-gray-50/60 transition-colors">
-                                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">
+                                <tr key={student.id} className="hover:bg-slate-50 transition-colors group">
+                                    <td className="px-5 py-4 text-slate-400 text-xs font-mono font-bold">
                                         {student.serialNumber || idx + 1}
                                     </td>
-                                    <td className="px-4 py-4 align-middle">
+                                    <td className="px-5 py-4 align-middle">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg overflow-hidden bg-navy/10 flex items-center justify-center shrink-0">
+                                            <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
                                                 {student.childPhotoUrl
                                                     ? <img src={student.childPhotoUrl} alt={getDisplayName(student)} className="w-full h-full object-cover" />
-                                                    : <span className="font-bold text-navy text-sm">{(getDisplayName(student) || "S").charAt(0)}</span>
+                                                    : <span className="font-bold text-slate-400 text-sm">{(getDisplayName(student) || "S").charAt(0)}</span>
                                                 }
                                             </div>
-                                            <span className="font-semibold text-navy">{getDisplayName(student)}</span>
+                                            <span className="font-bold text-slate-800 tracking-wide text-[15px]">{getDisplayName(student)}</span>
                                         </div>
                                     </td>
-                                    <td className="px-4 py-3">
-                                        <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 font-mono">{safeStr(student.admissionNumber) || "—"}</span>
+                                    <td className="px-5 py-4">
+                                        <span className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-bold border border-slate-200 font-mono tracking-widest">{safeStr(student.admissionNumber) || "—"}</span>
                                     </td>
                                     {activeTab === "active" ? (
                                         <>
-                                            <td className="px-4 py-3 text-gray-600">{getClass(student)} <span className="text-gray-400">·</span> {safeStr(student.section) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.fatherName) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.mobileNo) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600 font-medium">{getClass(student)} <span className="text-slate-300 mx-1">·</span> {safeStr(student.section) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600">{safeStr(student.fatherName) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600 font-mono text-xs">{safeStr(student.mobileNo) || "—"}</td>
                                         </>
                                     ) : (
                                         <>
-                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.lastClass) || getClass(student) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600">{safeStr(student.leftYear) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600 text-xs">{safeStr(student.lastDate) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-600 text-xs">{safeStr(student.branch) || "—"}</td>
-                                            <td className="px-4 py-3 text-gray-500 text-xs max-w-[150px] truncate">{safeStr(student.remarks) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600 font-medium">{safeStr(student.lastClass) || getClass(student) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600 font-medium">{safeStr(student.leftYear) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-500 font-mono text-xs">{safeStr(student.lastDate) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-600 font-medium text-xs">{safeStr(student.branch) || "—"}</td>
+                                            <td className="px-5 py-4 text-slate-400 text-xs max-w-[150px] truncate">{safeStr(student.remarks) || "—"}</td>
                                         </>
                                     )}
-                                    <td className="px-4 py-3 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button onClick={() => setEditingStudent(student)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-navy bg-navy/5 hover:bg-navy/10 border border-navy/10 transition-colors">
-                                                <Pencil className="w-3.5 h-3.5" /> Edit
+                                    <td className="px-5 py-4 text-right">
+                                        <div className="flex items-center justify-end gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setEditingStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300">
+                                                <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} /> Edit
                                             </button>
                                             {activeTab === "active" ? (
-                                                <button onClick={() => setDisableTarget(student)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-100 transition-colors">
-                                                    <PowerOff className="w-3.5 h-3.5" /> Disable
+                                                <button onClick={() => setDisableTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-white hover:bg-red-50 ring-1 ring-slate-200 hover:ring-red-200 shadow-sm transition-all focus:outline-none">
+                                                    <PowerOff className="w-3.5 h-3.5" strokeWidth={2.5} /> Disable
                                                 </button>
                                             ) : (
-                                                <button onClick={() => setReactivateTarget(student)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 border border-green-100 transition-colors">
-                                                    <RotateCcw className="w-3.5 h-3.5" /> Re-activate
+                                                <button onClick={() => setReactivateTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-600 bg-white hover:bg-emerald-50 ring-1 ring-slate-200 hover:ring-emerald-200 shadow-sm transition-all focus:outline-none">
+                                                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} /> Re-activate
                                                 </button>
                                             )}
                                         </div>
@@ -389,24 +390,24 @@ export default function AdminStudentsPage() {
 
             {/* Disable Confirmation Modal */}
             {disableTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
-                            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center">
-                                <PowerOff className="w-7 h-7 text-amber-600" />
+                            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
+                                <PowerOff className="w-7 h-7 text-red-500" strokeWidth={2.5} />
                             </div>
-                            <h2 className="text-xl font-bold text-gray-900">Disable Student?</h2>
-                            <p className="text-sm text-gray-500 leading-relaxed">
-                                <span className="font-semibold text-gray-800">{getDisplayName(disableTarget)}</span> (ENR: <span className="font-mono font-bold text-navy">{disableTarget.admissionNumber}</span>) will be marked as <span className="text-amber-600 font-semibold">LEFT</span> and moved to the Left Students panel.
-                                <br /><span className="text-gray-400 text-xs">No data will be deleted. You can re-activate anytime.</span>
+                            <h2 className="text-xl font-bold text-slate-900 mt-2">Disable Student?</h2>
+                            <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                                <span className="font-bold text-slate-800">{getDisplayName(disableTarget)}</span> (ENR: <span className="font-mono font-bold text-slate-800">{disableTarget.admissionNumber}</span>) will be marked as <span className="text-red-500 font-bold">LEFT</span> and moved to the Left Students panel.
+                                <br /><span className="text-slate-400 text-xs mt-2 block">No data will be deleted. You can re-activate anytime.</span>
                             </p>
                         </div>
-                        <div className="flex gap-3 pt-1">
-                            <button onClick={() => setDisableTarget(null)} disabled={isDisabling} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-colors">
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => setDisableTarget(null)} disabled={isDisabling} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors outline-none focus:ring-2 focus:ring-slate-200">
                                 Cancel
                             </button>
-                            <button onClick={handleDisable} disabled={isDisabling} className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                                {isDisabling ? <><Loader2 className="w-4 h-4 animate-spin" /> Disabling...</> : <><PowerOff className="w-4 h-4" /> Yes, Disable</>}
+                            <button onClick={handleDisable} disabled={isDisabling} className="flex-1 px-4 py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 outline-none focus:ring-2 focus:ring-red-500/50 shadow-sm border border-red-500">
+                                {isDisabling ? <><Loader2 className="w-4 h-4 animate-spin" /> Disabling...</> : <><PowerOff className="w-4 h-4" strokeWidth={2.5} /> Yes, Disable</>}
                             </button>
                         </div>
                     </div>
@@ -415,23 +416,23 @@ export default function AdminStudentsPage() {
 
             {/* Re-activate Confirmation Modal */}
             {reactivateTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
-                            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-                                <RotateCcw className="w-7 h-7 text-green-600" />
+                            <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                                <RotateCcw className="w-7 h-7 text-emerald-500" strokeWidth={2.5} />
                             </div>
-                            <h2 className="text-xl font-bold text-gray-900">Re-activate Student?</h2>
-                            <p className="text-sm text-gray-500">
-                                <span className="font-semibold text-gray-800">{getDisplayName(reactivateTarget)}</span> will be moved back to Active Students.
+                            <h2 className="text-xl font-bold text-slate-900 mt-2">Re-activate Student?</h2>
+                            <p className="text-sm text-slate-500 font-medium">
+                                <span className="font-bold text-slate-800">{getDisplayName(reactivateTarget)}</span> will be safely restored back to the Active Students directory.
                             </p>
                         </div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setReactivateTarget(null)} disabled={isReactivating} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50">
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => setReactivateTarget(null)} disabled={isReactivating} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 outline-none focus:ring-2 focus:ring-slate-200">
                                 Cancel
                             </button>
-                            <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                                {isReactivating ? <><Loader2 className="w-4 h-4 animate-spin" /> Activating...</> : <><RotateCcw className="w-4 h-4" /> Yes, Re-activate</>}
+                            <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 px-4 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-sm border border-emerald-500">
+                                {isReactivating ? <><Loader2 className="w-4 h-4 animate-spin" /> Activating...</> : <><RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Yes, Re-activate</>}
                             </button>
                         </div>
                     </div>
