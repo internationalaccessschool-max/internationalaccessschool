@@ -190,7 +190,7 @@ export default function AdminStudentsPage() {
             "REL": s.religion || "",
             "GEN": s.gender || "",
             "CL ADM": s.classAtAdmission || "",
-            "2025": s.currentClass || getClass(s) || "",
+            "CURRENT CLASS": s.currentClass || getClass(s) || "",
             "SEC": s.section || "",
             "HOUS": s.house || "",
             "UDISE": s.udise || "",
