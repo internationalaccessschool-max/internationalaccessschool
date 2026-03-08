@@ -155,7 +155,7 @@ export default function GenerateFeesPage() {
                         <label className="text-sm font-medium text-navy mb-1.5 block">Month</label>
                         <select
                             value={selectedMonth}
-                            onChange={e => setSelectedMonth(Number(e.target.value))}
+                            onChange={e => { setSelectedMonth(Number(e.target.value)); setResult(null); }}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-gold focus:ring-1 focus:ring-gold outline-none text-sm bg-gray-50/50 focus:bg-white transition-all"
                         >
                             {MONTHS.map((m, i) => (
@@ -168,7 +168,7 @@ export default function GenerateFeesPage() {
                         <label className="text-sm font-medium text-navy mb-1.5 block">Year</label>
                         <select
                             value={selectedYear}
-                            onChange={e => setSelectedYear(Number(e.target.value))}
+                            onChange={e => { setSelectedYear(Number(e.target.value)); setResult(null); }}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-gold focus:ring-1 focus:ring-gold outline-none text-sm bg-gray-50/50 focus:bg-white transition-all"
                         >
                             {years.map(y => (
@@ -192,12 +192,18 @@ export default function GenerateFeesPage() {
                 <button
                     onClick={handleGenerate}
                     disabled={generating}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-navy text-white font-semibold text-sm hover:bg-navy-light transition-all shadow-md shadow-navy/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${result ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20" : "bg-navy text-white hover:bg-navy-light shadow-navy/20"
+                        }`}
                 >
                     {generating ? (
                         <>
                             <Loader2 className="w-5 h-5 animate-spin" />
                             Generating...
+                        </>
+                    ) : result ? (
+                        <>
+                            <CheckCircle2 className="w-5 h-5" />
+                            Generated Successfully!
                         </>
                     ) : (
                         <>
