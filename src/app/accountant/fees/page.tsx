@@ -9,6 +9,7 @@ import {
     Mail, Loader2, RefreshCw, ChevronDown
 } from "lucide-react";
 import toast from "react-hot-toast";
+import FeeReceiptModal from "@/components/accountant/FeeReceiptModal";
 
 interface FeeRecord {
     id: string;
@@ -25,6 +26,15 @@ interface FeeRecord {
     status: "pending" | "paid" | "overdue";
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
+    breakdown?: {
+        tuitionFee?: number;
+        examFee?: number;
+        computerFee?: number;
+        transportFee?: number;
+        libraryFee?: number;
+        sportsFee?: number;
+        miscFee?: number;
+    };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -40,6 +50,7 @@ export default function ManageFeesPage() {
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [selectedReceipt, setSelectedReceipt] = useState<FeeRecord | null>(null);
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -428,6 +439,15 @@ export default function ManageFeesPage() {
                                                             WhatsApp
                                                         </a>
                                                     )}
+                                                    {record.status === "paid" && (
+                                                        <button
+                                                            onClick={() => setSelectedReceipt(record)}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 transition-colors"
+                                                        >
+                                                            <CheckCircle2 className="w-3 h-3" />
+                                                            View Receipt
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -438,6 +458,12 @@ export default function ManageFeesPage() {
                     </div>
                 )}
             </div>
+
+            {/* Receipt Modal */}
+            <FeeReceiptModal
+                record={selectedReceipt}
+                onClose={() => setSelectedReceipt(null)}
+            />
         </div>
     );
 }
