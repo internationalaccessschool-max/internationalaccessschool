@@ -34,7 +34,20 @@ export async function POST(req: NextRequest) {
 
             // Idempotent document ID to prevent duplicates
             const docId = `${student.id}_${month}_${year}_tuition`;
-            const feeRef = adminDb.collection("feeRecords").doc(docId);
+
+            const yearStr = year.toString();
+            const monthStr = month.toString();
+            const classId = cls || "unknown";
+
+            const feeRef = adminDb
+                .collection("feeRecords")
+                .doc(yearStr)
+                .collection("months")
+                .doc(monthStr)
+                .collection("classes")
+                .doc(classId)
+                .collection("records")
+                .doc(docId);
 
             const studentName = `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.name || "Unknown";
 
