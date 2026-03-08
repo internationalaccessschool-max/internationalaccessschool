@@ -112,12 +112,8 @@ export default function TransportAdminPage() {
             const studentSnap = await getDocs(collectionGroup(db, "profiles"));
             const allStudents = studentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
 
-            // Filter students who use some form of transport
-            const transportStudents = allStudents.filter(s => {
-                const t = (s.transport || "").trim().toUpperCase();
-                return !!t && t !== "NONE" && t !== "SELF" && t !== "N/A";
-            });
-            setStudents(transportStudents);
+            // Store all students rather than strictly filtering. Admins need to see all to assign transport.
+            setStudents(allStudents);
         } catch (error) {
             console.error("Error fetching transport data:", error);
             showToast("Failed to load data.", "error");
@@ -214,7 +210,7 @@ export default function TransportAdminPage() {
             if (data.transportMode === "NONE") {
                 newTransportString = "NONE";
             } else if (data.transportMode === "BUS_ASSIGNED" && data.assignedBusId) {
-                newTransportString = data.assignedBusId; // Store bus ID directly: "bus-123456"
+                newTransportString = "BUS"; // Store explicit BUS literal instead of Bus ID
             } else {
                 newTransportString = "BUS"; // General fallback
             }
@@ -441,7 +437,7 @@ export default function TransportAdminPage() {
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-50">
                                             {filteredStudents.length === 0 ? (
-                                                <tr><td colSpan={5} className="p-12 text-center text-gray-400">No students found requesting transport.</td></tr>
+                                                <tr><td colSpan={5} className="p-12 text-center text-gray-400">No students found.</td></tr>
                                             ) : filteredStudents.map(student => {
                                                 const busId = student.transport || "";
                                                 const assignedBus = getBusByTransportString(busId);
