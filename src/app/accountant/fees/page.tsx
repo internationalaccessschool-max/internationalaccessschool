@@ -65,8 +65,8 @@ export default function ManageFeesPage() {
     const fetchRecords = useCallback(async () => {
         setLoading(true);
         try {
-            // First get all classes
-            const classesSnap = await getDocs(collection(db, "classes"));
+            // First get all classes from fee structure
+            const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
             const classIds = classesSnap.docs.map(d => d.id);
 
             // Fetch records for all classes concurrently
