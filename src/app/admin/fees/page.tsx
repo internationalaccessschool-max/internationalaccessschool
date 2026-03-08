@@ -25,6 +25,7 @@ export default function AdminFeeDashboard() {
     const [loading, setLoading] = useState(true);
     const [filterMonth, setFilterMonth] = useState(currentMonth);
     const [filterYear, setFilterYear] = useState(currentYear);
+    const [monthlyData, setMonthlyData] = useState<{ month: string, year: number, value: number }[]>([]);
 
     useEffect(() => {
         const fetch = async () => {
@@ -37,6 +38,26 @@ export default function AdminFeeDashboard() {
                 );
                 const snap = await getDocs(q);
                 setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
+
+                // Fetch monthly trend (last 6 months)
+                const last6Queries = await Promise.all(
+                    Array.from({ length: 6 }, (_, i) => {
+                        const d = new Date(filterYear, filterMonth - 1 - i, 1);
+                        return getDocs(query(
+                            collection(db, "feeRecords"),
+                            where("month", "==", d.getMonth() + 1),
+                            where("year", "==", d.getFullYear()),
+                            where("status", "==", "paid")
+                        ));
+                    })
+                );
+
+                const mData = last6Queries.map((qSnap, i) => {
+                    const d = new Date(filterYear, filterMonth - 1 - i, 1);
+                    const total = qSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+                    return { month: MONTHS[d.getMonth()], year: d.getFullYear(), value: total };
+                }).reverse();
+                setMonthlyData(mData);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -70,13 +91,7 @@ export default function AdminFeeDashboard() {
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 10);
 
-    // Monthly trend (last 6 months)
-    const monthlyData = Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(filterYear, filterMonth - 1 - i, 1);
-        return { month: MONTHS[d.getMonth()], year: d.getFullYear(), value: Math.floor(Math.random() * 100000 + 50000) };
-    }).reverse();
-
-    const maxVal = Math.max(...monthlyData.map(m => m.value));
+    const maxVal = monthlyData.length > 0 ? Math.max(...monthlyData.map(m => m.value)) : 0;
 
     return (
         <div className="space-y-6">
