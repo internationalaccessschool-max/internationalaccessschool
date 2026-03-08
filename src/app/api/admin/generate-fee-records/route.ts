@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
         let opsInBatch = 0;
 
         for (const student of activeStudents) {
-            const cls = student.currentClass;
+            // Normalize class name
+            const rawCls = student.currentClass || student.className || student.class || "";
+            const cls = rawCls.toString().replace(/^class\s*/i, "").trim();
             const feeData = cls ? feeStructMap.get(cls) : null;
             const amount = feeData?.tuitionFee || 0; // fallback to 0 if not set
 
