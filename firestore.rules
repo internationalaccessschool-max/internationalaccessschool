@@ -1,45 +1,118 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check role
+    function isAuth() {
+      return request.auth != null;
+    }
+    
     function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
+    
+    function isAccountantOrAdmin() {
+      return isAuth() && getUserRole() in ['admin', 'accountant'];
+    }
 
+    // Users — own data only
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Students flat collection
     match /students/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if false; // Only Admin SDK writes
+      allow read: if isAuth();
+      allow write: if false;
     }
 
+    // Students profiles subcollection (collectionGroup)
     match /{path=**}/profiles/{profileId} {
-      allow read: if request.auth != null;
+      allow read: if isAuth();
     }
 
+    // Homework
     match /homework/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuth();
     }
 
+    // Attendance
     match /attendance/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuth();
     }
 
-    match /feeRecords/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && getUserRole() in ['admin', 'accountant'];
+    // Fee Structure — accountant reads/writes, others read only
+    match /fees/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
     }
 
+    // Fee Records — DEEP NESTED PATH SUPPORT
+    match /feeRecords/{year}/months/{month}/classes/{classId}/records/{recordId} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+
+    // Notices — public read
     match /notices/{document=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAuth();
     }
 
+    // Settings
+    match /settings/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && getUserRole() == 'admin';
+    }
+
+    // Gallery
+    match /gallery/{document=**} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // Transport
+    match /transport/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && getUserRole() in ['admin', 'supervisor'];
+    }
+
+    // Exams and Results
+    match /exams/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+    match /results/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    // Classes and subjects
+    match /classes/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+    match /classSubjects/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+    match /class_teachers/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    // Teachers
+    match /teachers/{document=**} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    // Admissions
+    match /admissions/{document=**} {
+      allow read: if isAuth();
+      allow write: if true;
+    }
+
+    // Default — deny everything else
     match /{document=**} {
       allow read, write: if false;
     }
