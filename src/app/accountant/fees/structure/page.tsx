@@ -24,6 +24,13 @@ const CLASS_LIST = [
 
 interface FeeStructure {
     monthly: number;
+    tuitionFee: number;
+    examFee: number;
+    computerFee: number;
+    transportFee: number;
+    libraryFee: number;
+    sportsFee: number;
+    miscFee: number;
     dueDay: number;
 }
 
@@ -40,7 +47,7 @@ export default function FeeStructurePage() {
                     const feeDoc = await getDoc(doc(db, "fees", "structure", "classes", cls.id));
                     structureMap[cls.id] = feeDoc.exists()
                         ? (feeDoc.data() as FeeStructure)
-                        : { monthly: 0, dueDay: 10 };
+                        : { monthly: 0, tuitionFee: 0, examFee: 0, computerFee: 0, transportFee: 0, libraryFee: 0, sportsFee: 0, miscFee: 0, dueDay: 10 };
                 }
                 setStructure(structureMap);
             } catch (err) {
@@ -58,6 +65,13 @@ export default function FeeStructurePage() {
         try {
             await setDoc(doc(db, "fees", "structure", "classes", classId), {
                 monthly: structure[classId]?.monthly || 0,
+                tuitionFee: structure[classId]?.tuitionFee || 0,
+                examFee: structure[classId]?.examFee || 0,
+                computerFee: structure[classId]?.computerFee || 0,
+                transportFee: structure[classId]?.transportFee || 0,
+                libraryFee: structure[classId]?.libraryFee || 0,
+                sportsFee: structure[classId]?.sportsFee || 0,
+                miscFee: structure[classId]?.miscFee || 0,
                 dueDay: structure[classId]?.dueDay || 10,
                 updatedAt: new Date(),
             });
@@ -70,10 +84,26 @@ export default function FeeStructurePage() {
     };
 
     const updateField = (classId: string, field: keyof FeeStructure, value: number) => {
-        setStructure(prev => ({
-            ...prev,
-            [classId]: { ...prev[classId], [field]: value },
-        }));
+        setStructure(prev => {
+            const classStructure = { ...prev[classId], [field]: value };
+
+            // Auto calculate monthly total if a fee component changes
+            if (field !== "dueDay" && field !== "monthly") {
+                classStructure.monthly =
+                    (classStructure.tuitionFee || 0) +
+                    (classStructure.examFee || 0) +
+                    (classStructure.computerFee || 0) +
+                    (classStructure.transportFee || 0) +
+                    (classStructure.libraryFee || 0) +
+                    (classStructure.sportsFee || 0) +
+                    (classStructure.miscFee || 0);
+            }
+
+            return {
+                ...prev,
+                [classId]: classStructure,
+            };
+        });
     };
 
     if (loading) {
@@ -123,55 +153,72 @@ export default function FeeStructurePage() {
                     <p className="text-xs text-gray-400 mt-0.5">Set the monthly fee and due day for each class. Leave monthly fee as 0 to skip that class.</p>
                 </div>
 
-                <div className="divide-y divide-gray-50">
-                    {/* Column Headers */}
-                    <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        <span>Class</span>
-                        <span>Monthly Fee (₹)</span>
-                        <span>Due Day (of month)</span>
-                        <span>Action</span>
-                    </div>
-
-                    {CLASS_LIST.map(cls => (
-                        <div key={cls.id} className="grid grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-gray-50/50 transition-colors">
-                            <div className="font-semibold text-navy">{cls.name}</div>
-
-                            <div>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={structure[cls.id]?.monthly || ""}
-                                    onChange={e => updateField(cls.id, "monthly", Number(e.target.value))}
-                                    placeholder="e.g. 5000"
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
-                                />
-                            </div>
-
-                            <div>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={28}
-                                    value={structure[cls.id]?.dueDay || 10}
-                                    onChange={e => updateField(cls.id, "dueDay", Number(e.target.value))}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all"
-                                />
-                            </div>
-
-                            <button
-                                onClick={() => handleSave(cls.id)}
-                                disabled={saving === cls.id}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-navy text-white text-sm font-medium hover:bg-navy-light transition-all disabled:opacity-50"
-                            >
-                                {saving === cls.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4" />
-                                )}
-                                Save
-                            </button>
+                <div className="overflow-x-auto">
+                    <div className="min-w-[1000px] divide-y divide-gray-50">
+                        {/* Column Headers */}
+                        <div className="grid grid-cols-[100px_repeat(7,1fr)_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
+                            <div className="text-left">Class</div>
+                            <div>Tuition</div>
+                            <div>Exam</div>
+                            <div>Computer</div>
+                            <div>Transport</div>
+                            <div>Library</div>
+                            <div>Sports</div>
+                            <div>Misc</div>
+                            <div className="text-navy">Total (₹)</div>
+                            <div>Due Day</div>
+                            <div className="text-right">Action</div>
                         </div>
-                    ))}
+
+                        {CLASS_LIST.map(cls => (
+                            <div key={cls.id} className="grid grid-cols-[100px_repeat(7,1fr)_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
+                                <div className="font-semibold text-navy text-sm">{cls.name}</div>
+
+                                {['tuitionFee', 'examFee', 'computerFee', 'transportFee', 'libraryFee', 'sportsFee', 'miscFee'].map(feeKey => (
+                                    <div key={feeKey}>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={structure[cls.id]?.[feeKey as keyof FeeStructure] || ""}
+                                            onChange={e => updateField(cls.id, feeKey as keyof FeeStructure, Number(e.target.value))}
+                                            placeholder="0"
+                                            className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all text-center"
+                                        />
+                                    </div>
+                                ))}
+
+                                <div className="text-center font-bold text-navy bg-gold/10 py-1.5 rounded border border-gold/20 text-sm">
+                                    ₹{structure[cls.id]?.monthly || 0}
+                                </div>
+
+                                <div>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={28}
+                                        value={structure[cls.id]?.dueDay || 10}
+                                        onChange={e => updateField(cls.id, "dueDay", Number(e.target.value))}
+                                        className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all text-center"
+                                    />
+                                </div>
+
+                                <div className="text-right">
+                                    <button
+                                        onClick={() => handleSave(cls.id)}
+                                        disabled={saving === cls.id}
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navy-light transition-all disabled:opacity-50 w-full"
+                                    >
+                                        {saving === cls.id ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Save className="w-3.5 h-3.5" />
+                                        )}
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
