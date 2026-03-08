@@ -13,6 +13,7 @@ import FeeReceiptModal from "@/components/accountant/FeeReceiptModal";
 
 interface FeeRecord {
     id: string;
+    path: string;
     studentName: string;
     rollNo: string;
     class: string;
@@ -64,27 +65,28 @@ export default function ManageFeesPage() {
     const fetchRecords = useCallback(async () => {
         setLoading(true);
         try {
-            const q = query(
-                collection(db, "feeRecords"),
-                where("month", "==", filterMonth),
-                where("year", "==", filterYear),
-                orderBy("class"),
+            // First get all classes
+            const classesSnap = await getDocs(collection(db, "classes"));
+            const classIds = classesSnap.docs.map(d => d.id);
+
+            // Fetch records for all classes concurrently
+            const promises = classIds.map(classId =>
+                getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
             );
-            const snap = await getDocs(q);
-            setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
+            const snapshots = await Promise.all(promises);
+            const allRecords = snapshots.flatMap(snap =>
+                snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+            );
+
+            // Sort by class and then studentName
+            allRecords.sort((a, b) => {
+                if (a.class !== b.class) return a.class.localeCompare(b.class);
+                return a.studentName.localeCompare(b.studentName);
+            });
+
+            setRecords(allRecords);
         } catch (err: any) {
-            // Try without orderBy if index not ready
-            try {
-                const q2 = query(
-                    collection(db, "feeRecords"),
-                    where("month", "==", filterMonth),
-                    where("year", "==", filterYear),
-                );
-                const snap2 = await getDocs(q2);
-                setRecords(snap2.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
-            } catch {
-                toast.error("Failed to load fee records");
-            }
+            toast.error("Failed to load fee records");
         } finally {
             setLoading(false);
         }
@@ -98,7 +100,8 @@ export default function ManageFeesPage() {
         try {
             const seq = Math.floor(Math.random() * 90000) + 10000;
             const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            await updateDoc(doc(db, "feeRecords", record.id), {
+
+            await updateDoc(doc(db, record.path), {
                 status: "paid",
                 paidOn: new Date(),
                 receiptNo,
@@ -119,7 +122,7 @@ export default function ManageFeesPage() {
     const handleMarkOverdue = async (record: FeeRecord) => {
         setActionLoading(record.id + "_overdue");
         try {
-            await updateDoc(doc(db, "feeRecords", record.id), { status: "overdue" });
+            await updateDoc(doc(db, record.path), { status: "overdue" });
             setRecords(prev => prev.map(r =>
                 r.id === record.id ? { ...r, status: "overdue" } : r
             ));
