@@ -119,7 +119,8 @@ export default function GenerateFeesPage() {
         }
     };
 
-    const years = [currentYear - 1, currentYear, currentYear + 1];
+    // Generate years from 2024 to 2050
+    const years = Array.from({ length: 2050 - 2024 + 1 }, (_, i) => 2024 + i);
 
     return (
         <div className="space-y-6">
