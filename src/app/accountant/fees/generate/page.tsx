@@ -45,6 +45,16 @@ export default function GenerateFeesPage() {
                 const amount = feeData.monthly || 0;
                 const dueDay = feeData.dueDay || 10;
 
+                const breakdown = {
+                    tuitionFee: feeData.tuitionFee || 0,
+                    examFee: feeData.examFee || 0,
+                    computerFee: feeData.computerFee || 0,
+                    transportFee: feeData.transportFee || 0,
+                    libraryFee: feeData.libraryFee || 0,
+                    sportsFee: feeData.sportsFee || 0,
+                    miscFee: feeData.miscFee || 0,
+                };
+
                 if (amount === 0) { skipped++; continue; }
 
                 // Build due date
@@ -76,6 +86,7 @@ export default function GenerateFeesPage() {
                     // parentEmail: try all known fields where parent contact might be stored
                     parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
                     amount,
+                    breakdown,
                     month: selectedMonth + 1,
                     year: selectedYear,
                     dueDate,
