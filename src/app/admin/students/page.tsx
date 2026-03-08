@@ -7,7 +7,7 @@ import {
     AlertTriangle, FileDown, PowerOff, RotateCcw
 } from "lucide-react";
 import {
-    collectionGroup, getDocs, doc, updateDoc
+    collectionGroup, getDocs, doc, updateDoc, query, orderBy, limit, startAfter
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
@@ -20,10 +20,8 @@ interface Student {
     firstName?: string;
     middleName?: string;
     lastName?: string;
-    name?: string;
     admissionNumber: string;
     serialNumber?: string;
-    className?: string;
     currentClass?: string;
     section?: string;
     fatherName?: string;
@@ -52,13 +50,13 @@ const safeStr = (val: any): string => {
 
 // Helper: get full display name
 const getDisplayName = (s: Student) => {
-    const n = s.name || `${safeStr(s.firstName)} ${safeStr(s.middleName)} ${safeStr(s.lastName)}`.trim();
-    return safeStr(n) || "Unknown Student";
+    const n = `${safeStr(s.firstName)} ${safeStr(s.lastName)}`.trim();
+    return n || "Unknown Student";
 };
 
 // Helper: get class display
 const getClass = (s: Student) => {
-    return safeStr(s.currentClass || s.className) || "—";
+    return safeStr(s.currentClass) || "—";
 };
 
 export default function AdminStudentsPage() {
@@ -70,6 +68,11 @@ export default function AdminStudentsPage() {
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [activeTab, setActiveTab] = useState<"active" | "left">("active");
 
+    // Pagination
+    const [lastVisible, setLastVisible] = useState<any>(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+
     // Disable dialog state
     const [disableTarget, setDisableTarget] = useState<Student | null>(null);
     const [isDisabling, setIsDisabling] = useState(false);
@@ -79,20 +82,55 @@ export default function AdminStudentsPage() {
     const [isReactivating, setIsReactivating] = useState(false);
 
     useEffect(() => {
-        const fetchStudents = async () => {
+        const fetchInitial = async () => {
             setIsLoading(true);
             try {
-                const snap = await getDocs(collectionGroup(db, "profiles"));
+                const q = query(collectionGroup(db, "profiles"), orderBy("admissionNumber"), limit(50));
+                const snap = await getDocs(q);
                 let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+
                 // Deduplicate
                 const seen = new Set<string>();
                 data = data.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
+
                 setStudents(data);
+                if (snap.docs.length > 0) {
+                    setLastVisible(snap.docs[snap.docs.length - 1]);
+                }
+                setHasMore(snap.docs.length === 50);
             } catch (err) { console.error(err); }
             finally { setIsLoading(false); }
         };
-        fetchStudents();
+        fetchInitial();
     }, []);
+
+    const loadMore = async () => {
+        if (!lastVisible || isLoadingMore || !hasMore) return;
+        setIsLoadingMore(true);
+        try {
+            const q = query(
+                collectionGroup(db, "profiles"),
+                orderBy("admissionNumber"),
+                startAfter(lastVisible),
+                limit(50)
+            );
+            const snap = await getDocs(q);
+            let newData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+
+            // Deduplicate against existing
+            setStudents(prev => {
+                const combined = [...prev, ...newData];
+                const seen = new Set<string>();
+                return combined.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
+            });
+
+            if (snap.docs.length > 0) {
+                setLastVisible(snap.docs[snap.docs.length - 1]);
+            }
+            setHasMore(snap.docs.length === 50);
+        } catch (err) { console.error(err); }
+        finally { setIsLoadingMore(false); }
+    };
 
     // Split into active / left
     const activeStudents = students.filter(s => (s.status || "").toUpperCase() !== "LEFT");
@@ -376,6 +414,18 @@ export default function AdminStudentsPage() {
                         </tbody>
                     </table>
                 </div>
+                {hasMore && !isLoading && (
+                    <div className="p-4 border-t border-slate-200/60 bg-slate-50 flex justify-center">
+                        <button
+                            onClick={loadMore}
+                            disabled={isLoadingMore}
+                            className="bg-white border border-slate-200 text-slate-700 px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+                        >
+                            {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            {isLoadingMore ? "Loading..." : "Load More"}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Edit Modal */}
