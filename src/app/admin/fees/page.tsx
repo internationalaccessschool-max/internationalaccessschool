@@ -31,33 +31,44 @@ export default function AdminFeeDashboard() {
         const fetch = async () => {
             setLoading(true);
             try {
-                const q = query(
-                    collection(db, "feeRecords"),
-                    where("month", "==", filterMonth),
-                    where("year", "==", filterYear),
+                // Get all classes to scan nested structure
+                const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+                const classIds = classesSnap.docs.map(d => d.id);
+
+                // Fetch records for current month across all classes concurrently
+                const promises = classIds.map(classId =>
+                    getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
                 );
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
+                const snapshots = await Promise.all(promises);
+                const currentRecords = snapshots.flatMap(snap =>
+                    snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord))
+                );
+                setRecords(currentRecords);
 
                 // Fetch monthly trend (last 6 months)
                 const last6Queries = await Promise.all(
-                    Array.from({ length: 6 }, (_, i) => {
+                    Array.from({ length: 6 }, async (_, i) => {
                         const d = new Date(filterYear, filterMonth - 1 - i, 1);
-                        return getDocs(query(
-                            collection(db, "feeRecords"),
-                            where("month", "==", d.getMonth() + 1),
-                            where("year", "==", d.getFullYear()),
-                            where("status", "==", "paid")
-                        ));
+                        const mYear = d.getFullYear();
+                        const mMonth = d.getMonth() + 1;
+
+                        const mPromises = classIds.map(classId =>
+                            getDocs(query(
+                                collection(db, `feeRecords/${mYear}/months/${mMonth}/classes/${classId}/records`),
+                                where("status", "==", "paid")
+                            ))
+                        );
+
+                        const mSnaps = await Promise.all(mPromises);
+                        const total = mSnaps.reduce((acc, snap) =>
+                            acc + snap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0)
+                            , 0);
+
+                        return { month: MONTHS[d.getMonth()], year: mYear, value: total };
                     })
                 );
 
-                const mData = last6Queries.map((qSnap, i) => {
-                    const d = new Date(filterYear, filterMonth - 1 - i, 1);
-                    const total = qSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
-                    return { month: MONTHS[d.getMonth()], year: d.getFullYear(), value: total };
-                }).reverse();
-                setMonthlyData(mData);
+                setMonthlyData(last6Queries.reverse());
             } catch (err) {
                 console.error(err);
             } finally {
