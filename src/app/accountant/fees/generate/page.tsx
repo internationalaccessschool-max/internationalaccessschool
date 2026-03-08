@@ -33,8 +33,12 @@ export default function GenerateFeesPage() {
             let skipped = 0;
 
             for (const student of students) {
-                // Student profiles store class as "className" (e.g. "7", "10")
-                const classId = student.className?.toString() || student.class?.toString() || "";
+                // Normalize className: "Class 7" → "7", "7" stays "7"
+                const rawClass = student.className?.toString() ||
+                    student.currentClass?.toString() ||
+                    student.class?.toString() || "";
+                const classId = rawClass.replace(/^class\s*/i, "").trim();
+
                 if (!classId) { skipped++; continue; }
 
                 // Get fee structure for this class
@@ -85,6 +89,7 @@ export default function GenerateFeesPage() {
                     section: student.section || "",
                     // parentEmail: try all known fields where parent contact might be stored
                     parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
+                    parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
                     amount,
                     breakdown,
                     month: selectedMonth + 1,
