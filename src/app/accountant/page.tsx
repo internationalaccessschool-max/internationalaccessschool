@@ -43,13 +43,28 @@ export default function AccountantDashboard() {
     const fetchRecords = useCallback(async () => {
         setLoading(true);
         try {
-            const q = query(
-                collection(db, "feeRecords"),
-                where("month", "==", currentMonth),
-                where("year", "==", currentYear),
+            // First get class IDs
+            const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+            const classIds = classesSnap.docs.map(d => d.id);
+
+            // Fetch records from nested path
+            const promises = classIds.map(classId =>
+                getDocs(collection(db, `feeRecords/${currentYear}/months/${currentMonth}/classes/${classId}/records`))
             );
-            const snap = await getDocs(q);
-            setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
+
+            const snapshots = await Promise.all(promises);
+            const allRecords = snapshots.flatMap(snap =>
+                snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord & { path: string }))
+            );
+
+            // Sort by class and name
+            allRecords.sort((a, b) => {
+                const classCompare = (a.class || "").localeCompare(b.class || "");
+                if (classCompare !== 0) return classCompare;
+                return (a.studentName || "").localeCompare(b.studentName || "");
+            });
+
+            setRecords(allRecords);
         } catch (err) {
             console.error(err);
         } finally {
@@ -64,7 +79,8 @@ export default function AccountantDashboard() {
         try {
             const seq = Math.floor(Math.random() * 90000) + 10000;
             const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            await updateDoc(doc(db, "feeRecords", record.id), {
+            const recordPath = (record as any).path || `feeRecords/${record.year}/months/${record.month}/classes/${record.class}/records/${record.id}`;
+            await updateDoc(doc(db, recordPath), {
                 status: "paid",
                 paidOn: new Date(),
                 receiptNo,
