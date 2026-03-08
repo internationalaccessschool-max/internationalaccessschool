@@ -66,7 +66,8 @@ export default function GenerateFeesPage() {
 
                 // Check if record already exists
                 const recordId = `${student.id}_${selectedYear}_${String(selectedMonth + 1).padStart(2, "0")}`;
-                const existingRecord = await getDoc(doc(db, "feeRecords", recordId));
+                const recordRef = doc(db, `feeRecords/${selectedYear}/months/${selectedMonth + 1}/classes/${classId}/records`, recordId);
+                const existingRecord = await getDoc(recordRef);
 
                 if (existingRecord.exists()) {
                     skipped++;
@@ -81,7 +82,7 @@ export default function GenerateFeesPage() {
                     "Unknown";
 
                 // Create fee record
-                await setDoc(doc(db, "feeRecords", recordId), {
+                await setDoc(recordRef, {
                     studentId: student.id,
                     studentName: studentFullName,
                     rollNo: student.rollNo || student.admissionNumber || "",
