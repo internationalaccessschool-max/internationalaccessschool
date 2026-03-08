@@ -85,7 +85,7 @@ export function HeroSlider() {
     const slide = slides[current];
 
     return (
-        <section className="relative min-h-[500px] h-[100dvh] w-full overflow-hidden bg-navy">
+        <section className="relative min-h-[400px] h-[50dvh] md:min-h-[600px] md:h-[100dvh] w-full overflow-hidden bg-navy">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={current}
