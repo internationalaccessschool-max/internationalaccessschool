@@ -123,7 +123,7 @@ export default function TeacherAttendancePage() {
                 // Determine raw class string. The DB stores "Class X"
                 const q = query(
                     collectionGroup(db, "profiles"),
-                    where("className", "==", assignedClass),
+                    where("currentClass", "==", assignedClass),
                     where("section", "==", assignedSection)
                 );
                 const snap = await getDocs(q);
@@ -131,8 +131,8 @@ export default function TeacherAttendancePage() {
                     const data = d.data() as any;
                     return {
                         id: d.id,
-                        name: data.firstName ? `${data.firstName} ${data.lastName || ""}`.trim() : (data.name || "Unknown"),
-                        regNo: data.admissionNumber || data.regNo || data.registrationNumber || "—",
+                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
+                        regNo: data.admissionNumber || "—",
                         status: "present" as AttendanceStatus, // Default to present
                     };
                 });
@@ -347,8 +347,8 @@ export default function TeacherAttendancePage() {
                     disabled={isPastDate}
                     onClick={() => markAll("present")}
                     className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${isPastDate
-                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
-                            : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                        ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                        : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
                         }`}>
                     Mark All Present
                 </button>
@@ -356,8 +356,8 @@ export default function TeacherAttendancePage() {
                     disabled={isPastDate}
                     onClick={() => markAll("absent")}
                     className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${isPastDate
-                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
-                            : "bg-red-50 text-red-600 hover:bg-red-100"
+                        ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                        : "bg-red-50 text-red-600 hover:bg-red-100"
                         }`}>
                     Mark All Absent
                 </button>
@@ -390,8 +390,8 @@ export default function TeacherAttendancePage() {
                                             disabled={isPastDate}
                                             onClick={() => setStatus(student.id, "present")}
                                             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                    ? student.status === "present" ? "bg-emerald-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                    : student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
+                                                ? student.status === "present" ? "bg-emerald-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                : student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
                                                 }`}
                                         >
                                             <Check className="w-3.5 h-3.5" />
@@ -403,8 +403,8 @@ export default function TeacherAttendancePage() {
                                             disabled={isPastDate}
                                             onClick={() => setStatus(student.id, "late")}
                                             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                    ? student.status === "late" ? "bg-amber-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                    : student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                                                ? student.status === "late" ? "bg-amber-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                : student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
                                                 }`}
                                         >
                                             <Clock className="w-3.5 h-3.5" />
@@ -416,8 +416,8 @@ export default function TeacherAttendancePage() {
                                             disabled={isPastDate}
                                             onClick={() => setStatus(student.id, "absent")}
                                             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                    ? student.status === "absent" ? "bg-red-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                    : student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                ? student.status === "absent" ? "bg-red-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                : student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
                                                 }`}
                                         >
                                             <X className="w-3.5 h-3.5" />
