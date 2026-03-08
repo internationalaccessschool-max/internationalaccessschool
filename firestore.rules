@@ -18,6 +18,11 @@ service cloud.firestore {
       allow write: if false; // Only Admin SDK writes
     }
 
+    match /{path=**}/profiles/{document} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /homework/{document=**} {
       allow read, write: if request.auth != null;
     }
