@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
 
 interface FeeRecord {
     id: string;
+    path: string;
     amount: number;
     month: number;
     year: number;
@@ -42,21 +43,39 @@ export default function StudentFeesPage() {
         if (!studentId) return;
         const fetchFees = async () => {
             try {
-                const q = query(
-                    collection(db, "feeRecords"),
-                    where("studentId", "==", studentId),
-                    orderBy("year", "desc"),
+                // Get student class
+                const studentDoc = await getDoc(doc(db, "students", studentId));
+                let studentClass = "unknown";
+                if (studentDoc.exists()) {
+                    const data = studentDoc.data();
+                    const rawCls = data.currentClass || data.className || data.class || "";
+                    studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
+                }
+
+                const currentYear = new Date().getFullYear();
+                const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+                const promises = [];
+                // Fetch this year and previous year
+                for (const year of [currentYear - 1, currentYear]) {
+                    for (const month of months) {
+                        promises.push(
+                            getDocs(query(
+                                collection(db, `feeRecords/${year}/months/${month}/classes/${studentClass}/records`),
+                                where("studentId", "==", studentId)
+                            ))
+                        );
+                    }
+                }
+
+                const snapshots = await Promise.all(promises);
+                const allRecords = snapshots.flatMap(snap =>
+                    snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
                 );
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord)));
-            } catch {
-                // Try without orderBy if index not ready
-                try {
-                    const q2 = query(collection(db, "feeRecords"), where("studentId", "==", studentId));
-                    const snap2 = await getDocs(q2);
-                    setRecords(snap2.docs.map(d => ({ id: d.id, ...d.data() } as FeeRecord))
-                        .sort((a, b) => b.year - a.year || b.month - a.month));
-                } catch (e) { console.error(e); }
+
+                setRecords(allRecords.sort((a, b) => b.year - a.year || b.month - a.month));
+            } catch (e) {
+                console.error(e);
             } finally {
                 setLoading(false);
             }
