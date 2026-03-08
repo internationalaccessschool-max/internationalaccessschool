@@ -39,7 +39,7 @@ export default function AdminAttendancePage() {
                 const classNum = selectedClass.replace("Class ", "").trim();
                 const q = query(
                     collectionGroup(db, "profiles"),
-                    where("className", "in", [selectedClass, classNum]),
+                    where("currentClass", "in", [selectedClass, classNum]),
                     where("section", "==", selectedSection)
                 );
                 const snap = await getDocs(q);
@@ -47,8 +47,8 @@ export default function AdminAttendancePage() {
                     const data = d.data();
                     return {
                         id: d.id,
-                        name: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
-                        regNo: data.admissionNumber || data.regNo || data.registrationNumber || "—",
+                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
+                        regNo: data.admissionNumber || "—",
                     };
                 });
                 list.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
