@@ -43,13 +43,26 @@ export default function StudentFeesPage() {
         if (!studentId) return;
         const fetchFees = async () => {
             try {
-                // Get student class
-                const studentDoc = await getDoc(doc(db, "students", studentId));
                 let studentClass = "unknown";
+
+                // Try direct students document first
+                const studentDoc = await getDoc(doc(db, "students", studentId));
                 if (studentDoc.exists()) {
                     const data = studentDoc.data();
                     const rawCls = data.currentClass || data.className || data.class || "";
                     studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
+                }
+
+                // If not found, try profiles subcollection
+                if (studentClass === "unknown") {
+                    const profilesSnap = await getDocs(
+                        collection(db, "students", studentId, "profiles")
+                    );
+                    if (!profilesSnap.empty) {
+                        const profileData = profilesSnap.docs[0].data();
+                        const rawCls = profileData.currentClass || profileData.className || profileData.class || "";
+                        studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
+                    }
                 }
 
                 const currentYear = new Date().getFullYear();
