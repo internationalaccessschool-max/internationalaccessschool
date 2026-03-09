@@ -14,6 +14,10 @@ service cloud.firestore {
       return isAuth() && getUserRole() in ['admin', 'accountant'];
     }
 
+    function isTeacherOrAdmin() {
+      return isAuth() && getUserRole() in ['admin', 'teacher'];
+    }
+
     // Users — own data only
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -30,14 +34,16 @@ service cloud.firestore {
       allow read: if isAuth();
     }
 
-    // Homework
+    // Homework — only teachers and admins can write
     match /homework/{document=**} {
-      allow read, write: if isAuth();
+      allow read: if isAuth();
+      allow write: if isTeacherOrAdmin();
     }
 
-    // Attendance
+    // Attendance — only teachers and admins can write
     match /attendance/{document=**} {
-      allow read, write: if isAuth();
+      allow read: if isAuth();
+      allow write: if isTeacherOrAdmin();
     }
 
     // Fee Structure — accountant reads/writes, others read only
@@ -79,25 +85,25 @@ service cloud.firestore {
     // Exams and Results
     match /exams/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isTeacherOrAdmin();
     }
     match /results/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isTeacherOrAdmin();
     }
 
     // Classes and subjects
     match /classes/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isAuth() && getUserRole() == 'admin';
     }
     match /classSubjects/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isAuth() && getUserRole() == 'admin';
     }
     match /class_teachers/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isAuth() && getUserRole() == 'admin';
     }
 
     // Teachers
@@ -106,10 +112,24 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Admissions
+    // Admissions — authenticated users can submit, only admin can modify
     match /admissions/{document=**} {
       allow read: if isAuth();
-      allow write: if true;
+      allow write: if isAuth();
+    }
+
+    // Admission Requests — public can submit (from website form), admin reads/writes
+    match /admission_requests/{document=**} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth() && getUserRole() == 'admin';
+    }
+
+    // Job Applications — public can submit, admin reads/manages
+    match /job_applications/{document=**} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth() && getUserRole() == 'admin';
     }
 
     // Default — deny everything else
