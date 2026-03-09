@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs
+*.log
+*.log.*
+build_log*.txt
+deploy_log*.txt
+server_logs*.txt
+lint-output.txt
+full_tsc_output.txt
+tsc_output.txt
+ts_error*.log
+build_cache.log
+
+# backup files
+*.bak.*
+__layout_backup.*
