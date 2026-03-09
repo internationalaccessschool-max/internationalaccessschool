@@ -5,7 +5,7 @@ import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
     const { user, role, loading } = useAuth();
@@ -13,39 +13,13 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     const pathname = usePathname();
     const isLoginPage = pathname === "/student/login";
 
-    const [debugState, setDebugState] = useState<any>(null);
-
     useEffect(() => {
         if (!loading && !isLoginPage) {
             if (!user || (role !== "student" && role !== "parent")) {
-                console.error("Layout Redirect Triggered. State:", { user: !!user, role, loading });
-                setDebugState({ user: !!user, uid: user?.uid, role, loading });
-                // router.push("/login");
+                router.push("/student/login");
             }
         }
     }, [user, role, loading, router, isLoginPage]);
-
-    if (debugState) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-                <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center border border-gray-100">
-                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <User className="w-8 h-8" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-navy mb-2">Session Expired</h2>
-                    <p className="text-gray-500 text-sm mb-6">
-                        Your session has expired or you do not have permission to access the student portal. Please log in again to continue.
-                    </p>
-                    <button
-                        onClick={() => router.push("/student/login")}
-                        className="w-full py-3 bg-navy text-white rounded-xl font-medium hover:bg-navy-light transition-colors shadow-lg shadow-navy/20"
-                    >
-                        Go to Login
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     const links = [
         {
