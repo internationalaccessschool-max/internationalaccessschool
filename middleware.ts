@@ -39,7 +39,7 @@ export function middleware(request: NextRequest) {
     // Role-based Path Checking
     if (pathname.startsWith("/admin")) {
         // Strict Admin Check
-        if (roleCookie !== "admin" || emailCookie !== "internationalaccessschool@gmail.com") {
+        if (roleCookie !== "admin" || emailCookie !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
             return NextResponse.redirect(new URL("/login", request.url));
         }
     } else if (pathname.startsWith("/teacher")) {
