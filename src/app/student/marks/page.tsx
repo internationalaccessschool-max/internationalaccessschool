@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    collection, getDocs, doc, getDoc, query, where, collectionGroup,
+    collection, getDocs, doc, getDoc, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -10,6 +10,7 @@ import { Exam, Result } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, GraduationCap, TrendingUp } from "lucide-react";
+import { getStudentClassInfo } from "@/lib/utils/studentProfile";
 
 interface SubjectResult {
     subjectName: string;
@@ -47,14 +48,8 @@ export default function StudentResultsPage() {
 
         const fetchResults = async () => {
             try {
-                // 1. Get student's class from their profile
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                let className = "";
-                profilesSnap.docs.forEach(d => {
-                    if (d.id === user.uid) {
-                        className = d.data().className || "";
-                    }
-                });
+                // 1. Get student's class using the shared utility (fast via studentLookup)
+                const { className } = await getStudentClassInfo(user.uid);
                 setStudentClass(className);
 
                 if (!className) {
