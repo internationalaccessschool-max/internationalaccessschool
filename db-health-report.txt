@@ -1,0 +1,20 @@
+=== DRILLING INTO users/classes/7 ===
+users/classes/7 has 1 docs/sections:
+
+  Section: sections
+  Subcollections: [A, B, Unassigned]
+  A has 1+ docs
+    Sample doc ID: students
+    Fields: section, class, updatedAt
+    Inner subcollections: [profiles]
+    profiles/027p3spWCqNmu0CFCQwBkH6NCgz2 fields: currentClass, fatherName, previousSchool, aparId, section, leftYear, branch, fatherMobile, bloodGroup, createdAt, udise, pen, rollNumber, block, previousSchoolAddress
+  B has 1+ docs
+    Sample doc ID: students
+    Fields: section, class, updatedAt
+    Inner subcollections: [profiles]
+    profiles/1aZP8NVQ9tSeEMEqEp7UO6AyfxO2 fields: currentClass, fatherName, previousSchool, aparId, section, leftYear, branch, fatherMobile, bloodGroup, createdAt, udise, pen, rollNumber, block, previousSchoolAddress
+  Unassigned has 1+ docs
+    Sample doc ID: students
+    Fields: section, class, updatedAt
+    Inner subcollections: [profiles]
+    profiles/0Ud9p9GEJ4dbpmsSKB62KUNDyrD2 fields: currentClass, fatherName, previousSchool, aparId, section, leftYear, branch, fatherMobile, bloodGroup, createdAt, udise, pen, rollNumber, block, previousSchoolAddress
