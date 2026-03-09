@@ -204,8 +204,7 @@ export default function AdminApplicationsPage() {
                 </div>`
             );
             setSelectedApp(null);
-        } catch (err) { console.error(err); }
-        setActionLoading(null);
+        } catch (err) { console.error(err); } finally { setActionLoading(null); }
     };
 
     const handleDelete = async (id: string) => {
@@ -398,8 +397,8 @@ export default function AdminApplicationsPage() {
                                                         subjects: p.subjects.includes(s) ? p.subjects.filter(x => x !== s) : [...p.subjects, s]
                                                     }))}
                                                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${staffDetails.subjects.includes(s)
-                                                            ? "bg-purple-50 border-purple-200 text-purple-700"
-                                                            : "bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300"
+                                                        ? "bg-purple-50 border-purple-200 text-purple-700"
+                                                        : "bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300"
                                                         }`}>
                                                     {staffDetails.subjects.includes(s) && <span className="mr-1">✓</span>}
                                                     {s}
