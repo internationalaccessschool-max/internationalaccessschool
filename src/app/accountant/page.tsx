@@ -30,8 +30,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export default function AccountantDashboard() {
     const { user } = useAuth();
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
+    const [currentMonth] = useState(() => new Date().getMonth() + 1);
+    const [currentYear] = useState(() => new Date().getFullYear());
 
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -77,7 +77,7 @@ export default function AccountantDashboard() {
     const handleMarkPaid = async (record: FeeRecord) => {
         setActionLoading(record.id);
         try {
-            const seq = Math.floor(Math.random() * 90000) + 10000;
+            const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
             const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
             const recordPath = (record as any).path || `feeRecords/${record.year}/months/${record.month}/classes/${record.class}/records/${record.id}`;
             await updateDoc(doc(db, recordPath), {
