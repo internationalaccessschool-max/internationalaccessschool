@@ -35,7 +35,7 @@ export default function TeacherDashboard() {
             if (user) {
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists() && userDoc.data().role === "teacher") {
-                    setUserData(userDoc.data());
+                    setUserData({ ...userDoc.data(), uid: user.uid });
                 } else {
                     router.push("/login");
                 }
