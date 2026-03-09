@@ -18,7 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
-            if (!user || role !== "admin" || user.email !== "internationalaccessschool@gmail.com") {
+            if (!user || role !== "admin" || user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
                 router.push("/login");
             }
         }
@@ -83,7 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return <>{children}</>;
     }
 
-    if (loading || !user || role !== "admin" || user.email !== "internationalaccessschool@gmail.com") {
+    if (loading || !user || role !== "admin" || user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
         return (
             <div className="h-screen w-full flex items-center justify-center bg-gray-50">
                 <Loader2 className="w-8 h-8 animate-spin text-navy" />
