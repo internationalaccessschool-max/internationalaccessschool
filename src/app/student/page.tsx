@@ -1,18 +1,19 @@
 "use client";
 
 import {
-    BookOpen, GraduationCap, Clock, CalendarCheck,
-    TrendingUp, FileText, CheckCircle2, AlertCircle, ArrowRight, PenLine
+    GraduationCap, Clock,
+    FileText, AlertCircle, ArrowRight
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, where, orderBy, limit, collectionGroup } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getTimeAgo } from "@/lib/utils/date";
+import { fetchStudentProfile } from "@/lib/utils/studentProfile";
 
 export default function StudentDashboard() {
+    const { user, role, loading: authLoading } = useAuth();
     const [userData, setUserData] = useState<any>(null);
     const [studentData, setStudentData] = useState<any>(null);
     const router = useRouter();
@@ -23,30 +24,29 @@ export default function StudentDashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.push("/student/login");
-                setLoading(false);
-                return;
-            }
+        if (authLoading) return;
+        if (!user || (role !== "student" && role !== "parent")) {
+            router.push("/student/login");
+            setLoading(false);
+            return;
+        }
 
+        const fetchData = async () => {
             try {
-                // Fetch student profile via collectionGroup to support new truly nested path structure
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                const profileDoc = profilesSnap.docs.find(d => d.id === user.uid);
+                // Use shared utility — smart path: studentLookup → direct path → fallback
+                const { profile, className, section } = await fetchStudentProfile(user.uid);
 
-                if (profileDoc) {
-                    const sd = profileDoc.data();
-                    setUserData({ ...sd, role: "student", uid: user.uid });
-                    setStudentData(sd);
+                if (profile) {
+                    setUserData({ ...profile, role: "student", uid: user.uid, className, section });
+                    setStudentData({ ...profile, className, section });
 
                     // Fetch homework for this student's class and section
                     try {
                         const hwSnap = await getDocs(
                             query(
                                 collection(db, "homework"),
-                                where("className", "==", sd.className || ""),
-                                where("section", "==", sd.section || "")
+                                where("className", "==", className),
+                                where("section", "==", section)
                             )
                         );
 
@@ -72,7 +72,6 @@ export default function StudentDashboard() {
                                 pendingCount++;
                             }
 
-                            // Build activity list
                             const dueDateStr = hw.dueDate
                                 ? new Date(hw.dueDate + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })
                                 : "No deadline";
@@ -97,9 +96,10 @@ export default function StudentDashboard() {
             }
 
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, [router]);
+        };
+
+        fetchData();
+    }, [user, role, authLoading, router]);
 
     const stats = [
         {
