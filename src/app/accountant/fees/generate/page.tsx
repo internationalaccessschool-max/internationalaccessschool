@@ -25,85 +25,94 @@ export default function GenerateFeesPage() {
         setResult(null);
 
         try {
-            // Fetch all students from nested profiles
+            // 1. Pre-fetch ALL fee structures upfront (one batch read instead of per-student)
+            const feeStructSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+            const feeStructMap: Record<string, any> = {};
+            feeStructSnap.docs.forEach(d => { feeStructMap[d.id] = d.data(); });
+
+            // 2. Fetch all students from nested profiles
             const studentsSnap = await getDocs(collectionGroup(db, "profiles"));
             const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
 
             let created = 0;
             let skipped = 0;
 
-            for (const student of students) {
-                // Normalize className: "Class 7" → "7", "7" stays "7"
-                const rawClass = student.className?.toString() ||
-                    student.currentClass?.toString() ||
-                    student.class?.toString() || "";
-                const classId = rawClass.replace(/^class\s*/i, "").trim();
+            // 3. Process in batches of 10 for concurrent writes
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < students.length; i += BATCH_SIZE) {
+                const batch = students.slice(i, i + BATCH_SIZE);
+                const results = await Promise.allSettled(batch.map(async (student) => {
+                    // Normalize className: "Class 7" → "7", "7" stays "7"
+                    const rawClass = student.className?.toString() ||
+                        student.currentClass?.toString() ||
+                        student.class?.toString() || "";
+                    const classId = rawClass.replace(/^class\s*/i, "").trim();
 
-                if (!classId) { skipped++; continue; }
+                    if (!classId) { skipped++; return; }
 
-                // Get fee structure for this class
-                const feeStructDoc = await getDoc(doc(db, "fees", "structure", "classes", classId));
-                if (!feeStructDoc.exists()) { skipped++; continue; }
+                    // Get fee structure from cached map (no Firestore read!)
+                    const feeData = feeStructMap[classId];
+                    if (!feeData) { skipped++; return; }
 
-                const feeData = feeStructDoc.data();
-                const amount = feeData.monthly || 0;
-                const dueDay = feeData.dueDay || 10;
+                    const amount = feeData.monthly || 0;
+                    const dueDay = feeData.dueDay || 10;
 
-                const breakdown = {
-                    tuitionFee: feeData.tuitionFee || 0,
-                    examFee: feeData.examFee || 0,
-                    computerFee: feeData.computerFee || 0,
-                    transportFee: feeData.transportFee || 0,
-                    libraryFee: feeData.libraryFee || 0,
-                    sportsFee: feeData.sportsFee || 0,
-                    miscFee: feeData.miscFee || 0,
-                };
+                    const breakdown = {
+                        tuitionFee: feeData.tuitionFee || 0,
+                        examFee: feeData.examFee || 0,
+                        computerFee: feeData.computerFee || 0,
+                        transportFee: feeData.transportFee || 0,
+                        libraryFee: feeData.libraryFee || 0,
+                        sportsFee: feeData.sportsFee || 0,
+                        miscFee: feeData.miscFee || 0,
+                    };
 
-                if (amount === 0) { skipped++; continue; }
+                    if (amount === 0) { skipped++; return; }
 
-                // Build due date
-                const dueDate = new Date(selectedYear, selectedMonth, dueDay);
+                    // Build due date
+                    const dueDate = new Date(selectedYear, selectedMonth, dueDay);
 
-                // Check if record already exists
-                const recordId = `${student.id}_${selectedYear}_${String(selectedMonth + 1).padStart(2, "0")}`;
-                const recordRef = doc(db, `feeRecords/${selectedYear}/months/${selectedMonth + 1}/classes/${classId}/records`, recordId);
-                const existingRecord = await getDoc(recordRef);
+                    // Check if record already exists
+                    const recordId = `${student.id}_${selectedYear}_${String(selectedMonth + 1).padStart(2, "0")}`;
+                    const recordRef = doc(db, `feeRecords/${selectedYear}/months/${selectedMonth + 1}/classes/${classId}/records`, recordId);
+                    const existingRecord = await getDoc(recordRef);
 
-                if (existingRecord.exists()) {
-                    skipped++;
-                    continue;
-                }
+                    if (existingRecord.exists()) {
+                        skipped++;
+                        return;
+                    }
 
-                // Build student name — profiles store firstName + lastName, not a combined "name" field
-                const studentFullName =
-                    student.name ||
-                    student.fullName ||
-                    `${student.firstName || ""} ${student.middleName || ""} ${student.lastName || ""}`.replace(/\s+/g, " ").trim() ||
-                    "Unknown";
+                    // Build student name — profiles store firstName + lastName, not a combined "name" field
+                    const studentFullName =
+                        student.name ||
+                        student.fullName ||
+                        `${student.firstName || ""} ${student.middleName || ""} ${student.lastName || ""}`.replace(/\s+/g, " ").trim() ||
+                        "Unknown";
 
-                // Create fee record
-                await setDoc(recordRef, {
-                    studentId: student.id,
-                    studentName: studentFullName,
-                    rollNo: student.rollNo || student.admissionNumber || "",
-                    class: classId,
-                    section: student.section || "",
-                    // parentEmail: try all known fields where parent contact might be stored
-                    parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
-                    parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
-                    amount,
-                    breakdown,
-                    month: selectedMonth + 1,
-                    year: selectedYear,
-                    dueDate,
-                    status: "pending",
-                    paidOn: null,
-                    receiptNo: null,
-                    markedBy: null,
-                    createdAt: new Date(),
-                });
+                    // Create fee record
+                    await setDoc(recordRef, {
+                        studentId: student.id,
+                        studentName: studentFullName,
+                        rollNo: student.rollNo || student.admissionNumber || "",
+                        class: classId,
+                        section: student.section || "",
+                        // parentEmail: try all known fields where parent contact might be stored
+                        parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
+                        parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
+                        amount,
+                        breakdown,
+                        month: selectedMonth + 1,
+                        year: selectedYear,
+                        dueDate,
+                        status: "pending",
+                        paidOn: null,
+                        receiptNo: null,
+                        markedBy: null,
+                        createdAt: new Date(),
+                    });
 
-                created++;
+                    created++;
+                }));
             }
 
             setResult({ created, skipped, total: students.length });
