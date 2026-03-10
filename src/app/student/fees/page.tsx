@@ -42,11 +42,10 @@ export default function StudentFeesPage() {
         const fetchFees = async () => {
             setLoading(true);
             try {
-                // ── Step 1: Get student info ──────────────────────────────────────────
-                // Extract admission number directly from email (e.g. "222534@ias.edu" → "222534")
+                // ── Get admission number from email (e.g. "222534@ias.edu" → "222534")
                 const admNo = user.email?.split("@")[0] || "";
 
-                // Try studentLookup collection first (simple top-level doc, no index needed)
+                // ── Try studentLookup for class info ─────────────────────────────────
                 let studentClass = "";
                 let admissionNumber = admNo;
 
@@ -58,34 +57,49 @@ export default function StudentFeesPage() {
                         studentClass = rawCls.replace(/^class\s*/i, "").trim();
                         admissionNumber = data.admissionNumber || admNo;
                     }
-                } catch (lookupErr) {
-                    console.warn("studentLookup read failed:", lookupErr);
+                } catch (e) {
+                    console.warn("studentLookup failed:", e);
                 }
 
-                if (!studentClass) {
-                    console.warn("Could not determine student class. uid:", user.uid, "email:", user.email);
-                    setDebugInfo(`Could not find class info. Please contact admin.`);
-                    setRecords([]);
-                    return;
+                // ── Determine which classes to search ────────────────────────────────
+                // If we know the student's class, only search that class.
+                // Otherwise, get ALL classes from fee structure and search all of them.
+                let classesToSearch: string[] = [];
+
+                if (studentClass) {
+                    classesToSearch = [studentClass];
+                } else {
+                    // Fallback: get all class IDs from fee structure
+                    try {
+                        const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+                        classesToSearch = classesSnap.docs.map(d => d.id);
+                    } catch (e) {
+                        console.warn("Could not fetch fee classes:", e);
+                    }
+
+                    // Extra fallback: try common class numbers
+                    if (classesToSearch.length === 0) {
+                        classesToSearch = Array.from({ length: 12 }, (_, i) => String(i + 1));
+                    }
                 }
 
-                // ── Step 2: Get all fee structure classes to try ──────────────────────
-                // The student's class in their profile might be "12" but fee records
-                // might use "12" or "Class 12" — we normalize both sides
-                const normalizedClass = studentClass.replace(/^class\s*/i, "").trim();
-
-                // ── Step 3: Fetch fee records and filter client-side ──────────────────
+                // ── Fetch fee records across all months/years/classes ────────────────
                 const currentYear = new Date().getFullYear();
+                const currentMonth = new Date().getMonth() + 1;
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-                const promises: Promise<any>[] = [];
-                for (const year of [currentYear - 1, currentYear]) {
-                    for (const month of months) {
-                        promises.push(
-                            getDocs(
-                                collection(db, `feeRecords/${year}/months/${month}/classes/${normalizedClass}/records`)
-                            ).catch(() => ({ docs: [] })) // silently skip missing collections
-                        );
+                const promises: Promise<{ docs: any[] }>[] = [];
+                for (const cls of classesToSearch) {
+                    for (const year of [currentYear - 1, currentYear]) {
+                        for (const month of months) {
+                            // Skip future months for current year
+                            if (year === currentYear && month > currentMonth) continue;
+                            promises.push(
+                                getDocs(
+                                    collection(db, `feeRecords/${year}/months/${month}/classes/${cls}/records`)
+                                ).catch(() => ({ docs: [] }))
+                            );
+                        }
                     }
                 }
 
@@ -95,34 +109,32 @@ export default function StudentFeesPage() {
                 for (const snap of snapshots) {
                     for (const d of snap.docs) {
                         const data = d.data();
-                        // Match this student's records by ANY of these identifiers:
+                        // Match by ANY identifier
                         const isMatch =
-                            data.studentId === user.uid ||                              // new records (after fix)
-                            data.admissionNumber === admissionNumber ||                 // admissionNumber field
-                            data.rollNo === admissionNumber ||                          // rollNo field
-                            (admNo && data.admissionNumber === admNo) ||                // from email
-                            (admNo && data.rollNo === admNo) ||                         // rollNo from email
-                            d.id.startsWith(`${user.uid}_`);                           // doc ID starts with uid
+                            data.studentId === user.uid ||
+                            (admissionNumber && data.admissionNumber === admissionNumber) ||
+                            (admissionNumber && data.rollNo === admissionNumber) ||
+                            (admNo && admNo !== admissionNumber && data.admissionNumber === admNo) ||
+                            (admNo && admNo !== admissionNumber && data.rollNo === admNo) ||
+                            d.id.startsWith(`${user.uid}_`);
 
                         if (isMatch) {
-                            allRecords.push({
-                                id: d.id,
-                                path: d.ref.path,
-                                ...data,
-                            } as FeeRecord);
+                            allRecords.push({ id: d.id, path: d.ref.path, ...data } as FeeRecord);
                         }
                     }
                 }
 
-                allRecords.sort((a, b) => b.year - a.year || b.month - a.month);
-                setRecords(allRecords);
+                // De-duplicate by record id
+                const uniqueRecords = Array.from(new Map(allRecords.map(r => [r.id, r])).values());
+                uniqueRecords.sort((a, b) => b.year - a.year || b.month - a.month);
+                setRecords(uniqueRecords);
 
-                if (allRecords.length === 0) {
-                    setDebugInfo(`Class: ${normalizedClass}, Adm: ${admissionNumber}`);
+                if (uniqueRecords.length === 0) {
+                    setDebugInfo(`Class: ${studentClass || "scanning all"} | Adm#: ${admissionNumber} | Classes searched: ${classesToSearch.join(",")}`);
                 }
             } catch (e) {
                 console.error("Error fetching fees:", e);
-                setDebugInfo(`Error: ${(e as any)?.message || "Unknown error"}`);
+                setDebugInfo(`Error: ${(e as any)?.message || "Unknown"}`);
             } finally {
                 setLoading(false);
             }
