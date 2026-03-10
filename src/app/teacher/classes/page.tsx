@@ -71,15 +71,22 @@ export default function TeacherClassesPage() {
 
                 const filtered = assignedClasses.length > 0
                     ? all.filter(s => {
-                        // Normalize: trim and lowercase for comparison
-                        const sCls = (s.className || "").trim();
+                        // Normalize: strip "Class " prefix, trim, and lowercase for robust comparison
+                        const sCls = (s.className || "").replace(/^class\s*/i, "").trim();
                         const sSec = (s.section || "").trim().toUpperCase();
-                        const matchCls = assignedClasses.find(c => c.trim() === sCls);
-                        if (!matchCls) return false;
-                        const allowedSections = (classSections[matchCls] || []).map(sec => sec.trim().toUpperCase());
+
+                        const matchClsRaw = assignedClasses.find(c => {
+                            const cNorm = c.replace(/^class\s*/i, "").trim();
+                            return cNorm === sCls;
+                        });
+
+                        if (!matchClsRaw) return false;
+
+                        // Check if specific sections are assigned for this class
+                        const allowedSections = (classSections[matchClsRaw] || []).map(sec => sec.trim().toUpperCase());
                         return allowedSections.length === 0 || allowedSections.includes(sSec);
                     })
-                    : all;
+                    : []; // If no classes are assigned, show an empty list (0 students)
 
                 console.log("[Teacher] filtered students:", filtered.length);
                 setStudents(filtered);
