@@ -35,6 +35,10 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     { label: "Results", path: "/supervisor/results", section: "Academic" },
     { label: "Marks Entry", path: "/supervisor/results/entry", section: "Academic" },
 
+    // ── Finance ───────────────────────────────────────────────────
+    { label: "Fee Overview", path: "/supervisor/fees", section: "Finance" },
+    { label: "Transport", path: "/supervisor/transport", section: "Finance" },
+
     // ── Admissions ───────────────────────────────────────────────
     { label: "Applications", path: "/supervisor/applications", section: "Admissions" },
     { label: "Admissions", path: "/supervisor/admissions", section: "Admissions" },
@@ -46,7 +50,7 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     { label: "Gallery", path: "/supervisor/gallery", section: "Content" },
 ];
 
-const SECTIONS = ["Overview", "People", "Academic", "Admissions", "Content"];
+const SECTIONS = ["Overview", "People", "Academic", "Finance", "Admissions", "Content"];
 
 
 export default function AdminSupervisorsPage() {
