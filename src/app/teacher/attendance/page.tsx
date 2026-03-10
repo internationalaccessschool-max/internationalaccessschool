@@ -120,20 +120,14 @@ export default function TeacherAttendancePage() {
 
         const fetchStudents = async () => {
             try {
-                // Try fetching by "className" first (primary field used when adding/importing students)
-                const q1 = query(
-                    collectionGroup(db, "profiles"),
-                    where("className", "==", assignedClass),
-                    where("section", "==", assignedSection)
-                );
+                const normClass = assignedClass.replace(/^class\s*/i, "").trim();
+
+                // 1. Query by className (exact and normalised)
+                const q1 = query(collectionGroup(db, "profiles"), where("className", "in", [assignedClass, normClass]), where("section", "==", assignedSection));
                 const snap1 = await getDocs(q1);
 
-                // Also try "currentClass" in case some older records use that field
-                const q2 = query(
-                    collectionGroup(db, "profiles"),
-                    where("currentClass", "==", assignedClass),
-                    where("section", "==", assignedSection)
-                );
+                // 2. Query by currentClass (exact and normalised)
+                const q2 = query(collectionGroup(db, "profiles"), where("currentClass", "in", [assignedClass, normClass]), where("section", "==", assignedSection));
                 const snap2 = await getDocs(q2);
 
                 // Merge results, deduplicating by doc ID
