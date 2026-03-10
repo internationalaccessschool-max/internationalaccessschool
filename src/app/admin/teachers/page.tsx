@@ -301,7 +301,15 @@ export default function AdminTeachersPage() {
         setLoadingPeriodSubjects(true);
         import("firebase/firestore").then(({ doc: fsDoc, getDoc }) =>
             getDoc(fsDoc(db, "classSubjects", className)).then(snap => {
-                setPeriodClassSubjects(snap.exists() ? (snap.data().subjects || []) : []);
+                if (snap.exists()) {
+                    const rawSubjects = snap.data().subjects || [];
+                    const subjectNames: string[] = rawSubjects.map((s: any) =>
+                        typeof s === "string" ? s : (s.name || s.id || "")
+                    ).filter(Boolean);
+                    setPeriodClassSubjects(subjectNames);
+                } else {
+                    setPeriodClassSubjects([]);
+                }
                 setLoadingPeriodSubjects(false);
             })
         );
