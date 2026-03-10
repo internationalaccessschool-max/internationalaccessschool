@@ -83,20 +83,42 @@ export default function TeacherMarksPage() {
                     setIsClassTeacher(true);
                     setMyClass(foundClass);
 
-                    // Load subjects for this class
-                    const subDoc = await getDoc(doc(db, "classSubjects", (foundClass as any).className));
-                    if (subDoc.exists()) {
-                        setSubjects((subDoc.data().subjects as SubjectEntry[]) || []);
+                    const rawClassName = (foundClass as any).className as string;
+                    // Normalise "Class 12" → "12" for lookups in classSubjects and exams
+                    const normClass = rawClassName.replace(/^class\s*/i, "").trim();
+
+                    // Load subjects for this class — try both the normalised name and raw name
+                    let subjectsLoaded = false;
+                    for (const key of [normClass, rawClassName]) {
+                        const subDoc = await getDoc(doc(db, "classSubjects", key));
+                        if (subDoc.exists()) {
+                            const rawSubjects = subDoc.data().subjects || [];
+                            // subjects are objects {id, name, maxMarks, type} — map to SubjectEntry
+                            const subjectEntries = rawSubjects.map((s: any) =>
+                                typeof s === "object"
+                                    ? { id: s.id || s.name, name: s.name, maxMarks: s.maxMarks || 100 }
+                                    : { id: s, name: s, maxMarks: 100 }
+                            );
+                            setSubjects(subjectEntries);
+                            subjectsLoaded = true;
+                            break;
+                        }
                     }
+                    if (!subjectsLoaded) setSubjects([]);
 
                     // Load published exams applicable to this class
+                    // Exams store classes as short names like "12"; class_teachers uses "Class 12"
+                    // Match on both the normalised short name and the raw full name
                     const examsSnap = await getDocs(collection(db, "exams"));
                     const applicableExams = examsSnap.docs
                         .map(d => ({ id: d.id, ...d.data() }) as Exam)
-                        .filter(e =>
-                            (e.status === "Published" || e.status === "Draft") // teachers see both draft and published
-                            && (e.classesApplicable ?? []).includes((foundClass as any).className)
-                        );
+                        .filter(e => {
+                            const classes = e.classesApplicable ?? [];
+                            return (
+                                (e.status === "Published" || e.status === "Draft") &&
+                                (classes.includes(normClass) || classes.includes(rawClassName))
+                            );
+                        });
                     setExams(applicableExams);
                 } else {
                     setIsClassTeacher(false);
@@ -124,14 +146,15 @@ export default function TeacherMarksPage() {
         const loadData = async () => {
             setIsLoadingStudents(true);
             try {
-                // Load students in this class
+                // Load students in this class - check both className and currentClass fields
                 const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
                 const seenIds = new Set<string>();
                 const filtered: StudentRow[] = [];
                 profilesSnap.docs.forEach(d => {
                     const data = d.data() as any;
+                    const studentClass = data.className || data.currentClass || "";
                     if (
-                        data.className === myClass.className &&
+                        studentClass === myClass.className &&
                         data.section === myClass.section &&
                         !seenIds.has(d.id)
                     ) {
