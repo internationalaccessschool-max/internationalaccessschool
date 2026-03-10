@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, query, where, collectionGroup, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
@@ -77,7 +77,7 @@ export default function StudentFeesPage() {
 
                 const snapshots = await Promise.all(promises);
                 const allRecords = snapshots.flatMap(snap =>
-                    snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+                    snap.docs.map((d: QueryDocumentSnapshot) => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
                 );
 
                 setRecords(allRecords.sort((a, b) => b.year - a.year || b.month - a.month));
