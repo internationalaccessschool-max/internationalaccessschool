@@ -67,17 +67,59 @@ export default function TeacherMarksPage() {
 
         const findClassTeacher = async () => {
             try {
-                // The admin class-teacher page stores assignments in `class_teachers` collection
-                // Each doc id = "Class_7-A", data = { cls, section, teacherId, teacherName }
-                const classTeachersSnap = await getDocs(collection(db, "class_teachers"));
+                // Try fetching teacher doc by UID
+                let teacherDocRef = doc(db, "teachers", user.uid);
+                let teacherSnap = await getDoc(teacherDocRef);
+
+                // If not found, try by email
+                if (!teacherSnap.exists() && user.email) {
+                    const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
+                    const emailSnaps = await getDocs(emailQ);
+                    if (!emailSnaps.empty) {
+                        teacherSnap = emailSnaps.docs[0] as any;
+                    }
+                }
+
                 let foundClass: { className: string; section: string } | null = null;
 
-                classTeachersSnap.docs.forEach(d => {
-                    const data = d.data();
-                    if (data.teacherId === user.uid) {
-                        foundClass = { className: data.cls, section: data.section };
+                if (teacherSnap.exists()) {
+                    const data = teacherSnap.data();
+                    const a = data.assignment;
+                    let matches: { cls: string, section: string }[] = [];
+
+                    // Parse new classSections format: { "Class 12": ["A", "B"] }
+                    if (a?.classSections) {
+                        Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
+                            if (Array.isArray(secs)) {
+                                secs.forEach((sec: string) => {
+                                    matches.push({ cls, section: sec });
+                                });
+                            }
+                        });
+                    } else if (a?.classes?.length) {
+                        // Fallback to old flat array format
+                        (a.classes as string[]).forEach((c: string) => {
+                            (a.sections || []).forEach((s: string) => {
+                                matches.push({ cls: c, section: s });
+                            });
+                        });
                     }
-                });
+
+                    // Fallback to old class_teachers collection
+                    if (matches.length === 0) {
+                        const ctSnap = await getDocs(collection(db, "class_teachers"));
+                        ctSnap.docs.forEach(d => {
+                            const ctData = d.data();
+                            if (ctData.teacherId === user.uid || (data.email && ctData.teacherEmail === data.email) || ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()) {
+                                matches.push({ cls: ctData.cls, section: ctData.section });
+                            }
+                        });
+                    }
+
+                    if (matches.length > 0) {
+                        foundClass = { className: matches[0].cls, section: matches[0].section };
+                    }
+                }
 
                 if (foundClass) {
                     setIsClassTeacher(true);
