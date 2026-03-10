@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, collectionGroup, QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
@@ -16,6 +16,9 @@ interface FeeRecord {
     paidOn: { toDate: () => Date } | null;
     status: "pending" | "paid" | "overdue";
     receiptNo: string | null;
+    studentId?: string;
+    admissionNumber?: string;
+    rollNo?: string;
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -31,6 +34,7 @@ export default function StudentFeesPage() {
     const { user } = useAuth();
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [debugInfo, setDebugInfo] = useState("");
 
     useEffect(() => {
         if (!user) return;
@@ -38,32 +42,39 @@ export default function StudentFeesPage() {
         const fetchFees = async () => {
             setLoading(true);
             try {
-                // ── Step 1: Find student profile via collectionGroup ──────────────────
-                // Student data is at: users/classes/{class}/sections/{section}/students/profiles/{uid}
-                const profilesSnap = await getDocs(
-                    query(collectionGroup(db, "profiles"), where("uid", "==", user.uid))
-                );
+                // ── Step 1: Get student info ──────────────────────────────────────────
+                // Extract admission number directly from email (e.g. "222534@ias.edu" → "222534")
+                const admNo = user.email?.split("@")[0] || "";
 
-                let studentClass = "unknown";
-                let admissionNumber = "";
+                // Try studentLookup collection first (simple top-level doc, no index needed)
+                let studentClass = "";
+                let admissionNumber = admNo;
 
-                if (!profilesSnap.empty) {
-                    const profileData = profilesSnap.docs[0].data();
-                    const rawCls = profileData.currentClass || profileData.className || profileData.class || "";
-                    studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
-                    admissionNumber = profileData.admissionNumber || "";
+                try {
+                    const lookupDoc = await getDoc(doc(db, "studentLookup", user.uid));
+                    if (lookupDoc.exists()) {
+                        const data = lookupDoc.data();
+                        const rawCls = (data.className || data.currentClass || "").toString();
+                        studentClass = rawCls.replace(/^class\s*/i, "").trim();
+                        admissionNumber = data.admissionNumber || admNo;
+                    }
+                } catch (lookupErr) {
+                    console.warn("studentLookup read failed:", lookupErr);
                 }
 
-                if (studentClass === "unknown") {
-                    console.warn("Could not find student class for uid:", user.uid);
+                if (!studentClass) {
+                    console.warn("Could not determine student class. uid:", user.uid, "email:", user.email);
+                    setDebugInfo(`Could not find class info. Please contact admin.`);
                     setRecords([]);
                     return;
                 }
 
-                // ── Step 2: Query fee records for this student across all months/years ─
-                // We fetch all records for the class and filter client-side because
-                // old records have studentId="students" (bug), new ones have correct uid.
-                // Matching by admissionNumber covers both old and new records.
+                // ── Step 2: Get all fee structure classes to try ──────────────────────
+                // The student's class in their profile might be "12" but fee records
+                // might use "12" or "Class 12" — we normalize both sides
+                const normalizedClass = studentClass.replace(/^class\s*/i, "").trim();
+
+                // ── Step 3: Fetch fee records and filter client-side ──────────────────
                 const currentYear = new Date().getFullYear();
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -72,27 +83,46 @@ export default function StudentFeesPage() {
                     for (const month of months) {
                         promises.push(
                             getDocs(
-                                collection(db, `feeRecords/${year}/months/${month}/classes/${studentClass}/records`)
-                            )
+                                collection(db, `feeRecords/${year}/months/${month}/classes/${normalizedClass}/records`)
+                            ).catch(() => ({ docs: [] })) // silently skip missing collections
                         );
                     }
                 }
 
                 const snapshots = await Promise.all(promises);
-                const allRecords = snapshots.flatMap(snap =>
-                    snap.docs
-                        .filter((d: QueryDocumentSnapshot) => {
-                            const data = d.data();
-                            // Match by studentId (new records) OR admissionNumber (old records)
-                            return data.studentId === user.uid ||
-                                (admissionNumber && data.admissionNumber === admissionNumber);
-                        })
-                        .map((d: QueryDocumentSnapshot) => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
-                );
+                const allRecords: FeeRecord[] = [];
 
-                setRecords(allRecords.sort((a, b) => b.year - a.year || b.month - a.month));
+                for (const snap of snapshots) {
+                    for (const d of snap.docs) {
+                        const data = d.data();
+                        // Match this student's records by ANY of these identifiers:
+                        const isMatch =
+                            data.studentId === user.uid ||                              // new records (after fix)
+                            data.admissionNumber === admissionNumber ||                 // admissionNumber field
+                            data.rollNo === admissionNumber ||                          // rollNo field
+                            (admNo && data.admissionNumber === admNo) ||                // from email
+                            (admNo && data.rollNo === admNo) ||                         // rollNo from email
+                            d.id.startsWith(`${user.uid}_`);                           // doc ID starts with uid
+
+                        if (isMatch) {
+                            allRecords.push({
+                                id: d.id,
+                                path: d.ref.path,
+                                ...data,
+                            } as FeeRecord);
+                        }
+                    }
+                }
+
+                allRecords.sort((a, b) => b.year - a.year || b.month - a.month);
+                setRecords(allRecords);
+
+                if (allRecords.length === 0) {
+                    setDebugInfo(`Class: ${normalizedClass}, Adm: ${admissionNumber}`);
+                }
             } catch (e) {
                 console.error("Error fetching fees:", e);
+                setDebugInfo(`Error: ${(e as any)?.message || "Unknown error"}`);
             } finally {
                 setLoading(false);
             }
@@ -151,6 +181,9 @@ export default function StudentFeesPage() {
                         <Banknote className="w-10 h-10 mx-auto mb-3 opacity-30" />
                         <p className="text-sm">No fee records found yet.</p>
                         <p className="text-xs mt-1">Your fee records will appear here once generated by the accountant.</p>
+                        {debugInfo && (
+                            <p className="text-xs mt-3 text-gray-300 font-mono">{debugInfo}</p>
+                        )}
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
