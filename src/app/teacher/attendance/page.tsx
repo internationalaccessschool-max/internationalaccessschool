@@ -120,22 +120,36 @@ export default function TeacherAttendancePage() {
 
         const fetchStudents = async () => {
             try {
-                // Determine raw class string. The DB stores "Class X"
-                const q = query(
+                // Try fetching by "className" first (primary field used when adding/importing students)
+                const q1 = query(
+                    collectionGroup(db, "profiles"),
+                    where("className", "==", assignedClass),
+                    where("section", "==", assignedSection)
+                );
+                const snap1 = await getDocs(q1);
+
+                // Also try "currentClass" in case some older records use that field
+                const q2 = query(
                     collectionGroup(db, "profiles"),
                     where("currentClass", "==", assignedClass),
                     where("section", "==", assignedSection)
                 );
-                const snap = await getDocs(q);
-                const studentList: Student[] = snap.docs.map(d => {
+                const snap2 = await getDocs(q2);
+
+                // Merge results, deduplicating by doc ID
+                const seen = new Set<string>();
+                const studentList: Student[] = [];
+                for (const d of [...snap1.docs, ...snap2.docs]) {
+                    if (seen.has(d.id)) continue;
+                    seen.add(d.id);
                     const data = d.data() as any;
-                    return {
+                    studentList.push({
                         id: d.id,
                         name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
                         regNo: data.admissionNumber || "—",
                         status: "present" as AttendanceStatus, // Default to present
-                    };
-                });
+                    });
+                }
 
                 // Sort by regNo
                 studentList.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
