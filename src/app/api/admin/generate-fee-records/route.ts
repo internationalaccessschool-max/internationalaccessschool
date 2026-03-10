@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
         // Fetch all students via collectionGroup
         const studentsSnap = await adminDb.collectionGroup("profiles").get();
         const activeStudents = studentsSnap.docs
-            .map((d: any) => ({ id: d.ref.parent.parent?.id || d.id, ...d.data() } as any))
+            .map((d: any) => ({ id: d.id, ...d.data() } as any))
             .filter((s: any) => (s.status || "").toUpperCase() !== "LEFT");
 
         // Fetch fee structures
