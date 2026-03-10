@@ -153,8 +153,9 @@ export default function TeacherMarksPage() {
                 profilesSnap.docs.forEach(d => {
                     const data = d.data() as any;
                     const studentClass = data.className || data.currentClass || "";
+                    const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
                     if (
-                        studentClass === myClass.className &&
+                        (studentClass === myClass.className || studentClass === normMyClass) &&
                         data.section === myClass.section &&
                         !seenIds.has(d.id)
                     ) {
