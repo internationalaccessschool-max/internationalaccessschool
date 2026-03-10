@@ -188,28 +188,40 @@ export default function TeacherMarksPage() {
         const loadData = async () => {
             setIsLoadingStudents(true);
             try {
-                // Load students in this class - check both className and currentClass fields
+                // Load ALL students in this class - check both className and currentClass fields
+                let allProfiles: any[] = [];
+
+                // Primary: collectionGroup query on 'profiles'
                 const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
+                allProfiles = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Fallback: users collection with role=student
+                if (allProfiles.length === 0) {
+                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+                    allProfiles = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
+
                 const seenIds = new Set<string>();
                 const filtered: StudentRow[] = [];
-                profilesSnap.docs.forEach(d => {
-                    const data = d.data() as any;
+                for (const data of allProfiles) {
                     const studentClass = data.className || data.currentClass || "";
+                    const studentSec = data.section || "";
                     const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
+
                     if (
                         (studentClass === myClass.className || studentClass === normMyClass) &&
-                        data.section === myClass.section &&
-                        !seenIds.has(d.id)
+                        studentSec === myClass.section &&
+                        !seenIds.has(data.id)
                     ) {
-                        seenIds.add(d.id);
+                        seenIds.add(data.id);
                         filtered.push({
-                            id: d.id,
+                            id: data.id,
                             firstName: data.firstName || "",
                             lastName: data.lastName || "",
-                            admissionNumber: data.admissionNumber || "",
+                            admissionNumber: data.admissionNumber || "—",
                         });
                     }
-                });
+                }
                 filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
                 setStudents(filtered);
 
