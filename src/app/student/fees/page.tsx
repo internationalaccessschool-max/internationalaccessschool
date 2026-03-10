@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, collectionGroup } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
@@ -31,51 +31,45 @@ export default function StudentFeesPage() {
     const { user } = useAuth();
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [studentId, setStudentId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!user) return;
-        // Student's uid is their studentId
-        setStudentId(user.uid);
-    }, [user]);
 
-    useEffect(() => {
-        if (!studentId) return;
         const fetchFees = async () => {
+            setLoading(true);
             try {
+                // ── Step 1: Find student profile via collectionGroup ──────────────────
+                // Student data is at: users/classes/{class}/sections/{section}/students/profiles/{uid}
+                const profilesSnap = await getDocs(
+                    query(collectionGroup(db, "profiles"), where("uid", "==", user.uid))
+                );
+
                 let studentClass = "unknown";
 
-                // Try direct students document first
-                const studentDoc = await getDoc(doc(db, "students", studentId));
-                if (studentDoc.exists()) {
-                    const data = studentDoc.data();
-                    const rawCls = data.currentClass || data.className || data.class || "";
+                if (!profilesSnap.empty) {
+                    const profileData = profilesSnap.docs[0].data();
+                    const rawCls = profileData.currentClass || profileData.className || profileData.class || "";
                     studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
                 }
 
-                // If not found, try profiles subcollection
                 if (studentClass === "unknown") {
-                    const profilesSnap = await getDocs(
-                        collection(db, "students", studentId, "profiles")
-                    );
-                    if (!profilesSnap.empty) {
-                        const profileData = profilesSnap.docs[0].data();
-                        const rawCls = profileData.currentClass || profileData.className || profileData.class || "";
-                        studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
-                    }
+                    console.warn("Could not find student class for uid:", user.uid);
+                    setRecords([]);
+                    return;
                 }
 
+                // ── Step 2: Query fee records for this student across all months/years ─
                 const currentYear = new Date().getFullYear();
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-                const promises = [];
+                const promises: Promise<any>[] = [];
                 // Fetch this year and previous year
                 for (const year of [currentYear - 1, currentYear]) {
                     for (const month of months) {
                         promises.push(
                             getDocs(query(
                                 collection(db, `feeRecords/${year}/months/${month}/classes/${studentClass}/records`),
-                                where("studentId", "==", studentId)
+                                where("studentId", "==", user.uid)
                             ))
                         );
                     }
@@ -88,13 +82,14 @@ export default function StudentFeesPage() {
 
                 setRecords(allRecords.sort((a, b) => b.year - a.year || b.month - a.month));
             } catch (e) {
-                console.error(e);
+                console.error("Error fetching fees:", e);
             } finally {
                 setLoading(false);
             }
         };
+
         fetchFees();
-    }, [studentId]);
+    }, [user]);
 
     const totalPaid = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
     const totalDue = records.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
