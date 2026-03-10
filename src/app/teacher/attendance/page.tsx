@@ -119,22 +119,29 @@ export default function TeacherAttendancePage() {
             try {
                 const normClass = assignedClass.replace(/^class\s*/i, "").trim();
 
-                // Fetch all profiles for this section (only requires a single-field index on section, which is built-in)
-                const q = query(collectionGroup(db, "profiles"), where("section", "==", assignedSection));
-                const snap = await getDocs(q);
+                let allProfiles: any[] = [];
+                // Primary: collectionGroup query on 'profiles'
+                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
+                allProfiles = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Fallback: users collection with role=student
+                if (allProfiles.length === 0) {
+                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+                    allProfiles = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
 
                 const seen = new Set<string>();
                 const studentList: Student[] = [];
-                for (const d of snap.docs) {
-                    const data = d.data() as any;
+                for (const data of allProfiles) {
                     const studentClass = data.className || data.currentClass || "";
+                    const studentSec = data.section || "";
 
                     // Match against exact class name or normalised name
-                    if (studentClass === assignedClass || studentClass === normClass) {
-                        if (seen.has(d.id)) continue;
-                        seen.add(d.id);
+                    if ((studentClass === assignedClass || studentClass === normClass) && studentSec === assignedSection) {
+                        if (seen.has(data.id)) continue;
+                        seen.add(data.id);
                         studentList.push({
-                            id: d.id,
+                            id: data.id,
                             name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
                             regNo: data.admissionNumber || "—",
                             status: "present" as AttendanceStatus, // Default to present
