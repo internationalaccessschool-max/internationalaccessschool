@@ -45,11 +45,13 @@ export default function StudentFeesPage() {
                 );
 
                 let studentClass = "unknown";
+                let admissionNumber = "";
 
                 if (!profilesSnap.empty) {
                     const profileData = profilesSnap.docs[0].data();
                     const rawCls = profileData.currentClass || profileData.className || profileData.class || "";
                     studentClass = rawCls.toString().replace(/^class\s*/i, "").trim() || "unknown";
+                    admissionNumber = profileData.admissionNumber || "";
                 }
 
                 if (studentClass === "unknown") {
@@ -59,25 +61,33 @@ export default function StudentFeesPage() {
                 }
 
                 // ── Step 2: Query fee records for this student across all months/years ─
+                // We fetch all records for the class and filter client-side because
+                // old records have studentId="students" (bug), new ones have correct uid.
+                // Matching by admissionNumber covers both old and new records.
                 const currentYear = new Date().getFullYear();
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
                 const promises: Promise<any>[] = [];
-                // Fetch this year and previous year
                 for (const year of [currentYear - 1, currentYear]) {
                     for (const month of months) {
                         promises.push(
-                            getDocs(query(
-                                collection(db, `feeRecords/${year}/months/${month}/classes/${studentClass}/records`),
-                                where("studentId", "==", user.uid)
-                            ))
+                            getDocs(
+                                collection(db, `feeRecords/${year}/months/${month}/classes/${studentClass}/records`)
+                            )
                         );
                     }
                 }
 
                 const snapshots = await Promise.all(promises);
                 const allRecords = snapshots.flatMap(snap =>
-                    snap.docs.map((d: QueryDocumentSnapshot) => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+                    snap.docs
+                        .filter((d: QueryDocumentSnapshot) => {
+                            const data = d.data();
+                            // Match by studentId (new records) OR admissionNumber (old records)
+                            return data.studentId === user.uid ||
+                                (admissionNumber && data.admissionNumber === admissionNumber);
+                        })
+                        .map((d: QueryDocumentSnapshot) => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
                 );
 
                 setRecords(allRecords.sort((a, b) => b.year - a.year || b.month - a.month));
