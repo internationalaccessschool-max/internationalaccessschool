@@ -36,70 +36,67 @@ export default function TeacherAttendancePage() {
     });
     const [existingDocId, setExistingDocId] = useState<string | null>(null);
 
-    // Step 1: Find the teacher's assigned class from class_teachers collection
+    // Step 1: Find the teacher's assigned class from teacher doc (new assignment format)
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
 
             try {
-                const ctSnap = await getDocs(collection(db, "class_teachers"));
-                let matches: { cls: string, section: string }[] = [];
+                // Try fetching teacher doc by UID
+                let teacherDocRef = doc(db, "teachers", user.uid);
+                let teacherSnap = await getDoc(teacherDocRef);
 
-                // Try 1: Direct UID match
-                ctSnap.docs.forEach(d => {
-                    const data = d.data();
-                    if (data.teacherId === user.uid) {
-                        matches.push({ cls: data.cls, section: data.section });
-                    }
-                });
-
-                // Try 2: If no match, look up teacher doc by UID to get their name,
-                //         then match by teacherName in class_teachers
-                if (matches.length === 0) {
-                    // Check teachers collection
-                    const teacherDoc = await getDoc(doc(db, "teachers", user.uid));
-                    let teacherName = "";
-                    if (teacherDoc.exists()) {
-                        const td = teacherDoc.data();
-                        teacherName = `${td.firstName || ""} ${td.lastName || ""}`.trim();
-                    }
-                    // Also check users collection
-                    if (!teacherName) {
-                        const userDoc = await getDoc(doc(db, "users", user.uid));
-                        if (userDoc.exists()) {
-                            teacherName = userDoc.data().name || "";
-                        }
-                    }
-                    if (teacherName) {
-                        ctSnap.docs.forEach(d => {
-                            const data = d.data();
-                            if (data.teacherName === teacherName) {
-                                matches.push({ cls: data.cls, section: data.section });
-                            }
-                        });
+                // If not found, try by email
+                if (!teacherSnap.exists() && user.email) {
+                    const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
+                    const emailSnaps = await getDocs(emailQ);
+                    if (!emailSnaps.empty) {
+                        teacherSnap = emailSnaps.docs[0] as any;
                     }
                 }
 
-                // Try 3: If still no match, check by email in teachers collection
-                if (matches.length === 0 && user.email) {
-                    const teachersByEmail = await getDocs(
-                        query(collection(db, "teachers"), where("email", "==", user.email))
-                    );
-                    if (!teachersByEmail.empty) {
-                        const teacherDocId = teachersByEmail.docs[0].id;
+                if (teacherSnap.exists()) {
+                    const data = teacherSnap.data();
+                    const a = data.assignment;
+                    let matches: { cls: string, section: string }[] = [];
+
+                    // Parse new classSections format: { "Class 12": ["A", "B"] }
+                    if (a?.classSections) {
+                        Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
+                            if (Array.isArray(secs)) {
+                                secs.forEach((sec: string) => {
+                                    matches.push({ cls, section: sec });
+                                });
+                            }
+                        });
+                    } else if (a?.classes?.length) {
+                        // Fallback to old flat array format: classes: ["Class 12"], sections: ["A"]
+                        (a.classes as string[]).forEach((c: string) => {
+                            (a.sections || []).forEach((s: string) => {
+                                matches.push({ cls: c, section: s });
+                            });
+                        });
+                    }
+
+                    // Fallback to old class_teachers collection
+                    if (matches.length === 0) {
+                        const ctSnap = await getDocs(collection(db, "class_teachers"));
                         ctSnap.docs.forEach(d => {
-                            const data = d.data();
-                            if (data.teacherId === teacherDocId) {
-                                matches.push({ cls: data.cls, section: data.section });
+                            const ctData = d.data();
+                            if (ctData.teacherId === user.uid || (data.email && ctData.teacherEmail === data.email) || ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()) {
+                                matches.push({ cls: ctData.cls, section: ctData.section });
                             }
                         });
                     }
-                }
 
-                if (matches.length > 0) {
-                    setAssignedSections(matches);
-                    setAssignedClass(matches[0].cls);
-                    setAssignedSection(matches[0].section);
+                    if (matches.length > 0) {
+                        setAssignedSections(matches);
+                        setAssignedClass(matches[0].cls);
+                        setAssignedSection(matches[0].section);
+                    } else {
+                        setNotClassTeacher(true);
+                        setLoading(false);
+                    }
                 } else {
                     setNotClassTeacher(true);
                     setLoading(false);
