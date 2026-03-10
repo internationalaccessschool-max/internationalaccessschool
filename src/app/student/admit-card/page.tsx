@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, collectionGroup, query, where, getDocs } from "firebase/firestore";
+import { collection, collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,13 +36,21 @@ export default function StudentAdmitCardPage() {
         if (!user) return;
         const fetchCards = async () => {
             try {
-                const q = query(
-                    collectionGroup(db, "admitCards"),
-                    where("studentId", "==", user.uid)
+                // Fetch all exams first
+                const examsSnap = await getDocs(collection(db, "exams"));
+
+                // For each exam, attempt to fetch this student's specific admit card
+                const fetchPromises = examsSnap.docs.map(examDoc =>
+                    getDoc(doc(db, "exams", examDoc.id, "admitCards", user.uid))
                 );
-                const snap = await getDocs(q);
-                const cards = snap.docs.map(d => ({ id: d.id, ...d.data() }) as AdmitCard);
-                cards.sort((a, b) => (b.generatedAt || 0) - (a.generatedAt || 0));
+
+                const admitCardDocs = await Promise.all(fetchPromises);
+
+                const cards = admitCardDocs
+                    .filter((d: any) => d.exists())
+                    .map((d: any) => ({ id: d.id, ...d.data() }) as AdmitCard);
+
+                cards.sort((a: AdmitCard, b: AdmitCard) => (b.generatedAt || 0) - (a.generatedAt || 0));
                 setAdmitCards(cards);
             } catch (err) {
                 console.error("Error fetching admit cards:", err);
