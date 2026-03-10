@@ -122,27 +122,27 @@ export default function TeacherAttendancePage() {
             try {
                 const normClass = assignedClass.replace(/^class\s*/i, "").trim();
 
-                // 1. Query by className (exact and normalised)
-                const q1 = query(collectionGroup(db, "profiles"), where("className", "in", [assignedClass, normClass]), where("section", "==", assignedSection));
-                const snap1 = await getDocs(q1);
+                // Fetch all profiles for this section (only requires a single-field index on section, which is built-in)
+                const q = query(collectionGroup(db, "profiles"), where("section", "==", assignedSection));
+                const snap = await getDocs(q);
 
-                // 2. Query by currentClass (exact and normalised)
-                const q2 = query(collectionGroup(db, "profiles"), where("currentClass", "in", [assignedClass, normClass]), where("section", "==", assignedSection));
-                const snap2 = await getDocs(q2);
-
-                // Merge results, deduplicating by doc ID
                 const seen = new Set<string>();
                 const studentList: Student[] = [];
-                for (const d of [...snap1.docs, ...snap2.docs]) {
-                    if (seen.has(d.id)) continue;
-                    seen.add(d.id);
+                for (const d of snap.docs) {
                     const data = d.data() as any;
-                    studentList.push({
-                        id: d.id,
-                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
-                        regNo: data.admissionNumber || "—",
-                        status: "present" as AttendanceStatus, // Default to present
-                    });
+                    const studentClass = data.className || data.currentClass || "";
+
+                    // Match against exact class name or normalised name
+                    if (studentClass === assignedClass || studentClass === normClass) {
+                        if (seen.has(d.id)) continue;
+                        seen.add(d.id);
+                        studentList.push({
+                            id: d.id,
+                            name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
+                            regNo: data.admissionNumber || "—",
+                            status: "present" as AttendanceStatus, // Default to present
+                        });
+                    }
                 }
 
                 // Sort by regNo
