@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, collectionGroup } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { collection, doc, getDoc, getDocs, setDoc, query, where, collectionGroup, serverTimestamp } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, Users, CalendarCheck } from "lucide-react";
+
+type AttendanceStatus = "present" | "late" | "absent";
 
 const CLASSES = Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`);
 const SECTIONS = ["A", "B", "C", "D"];
@@ -18,6 +20,7 @@ interface StudentInfo {
     id: string;
     name: string;
     regNo: string;
+    status: AttendanceStatus;
 }
 
 export default function AdminAttendancePage() {
@@ -27,10 +30,13 @@ export default function AdminAttendancePage() {
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
 
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
     const [students, setStudents] = useState<StudentInfo[]>([]);
     const [attendanceDocs, setAttendanceDocs] = useState<AttendanceDoc[]>([]);
     const [singleDayRecords, setSingleDayRecords] = useState<Record<string, string>>({});
     const [markedBy, setMarkedBy] = useState<string | null>(null);
+    const [existingDocId, setExistingDocId] = useState<string | null>(null);
 
     // Fetch students for selected class-section
     useEffect(() => {
@@ -49,6 +55,7 @@ export default function AdminAttendancePage() {
                         id: d.id,
                         name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
                         regNo: data.admissionNumber || "—",
+                        status: "present" as AttendanceStatus, // initialize for logic
                     };
                 });
                 list.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
@@ -84,16 +91,81 @@ export default function AdminAttendancePage() {
                 const dayDoc = docs.find(d => d.date === selectedDate);
                 setSingleDayRecords(dayDoc?.records || {});
                 setMarkedBy(dayDoc?.markedByName || null);
+
+                const docIdMatch = `${selectedClass}-${selectedSection}_${selectedDate}`.replace(/ /g, "_");
+                if (dayDoc) {
+                    setExistingDocId(docIdMatch);
+                } else {
+                    setExistingDocId(null);
+                }
             } catch (err) {
                 console.error("Error fetching attendance:", err);
                 setAttendanceDocs([]);
                 setSingleDayRecords({});
+                setExistingDocId(null);
             } finally {
                 setLoading(false);
             }
         };
         fetchAttendance();
     }, [selectedClass, selectedSection, selectedDate]);
+
+    // Apply fetched attendance statuses (or reset to present) whenever students or single day records load
+    useEffect(() => {
+        if (students.length > 0) {
+            setStudents(prev => prev.map(s => {
+                const fetchedStatus = singleDayRecords[s.id];
+                return {
+                    ...s,
+                    status: (fetchedStatus as AttendanceStatus) || "present"
+                };
+            }));
+        }
+    }, [singleDayRecords]); // Deliberately omitted 'students' so it doesn't infinite loop when statuses change mid-edit
+
+    const setStatus = (studentId: string, status: AttendanceStatus) => {
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status } : s));
+        setSaved(false);
+    };
+
+    const markAll = (status: AttendanceStatus) => {
+        setStudents(prev => prev.map(s => ({ ...s, status })));
+        setSaved(false);
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSaved(false);
+
+        try {
+            const docId = `${selectedClass}-${selectedSection}_${selectedDate}`.replace(/ /g, "_");
+            const records: Record<string, string> = {};
+            students.forEach(s => { records[s.id] = s.status; });
+
+            const currentUser = auth.currentUser;
+            await setDoc(doc(db, "attendance", docId), {
+                cls: selectedClass,
+                section: selectedSection,
+                date: selectedDate,
+                records,
+                markedBy: currentUser?.uid || "admin",
+                markedByName: currentUser?.displayName || "Admin/Supervisor",
+                createdAt: serverTimestamp(),
+            });
+
+            // Refresh the record tracker without re-querying everything
+            setSingleDayRecords(records);
+            setExistingDocId(docId);
+            setMarkedBy(currentUser?.displayName || "Admin/Supervisor");
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch (err) {
+            console.error("Error saving attendance:", err);
+            alert("Failed to save attendance. Please try again.");
+        } finally {
+            setSaving(false);
+        }
+    };
 
     // Summary stats
     const totalDays = attendanceDocs.length;
@@ -113,11 +185,11 @@ export default function AdminAttendancePage() {
         return { present, late, absent, total, pct };
     };
 
-    // Overall class stats for selected date
-    const dayPresent = Object.values(singleDayRecords).filter(s => s === "present").length;
-    const dayLate = Object.values(singleDayRecords).filter(s => s === "late").length;
-    const dayAbsent = Object.values(singleDayRecords).filter(s => s === "absent").length;
-    const dayTotal = Object.keys(singleDayRecords).length;
+    // Overall class stats for selected date (use live student status, not static day records so stats update instantly)
+    const dayPresent = students.filter(s => s.status === "present").length;
+    const dayLate = students.filter(s => s.status === "late").length;
+    const dayAbsent = students.filter(s => s.status === "absent").length;
+    const dayTotal = students.length;
 
     const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
         weekday: "long", day: "numeric", month: "long", year: "numeric"
@@ -225,39 +297,99 @@ export default function AdminAttendancePage() {
 
                     <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-navy">{dateDisplay}</p>
-                        {markedBy && <p className="text-xs text-gray-400">Marked by: {markedBy}</p>}
+                        {markedBy && <p className="text-xs text-amber-600 font-medium mt-1">⚡ Last marked by: {markedBy}</p>}
                     </div>
 
-                    {/* Student list for that day */}
-                    {dayTotal === 0 ? (
+                    {/* Quick actions for admin to override attendance completely */}
+                    <div className="flex gap-2 mb-2">
+                        <button
+                            onClick={() => markAll("present")}
+                            className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
+                            Mark All Present
+                        </button>
+                        <button
+                            onClick={() => markAll("absent")}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors">
+                            Mark All Absent
+                        </button>
+                    </div>
+
+                    {/* Student list for that day - editable */}
+                    {students.length === 0 ? (
                         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
-                            No attendance marked for this date.
+                            No students found for this class & section.
                         </div>
                     ) : (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
                             {students.map((student, idx) => {
-                                const status = singleDayRecords[student.id];
-                                if (!status) return null;
                                 return (
-                                    <div key={student.id} className="flex items-center justify-between px-5 py-3">
+                                    <div key={student.id} className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs">
+                                            <div className="w-8 h-8 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs shrink-0">
                                                 {idx + 1}
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-navy">{student.name}</p>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-navy truncate">{student.name}</p>
                                                 <p className="text-xs text-gray-400">Reg: {student.regNo}</p>
                                             </div>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${status === "present" ? "bg-emerald-100 text-emerald-700"
-                                            : status === "late" ? "bg-amber-100 text-amber-700"
-                                                : "bg-red-100 text-red-700"
-                                            }`}>
-                                            {status === "present" ? "✓ Present" : status === "late" ? "⏰ Late" : "✗ Absent"}
-                                        </span>
+                                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 self-end sm:self-auto ml-11 sm:ml-0">
+                                            {/* Present */}
+                                            <button
+                                                onClick={() => setStatus(student.id, "present")}
+                                                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
+                                                    }`}
+                                            >
+                                                <Check className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Present</span>
+                                            </button>
+
+                                            {/* Late */}
+                                            <button
+                                                onClick={() => setStatus(student.id, "late")}
+                                                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                                                    }`}
+                                            >
+                                                <Clock className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Late</span>
+                                            </button>
+
+                                            {/* Absent */}
+                                            <button
+                                                onClick={() => setStatus(student.id, "absent")}
+                                                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                    }`}
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Absent</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {students.length > 0 && (
+                        <div className="sticky bottom-4 z-20 mt-6">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className={`w-full py-4 text-base font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${saved
+                                    ? "bg-emerald-500 hover:bg-emerald-500"
+                                    : "bg-navy hover:bg-navy-light"
+                                    } text-white`}
+                            >
+                                {saving ? (
+                                    <><Loader2 className="w-5 h-5 animate-spin" /> Saving...</>
+                                ) : saved ? (
+                                    "✓ Attendance Saved!"
+                                ) : existingDocId ? (
+                                    "Update Attendance"
+                                ) : (
+                                    "Save Attendance"
+                                )}
+                            </button>
                         </div>
                     )}
                 </>
