@@ -62,10 +62,20 @@ export default function AssignTeachersPage() {
         setLoadingSubjects(true);
         setSelSubject("");
         getDoc(doc(db, "classSubjects", selClass)).then(snap => {
-            setClassSubjects(snap.exists() ? (snap.data().subjects || []) : []);
+            if (snap.exists()) {
+                const rawSubjects = snap.data().subjects || [];
+                // subjects are stored as objects {id, name, maxMarks, type} — extract name strings
+                const subjectNames: string[] = rawSubjects.map((s: any) =>
+                    typeof s === "string" ? s : (s.name || s.id || "")
+                ).filter(Boolean);
+                setClassSubjects(subjectNames);
+            } else {
+                setClassSubjects([]);
+            }
             setLoadingSubjects(false);
         });
     }, [selClass]);
+
 
     const handleCreate = async () => {
         if (!selTeacher || !selClass || !selSection || !selSubject) {
