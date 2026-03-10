@@ -32,6 +32,7 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     { label: "Homework", path: "/supervisor/homework", section: "Academic" },
     { label: "Exams", path: "/supervisor/exams", section: "Academic" },
     { label: "Class Subjects", path: "/supervisor/class-subjects", section: "Academic" },
+    { label: "Results", path: "/supervisor/results", section: "Academic" },
     { label: "Marks Entry", path: "/supervisor/results/entry", section: "Academic" },
 
     // ── Admissions ───────────────────────────────────────────────
@@ -294,12 +295,12 @@ export default function AdminSupervisorsPage() {
 
             {/* Permissions Dialog */}
             <Dialog open={isPermOpen} onOpenChange={setIsPermOpen}>
-                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
+                <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: "85vh" }}>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>Permissions — {editingSupervisor?.displayName}</DialogTitle>
                         <DialogDescription>Select which pages this supervisor can access.</DialogDescription>
                     </DialogHeader>
-                    <div className="py-4 space-y-5">
+                    <div className="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
                         {SECTIONS.map(section => {
                             const pages = ALL_PAGES.filter(p => p.section === section);
                             const nonDashboard = pages.filter(p => p.path !== "/supervisor");
@@ -338,7 +339,7 @@ export default function AdminSupervisorsPage() {
                             );
                         })}
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0 border-t pt-4">
                         <Button variant="outline" onClick={() => setIsPermOpen(false)}>Cancel</Button>
                         <Button onClick={handleSavePermissions} disabled={isSavingPerm}>
                             {isSavingPerm ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save Permissions"}
