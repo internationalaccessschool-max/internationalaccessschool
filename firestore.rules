@@ -76,10 +76,28 @@ service cloud.firestore {
       allow write: if isAuth();
     }
 
-    // Transport
+    // Transport routes
     match /transport/{document=**} {
       allow read: if isAuth();
       allow write: if isAuth() && getUserRole() in ['admin', 'supervisor'];
+    }
+
+    // Transport buses
+    match /transport_buses/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && getUserRole() in ['admin', 'supervisor'];
+    }
+
+    // Student Lookup — students can read their own, admin/accountant can read all
+    match /studentLookup/{uid} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    // Fee Structure
+    match /feeStructure/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
     }
 
     // Exams and Results
