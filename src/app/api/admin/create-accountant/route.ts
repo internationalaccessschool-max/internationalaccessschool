@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/auth-guard";
 
 export async function POST(request: NextRequest) {
     try {
+        const auth = await verifyAuth(request, ["admin"]);
+        if (auth instanceof NextResponse) return auth;
+
         const { email, password, displayName } = await request.json();
 
         if (!email || !password || !displayName) {
