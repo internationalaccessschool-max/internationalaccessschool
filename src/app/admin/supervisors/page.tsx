@@ -15,6 +15,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { ShieldCheck, Plus, Trash2, Settings2, Loader2, CheckSquare, Square } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 // All pages a supervisor can potentially access — must match actual /supervisor/* routes
 const ALL_PAGES: { label: string; path: string; section: string }[] = [
@@ -95,7 +96,7 @@ export default function AdminSupervisorsPage() {
         setIsCreating(true);
         try {
             // Call admin API to create user in Firebase Auth
-            const res = await fetch("/api/admin/create-supervisor", {
+            const res = await authFetch("/api/admin/create-supervisor", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: newEmail, password: newPassword, displayName: newName }),
@@ -177,7 +178,7 @@ export default function AdminSupervisorsPage() {
         if (!window.confirm(`Delete supervisor "${sup.displayName}"?\n\nThis will permanently remove their login access.`)) return;
         try {
             // Step 1: Remove from Firebase Auth first
-            const res = await fetch("/api/admin/delete-user", {
+            const res = await authFetch("/api/admin/delete-user", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ uid: sup.uid }),
