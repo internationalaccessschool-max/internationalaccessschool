@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
-import { getAuth } from "firebase-admin/auth";
-import { customInitApp } from "@/lib/firebase-admin";
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/auth-guard";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const authResult = await verifyAuth(request, ["admin"]);
+        if (authResult instanceof NextResponse) return authResult;
+
         const body = await request.json();
         const { uid, newPassword, newDisplayName } = body;
 
@@ -19,12 +22,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
         }
 
-        // Initialize Firebase Admin
-        customInitApp();
-        const auth = getAuth();
-
-        // Update the user's auth profile
-        await auth.updateUser(uid, updateData);
+        await adminAuth.updateUser(uid, updateData);
 
         return NextResponse.json({ success: true, message: "Auth user updated successfully" });
     } catch (error: any) {
