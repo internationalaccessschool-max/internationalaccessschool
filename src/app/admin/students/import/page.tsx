@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { collectionGroup, getDocs } from "firebase/firestore";
@@ -434,7 +436,7 @@ export default function BulkImportPage() {
             let successCount = 0, errorCount = 0;
             for (let i = 0; i < toImport.length; i += 100) {
                 const batch = toImport.slice(i, i + 100).map(r => r.data);
-                const res = await fetch("/api/admin/bulk-register-students", {
+                const res = await authFetch("/api/admin/bulk-register-students", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ students: batch })
