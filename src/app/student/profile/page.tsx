@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, updateDoc, collectionGroup, getDocs } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -115,7 +117,7 @@ export default function StudentProfilePage() {
             // Update Auth Password and profile name
             try {
                 const newDisplayName = `${sanitized.firstName || ""} ${sanitized.lastName || ""}`.trim();
-                await fetch("/api/admin/update-student-password", {
+                await authFetch("/api/admin/update-student-password", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -531,7 +533,7 @@ function DocumentCard({ title, url, onUpload, onRemove, folder, uid, acceptedFil
                     <button
                         onClick={async () => {
                             try {
-                                await fetch("/api/delete-file", {
+                                await authFetch("/api/delete-file", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ url })
