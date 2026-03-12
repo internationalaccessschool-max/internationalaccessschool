@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect, useCallback } from "react";
 import { collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -184,7 +186,7 @@ export default function ManageFeesPage() {
 </body>
 </html>`;
 
-            const res = await fetch("/api/send-email", {
+            const res = await authFetch("/api/send-email", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ to: record.parentEmail, subject, html }),
