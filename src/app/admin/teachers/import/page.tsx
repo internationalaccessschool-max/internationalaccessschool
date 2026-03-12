@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -234,7 +236,7 @@ export default function TeacherImportPage() {
         setUploadStatus({ type: null, message: "" });
 
         try {
-            const res = await fetch("/api/admin/bulk-register-teachers", {
+            const res = await authFetch("/api/admin/bulk-register-teachers", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ teachers: toImport.map((r) => r.data) }),
