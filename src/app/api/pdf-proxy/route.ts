@@ -1,7 +1,11 @@
 import { v2 as cloudinary } from "cloudinary";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/auth-guard";
 
 export async function GET(req: NextRequest) {
+    const authResult = await verifyAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+
     const url = req.nextUrl.searchParams.get("url");
 
     if (!url) {
