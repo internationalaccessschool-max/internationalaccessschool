@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState } from "react";
 import { doc, setDoc, updateDoc, collectionGroup, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -146,7 +148,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
         // Update Auth password and display name via API
         try {
             const newDisplayName = `${dataToSave.firstName || ""} ${dataToSave.lastName || ""}`.trim();
-            await fetch("/api/admin/update-student-password", {
+            await authFetch("/api/admin/update-student-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -322,7 +324,7 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                                         <button
                                             onClick={async () => {
                                                 try {
-                                                    await fetch("/api/delete-file", {
+                                                    await authFetch("/api/delete-file", {
                                                         method: "POST",
                                                         headers: { "Content-Type": "application/json" },
                                                         body: JSON.stringify({ url: form[doc.field] })
