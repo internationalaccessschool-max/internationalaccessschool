@@ -119,37 +119,45 @@ export default function TeacherAttendancePage() {
             try {
                 const normClass = assignedClass.replace(/^class\s*/i, "").trim();
 
-                let allProfiles: any[] = [];
-                // Primary: collectionGroup query on 'profiles'
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                allProfiles = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                // ✅ Optimised: read directly from the exact nested path — no whole-db scan
+                const directSnap = await getDocs(
+                    collection(db, "users", "classes", assignedClass, "sections", assignedSection, "students", "profiles")
+                );
 
-                // Fallback: users collection with role=student
+                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Fallback 1: try normalised class name (e.g. "12" instead of "Class 12")
+                if (allProfiles.length === 0) {
+                    const altSnap = await getDocs(
+                        collection(db, "users", "classes", normClass, "sections", assignedSection, "students", "profiles")
+                    );
+                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
+
+                // Fallback 2: users collection (~cheaper than full collectionGroup scan)
                 if (allProfiles.length === 0) {
                     const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                    allProfiles = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    allProfiles = usersSnap.docs
+                        .map((d): any => ({ id: d.id, ...d.data() }))
+                        .filter((d: any) => {
+                            const cls = d.className || d.currentClass || "";
+                            return (cls === assignedClass || cls === normClass) && d.section === assignedSection;
+                        });
                 }
 
                 const seen = new Set<string>();
                 const studentList: Student[] = [];
                 for (const data of allProfiles) {
-                    const studentClass = data.className || data.currentClass || "";
-                    const studentSec = data.section || "";
-
-                    // Match against exact class name or normalised name
-                    if ((studentClass === assignedClass || studentClass === normClass) && studentSec === assignedSection) {
-                        if (seen.has(data.id)) continue;
-                        seen.add(data.id);
-                        studentList.push({
-                            id: data.id,
-                            name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
-                            regNo: data.admissionNumber || "—",
-                            status: "present" as AttendanceStatus, // Default to present
-                        });
-                    }
+                    if (seen.has(data.id)) continue;
+                    seen.add(data.id);
+                    studentList.push({
+                        id: data.id,
+                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || "Unknown",
+                        regNo: data.admissionNumber || "—",
+                        status: "present" as AttendanceStatus,
+                    });
                 }
 
-                // Sort by regNo
                 studentList.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
                 setStudents(studentList);
             } catch (err) {
