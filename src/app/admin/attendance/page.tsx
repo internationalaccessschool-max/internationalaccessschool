@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, doc, getDoc, getDocs, setDoc, query, where, collectionGroup, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, Users, CalendarCheck } from "lucide-react";
 
@@ -42,22 +42,47 @@ export default function AdminAttendancePage() {
     useEffect(() => {
         const fetchStudents = async () => {
             try {
-                const classNum = selectedClass.replace("Class ", "").trim();
-                const q = query(
-                    collectionGroup(db, "profiles"),
-                    where("currentClass", "in", [selectedClass, classNum]),
-                    where("section", "==", selectedSection)
+                const classNum = selectedClass.replace(/^class\s*/i, "").trim();
+
+                // ✅ Optimised: read directly from nested path - no whole-db scan
+                const directSnap = await getDocs(
+                    collection(db, "users", "classes", selectedClass, "sections", selectedSection, "students", "profiles")
                 );
-                const snap = await getDocs(q);
-                const list: StudentInfo[] = snap.docs.map(d => {
-                    const data = d.data();
-                    return {
-                        id: d.id,
-                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Unknown",
+
+                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Fallback 1: try normalised class name
+                if (allProfiles.length === 0) {
+                    const altSnap = await getDocs(
+                        collection(db, "users", "classes", classNum, "sections", selectedSection, "students", "profiles")
+                    );
+                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
+
+                // Fallback 2: users collection filtered on className/section
+                if (allProfiles.length === 0) {
+                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+                    allProfiles = usersSnap.docs
+                        .map((d): any => ({ id: d.id, ...d.data() }))
+                        .filter((d: any) => {
+                            const cls = d.className || d.currentClass || "";
+                            return (cls === selectedClass || cls === classNum) && d.section === selectedSection;
+                        });
+                }
+
+                const seenIds = new Set<string>();
+                const list: StudentInfo[] = [];
+                for (const data of allProfiles) {
+                    if (seenIds.has(data.id)) continue;
+                    seenIds.add(data.id);
+                    list.push({
+                        id: data.id,
+                        name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || "Unknown",
                         regNo: data.admissionNumber || "—",
-                        status: "present" as AttendanceStatus, // initialize for logic
-                    };
-                });
+                        status: "present" as AttendanceStatus,
+                    });
+                }
+
                 list.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
                 setStudents(list);
             } catch (err) {
