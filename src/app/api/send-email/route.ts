@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { verifyAuth } from "@/lib/auth-guard";
 
 export async function POST(req: NextRequest) {
+    const authResult = await verifyAuth(req, ["admin", "accountant"]);
+    if (authResult instanceof NextResponse) return authResult;
+
     const { to, subject, html } = await req.json();
 
     if (!to || !subject || !html) {
