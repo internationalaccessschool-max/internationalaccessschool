@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect } from "react";
 import { X, Download, ZoomIn, ZoomOut, RotateCw, FileText, File, Loader2, ExternalLink } from "lucide-react";
 
@@ -45,7 +47,7 @@ export function FileViewer({ url, fileName, isOpen, onClose }: FileViewerProps) 
     useEffect(() => {
         if (isOpen && fileType === "pdf") {
             setIframeLoading(true);
-            fetch(`/api/sign-cloudinary-url?url=${encodeURIComponent(url)}`)
+            authFetch(`/api/sign-cloudinary-url?url=${encodeURIComponent(url)}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.signedUrl) setSignedPdfUrl(data.signedUrl);
