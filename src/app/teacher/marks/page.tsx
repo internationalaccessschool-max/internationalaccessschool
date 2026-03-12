@@ -188,39 +188,44 @@ export default function TeacherMarksPage() {
         const loadData = async () => {
             setIsLoadingStudents(true);
             try {
-                // Load ALL students in this class - check both className and currentClass fields
-                let allProfiles: any[] = [];
+                // ✅ Optimised: read directly from nested path - no whole-db scan
+                const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
 
-                // Primary: collectionGroup query on 'profiles'
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                allProfiles = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const directSnap = await getDocs(
+                    collection(db, "users", "classes", myClass.className, "sections", myClass.section, "students", "profiles")
+                );
+                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // Fallback: users collection with role=student
+                // Fallback 1: normalised class name
+                if (allProfiles.length === 0) {
+                    const altSnap = await getDocs(
+                        collection(db, "users", "classes", normMyClass, "sections", myClass.section, "students", "profiles")
+                    );
+                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
+
+                // Fallback 2: users collection filtered on className/section
                 if (allProfiles.length === 0) {
                     const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                    allProfiles = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    allProfiles = usersSnap.docs
+                        .map((d): any => ({ id: d.id, ...d.data() }))
+                        .filter((d: any) => {
+                            const cls = d.className || d.currentClass || "";
+                            return (cls === myClass.className || cls === normMyClass) && d.section === myClass.section;
+                        });
                 }
 
                 const seenIds = new Set<string>();
                 const filtered: StudentRow[] = [];
                 for (const data of allProfiles) {
-                    const studentClass = data.className || data.currentClass || "";
-                    const studentSec = data.section || "";
-                    const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
-
-                    if (
-                        (studentClass === myClass.className || studentClass === normMyClass) &&
-                        studentSec === myClass.section &&
-                        !seenIds.has(data.id)
-                    ) {
-                        seenIds.add(data.id);
-                        filtered.push({
-                            id: data.id,
-                            firstName: data.firstName || "",
-                            lastName: data.lastName || "",
-                            admissionNumber: data.admissionNumber || "—",
-                        });
-                    }
+                    if (seenIds.has(data.id)) continue;
+                    seenIds.add(data.id);
+                    filtered.push({
+                        id: data.id,
+                        firstName: data.firstName || "",
+                        lastName: data.lastName || "",
+                        admissionNumber: data.admissionNumber || "—",
+                    });
                 }
                 filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
                 setStudents(filtered);
