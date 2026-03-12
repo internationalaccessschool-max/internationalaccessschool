@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect } from "react";
 import { collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -58,7 +60,7 @@ export default function AdminAccountantsPage() {
 
         setIsCreating(true);
         try {
-            const res = await fetch("/api/admin/create-accountant", {
+            const res = await authFetch("/api/admin/create-accountant", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: newEmail, password: newPassword, displayName: newName }),
@@ -98,7 +100,7 @@ export default function AdminAccountantsPage() {
         if (!deleting) return;
         try {
             // Step 1: Remove from Firebase Auth — revokes login immediately
-            const res = await fetch("/api/admin/delete-user", {
+            const res = await authFetch("/api/admin/delete-user", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ uid: deleting.uid }),
