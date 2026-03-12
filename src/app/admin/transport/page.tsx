@@ -27,9 +27,11 @@ export interface Student {
     lastName?: string;
     admissionNumber?: string;
     className?: string;
+    currentClass?: string;
     section?: string;
     mobileNo?: string;
     transport?: string;
+    status?: string;
     [key: string]: any;
 }
 
@@ -113,7 +115,7 @@ export default function TransportAdminPage() {
             const allStudents = studentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
 
             // Store all students rather than strictly filtering. Admins need to see all to assign transport.
-            setStudents(allStudents);
+            setStudents(allStudents.filter(s => (s.status || "").toUpperCase() !== "LEFT"));
         } catch (error) {
             console.error("Error fetching transport data:", error);
             showToast("Failed to load data.", "error");
@@ -247,7 +249,7 @@ export default function TransportAdminPage() {
     const filteredStudents = students.filter(s => {
         if (!searchTerm) return true;
         const q = searchTerm.toLowerCase();
-        return (getDisplayName(s).toLowerCase().includes(q) || (s.admissionNumber || "").toLowerCase().includes(q) || (s.className || "").toLowerCase().includes(q));
+        return (getDisplayName(s).toLowerCase().includes(q) || (s.admissionNumber || "").toLowerCase().includes(q) || ((s.currentClass || s.className || "") + " " + (s.section || "")).toLowerCase().includes(q));
     });
 
     const filteredBuses = buses.filter(b => {
@@ -449,7 +451,9 @@ export default function TransportAdminPage() {
                                                             <div>{getDisplayName(student)}</div>
                                                             <div className="text-xs text-gray-400 mt-0.5 font-normal">{student.admissionNumber}</div>
                                                         </td>
-                                                        <td className="p-4 text-gray-600">{student.className} {student.section}</td>
+                                                        <td className="p-4 text-gray-600">
+                                                            {student.currentClass || student.classAtAdmission || student.className || "—"} {student.section || ""}
+                                                        </td>
                                                         <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
                                                         <td className="p-4">
                                                             {isUnassigned ? (
