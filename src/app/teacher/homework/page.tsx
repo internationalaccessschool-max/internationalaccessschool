@@ -65,7 +65,28 @@ export default function TeacherHomeworkPage() {
                 const { doc, getDoc } = await import("firebase/firestore");
                 const teacherDoc = await getDoc(doc(db, "teachers", user.uid));
                 if (teacherDoc.exists()) {
-                    const cs: Record<string, string[]> = teacherDoc.data()?.assignment?.classSections || {};
+                    const data = teacherDoc.data();
+                    let cs: Record<string, string[]> = {};
+                    
+                    const periodSchedule = data?.periodSchedule || {};
+                    Object.values(periodSchedule).forEach((period: any) => {
+                        if (period.className && period.section) {
+                            const clsName = period.className.startsWith("Class") 
+                                ? period.className 
+                                : `Class ${period.className}`;
+                            if (!cs[clsName]) {
+                                cs[clsName] = [];
+                            }
+                            if (!cs[clsName].includes(period.section)) {
+                                cs[clsName].push(period.section);
+                            }
+                        }
+                    });
+
+                    if (Object.keys(cs).length === 0) {
+                        cs = data?.assignment?.classSections || {};
+                    }
+                    
                     setAssignedClassSections(cs);
                 }
             } catch (err) {
