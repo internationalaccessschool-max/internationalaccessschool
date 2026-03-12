@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary, UploadApiResponse } from "cloudinary";
+import { verifyAuth } from "@/lib/auth-guard";
 
 // Configure Cloudinary explicitly
 cloudinary.config({
@@ -10,6 +11,9 @@ cloudinary.config({
 });
 
 export async function POST(req: NextRequest) {
+    const authResult = await verifyAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+
     try {
         const formData = await req.formData();
         const file = formData.get("file") as File | null;
