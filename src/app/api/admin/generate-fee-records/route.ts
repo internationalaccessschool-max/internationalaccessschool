@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/auth-guard";
 
 export async function POST(req: NextRequest) {
     try {
+        const authResult = await verifyAuth(req, ["admin", "accountant"]);
+        if (authResult instanceof NextResponse) return authResult;
+
         const { month, year, session } = await req.json();
 
         if (!month || !year) {
