@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/auth-guard";
 
 export async function POST(req: NextRequest) {
     try {
+        const authResult = await verifyAuth(req, ["admin"]);
+        if (authResult instanceof NextResponse) return authResult;
+
         const { teachers } = await req.json();
         if (!Array.isArray(teachers) || teachers.length === 0) {
             return NextResponse.json({ error: "No teachers provided" }, { status: 400 });
