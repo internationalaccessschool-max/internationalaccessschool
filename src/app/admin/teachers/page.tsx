@@ -19,6 +19,7 @@ import { db, firebaseConfig } from "@/lib/firebase";
 import Link from "next/link";
 import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
 import { FileViewerTrigger } from "@/components/ui/file-viewer";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CLASSES = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
@@ -171,7 +172,7 @@ export default function AdminTeachersPage() {
                 if (editData.newPassword && editData.newPassword.length < 6) {
                     setEditError("Password must be at least 6 characters."); setSavingEdit(false); return;
                 }
-                const credRes = await fetch("/api/admin/update-user-credentials", {
+                const credRes = await authFetch("/api/admin/update-user-credentials", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -221,7 +222,7 @@ export default function AdminTeachersPage() {
 
         try {
             // Use the admin API which handles duplicate email checks across roles
-            const res = await fetch("/api/admin/create-teacher", {
+            const res = await authFetch("/api/admin/create-teacher", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -265,7 +266,7 @@ export default function AdminTeachersPage() {
 
         try {
             // Step 1: Remove from Firebase Auth — revokes login immediately
-            const res = await fetch("/api/admin/delete-user", {
+            const res = await authFetch("/api/admin/delete-user", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ uid: id }),
