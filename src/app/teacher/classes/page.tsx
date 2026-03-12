@@ -50,46 +50,73 @@ export default function TeacherClassesPage() {
             }
             setTeacherAssignment({ classSections });
 
-            // Fetch students — try profiles sub-collection first (same as admin page), then users fallback
+            // ✅ Optimised: fetch each assigned class-section directly — no whole-db scan
             try {
-                let all: Student[] = [];
-
-                // Primary: collectionGroup query on 'profiles'
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                all = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-
-                // Fallback: users collection with role=student
-                if (all.length === 0) {
-                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                    all = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-                }
-
                 const assignedClasses = Object.keys(classSections);
-                console.log("[Teacher] assigned classSections:", classSections);
-                console.log("[Teacher] total students found:", all.length);
-                console.log("[Teacher] sample classNames:", all.slice(0, 3).map(s => s.className));
 
-                const filtered = assignedClasses.length > 0
-                    ? all.filter(s => {
-                        // Normalize: strip "Class " prefix, trim, and lowercase for robust comparison
-                        const sCls = (s.className || "").replace(/^class\s*/i, "").trim();
-                        const sSec = (s.section || "").trim().toUpperCase();
+                if (assignedClasses.length === 0) {
+                    setStudents([]);
+                } else {
+                    const fetchTasks: Promise<Student[]>[] = [];
 
-                        const matchClsRaw = assignedClasses.find(c => {
-                            const cNorm = c.replace(/^class\s*/i, "").trim();
-                            return cNorm === sCls;
+                    for (const cls of assignedClasses) {
+                        const normCls = cls.replace(/^class\s*/i, "").trim();
+                        const sections = classSections[cls];
+
+                        if (sections && sections.length > 0) {
+                            for (const sec of sections) {
+                                // Try both "Class 12" and "12" formats
+                                fetchTasks.push(
+                                    getDocs(collection(db, "users", "classes", cls, "sections", sec, "students", "profiles"))
+                                        .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)))
+                                        .then(async students => {
+                                            if (students.length === 0) {
+                                                // Try normalised name (e.g. "12" → check path with normCls)
+                                                const altSnap = await getDocs(collection(db, "users", "classes", normCls, "sections", sec, "students", "profiles"));
+                                                return altSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                                            }
+                                            return students;
+                                        })
+                                );
+                            }
+                        } else {
+                            // Sections not specified — fetch from both naming conventions
+                            fetchTasks.push(
+                                getDocs(collection(db, "users", "classes", cls, "sections", "A", "students", "profiles"))
+                                    .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)))
+                            );
+                        }
+                    }
+
+                    const results = await Promise.all(fetchTasks);
+                    const seen = new Set<string>();
+                    const merged: Student[] = [];
+                    for (const batch of results) {
+                        for (const s of batch) {
+                            if (!seen.has(s.id)) {
+                                seen.add(s.id);
+                                merged.push(s);
+                            }
+                        }
+                    }
+
+                    // Final safety fallback: if still empty, use users collection
+                    let finalList = merged;
+                    if (finalList.length === 0) {
+                        const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+                        const allUsers: Student[] = usersSnap.docs.map((d): any => ({ id: d.id, ...d.data() }));
+                        finalList = allUsers.filter((s: any) => {
+                            const sCls = (s.className || "").replace(/^class\s*/i, "").trim();
+                            const sSec = (s.section || "").trim().toUpperCase();
+                            const matchClsRaw = assignedClasses.find(c => c.replace(/^class\s*/i, "").trim() === sCls);
+                            if (!matchClsRaw) return false;
+                            const allowedSections = (classSections[matchClsRaw] || []).map(sec => sec.trim().toUpperCase());
+                            return allowedSections.length === 0 || allowedSections.includes(sSec);
                         });
+                    }
 
-                        if (!matchClsRaw) return false;
-
-                        // Check if specific sections are assigned for this class
-                        const allowedSections = (classSections[matchClsRaw] || []).map(sec => sec.trim().toUpperCase());
-                        return allowedSections.length === 0 || allowedSections.includes(sSec);
-                    })
-                    : []; // If no classes are assigned, show an empty list (0 students)
-
-                console.log("[Teacher] filtered students:", filtered.length);
-                setStudents(filtered);
+                    setStudents(finalList);
+                }
             } catch (err) {
                 console.error("[Teacher] student fetch error:", err);
             }
