@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useRef } from "react";
 import { X, Check, Loader2 } from "lucide-react";
 
@@ -97,7 +99,7 @@ export function CloudinaryUpload({
         formData.append("folder", getFolderPath());
         formData.append("public_id", finalPublicId);
 
-        const response = await fetch("/api/upload", {
+        const response = await authFetch("/api/upload", {
             method: "POST",
             body: formData,
         });
