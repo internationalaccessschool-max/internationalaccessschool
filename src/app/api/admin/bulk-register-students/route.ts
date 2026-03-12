@@ -1,20 +1,18 @@
-import { NextResponse } from "next/server";
-import { getFirestore } from "firebase-admin/firestore";
-import { getAuth } from "firebase-admin/auth";
-import { customInitApp } from "@/lib/firebase-admin";
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/auth-guard";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const authResult = await verifyAuth(request, ["admin"]);
+        if (authResult instanceof NextResponse) return authResult;
+
         const body = await request.json();
         const { students } = body;
 
         if (!students || !Array.isArray(students)) {
             return NextResponse.json({ error: "Invalid data format. Expected an array of students." }, { status: 400 });
         }
-
-        customInitApp();
-        const db = getFirestore();
-        const auth = getAuth();
 
         let successCount = 0;
         const errors: any[] = [];
@@ -51,7 +49,7 @@ export async function POST(request: Request) {
 
                 let uid: string;
                 try {
-                    const userRecord = await auth.createUser({
+                    const userRecord = await adminAuth.createUser({
                         email,
                         password,
                         displayName,
@@ -59,7 +57,7 @@ export async function POST(request: Request) {
                     uid = userRecord.uid;
                 } catch (authError: any) {
                     if (authError.code === "auth/email-already-exists") {
-                        const existing = await auth.getUserByEmail(email);
+                        const existing = await adminAuth.getUserByEmail(email);
                         uid = existing.uid;
                     } else {
                         throw authError;
@@ -99,8 +97,8 @@ export async function POST(request: Request) {
                     minorityStatus: student.minorityStatus || "",
 
                     // Academic
-                    className: resolvedClass,           // used by existing queries
-                    currentClass: resolvedClass,        // new field
+                    className: resolvedClass,
+                    currentClass: resolvedClass,
                     classAtAdmission: student.classAtAdmission || "",
                     section: resolvedSection,
                     rollNumber: student.rollNumber || "",
@@ -170,13 +168,12 @@ export async function POST(request: Request) {
                 };
 
                 // ── Firestore path ──
-                // users → classes → {className} → sections → {section} → students → profiles → {uid}
-                const rootRef = db.collection("users").doc("classes");
+                const rootRef = adminDb.collection("users").doc("classes");
                 const classRef = rootRef.collection(resolvedClass).doc("sections");
                 const sectionRef = classRef.collection(resolvedSection).doc("students");
                 const profileRef = sectionRef.collection("profiles").doc(uid);
 
-                // Ensure parent stubs exist (so Firestore console shows tree)
+                // Ensure parent stubs exist
                 await rootRef.set({ updatedAt: new Date() }, { merge: true });
                 await classRef.set({ class: resolvedClass, updatedAt: new Date() }, { merge: true });
                 await sectionRef.set({ section: resolvedSection, class: resolvedClass, updatedAt: new Date() }, { merge: true });
@@ -184,8 +181,8 @@ export async function POST(request: Request) {
                 // Save student
                 await profileRef.set(studentData, { merge: true });
 
-                // Also save a lightweight lookup doc at top-level for quick queries
-                await db.collection("studentLookup").doc(uid).set({
+                // Also save a lightweight lookup doc
+                await adminDb.collection("studentLookup").doc(uid).set({
                     uid,
                     admissionNumber: admNo,
                     name: studentData.name,
