@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect } from "react";
 import {
     Eye, Check, X, FileText, User, Phone, Mail,
@@ -46,7 +48,7 @@ const STATUS_ICONS: Record<string, any> = { Pending: Clock, Accepted: CheckCircl
 
 async function sendEmail(to: string, subject: string, html: string) {
     try {
-        await fetch("/api/send-email", {
+        await authFetch("/api/send-email", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ to, subject, html }),
