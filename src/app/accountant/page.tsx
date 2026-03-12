@@ -1,5 +1,7 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 import { useState, useEffect, useCallback } from "react";
 import { collection, getDocs, query, where, orderBy, updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -100,7 +102,7 @@ export default function AccountantDashboard() {
         try {
             const dueStr = record.dueDate?.toDate ? record.dueDate.toDate().toLocaleDateString("en-IN") : "N/A";
             const isOverdue = record.status === "overdue";
-            await fetch("/api/send-email", {
+            await authFetch("/api/send-email", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
