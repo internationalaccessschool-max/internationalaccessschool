@@ -109,3 +109,28 @@ export interface Result {
     teacherRemarks?: string;
     updatedAt: number;
 }
+
+export interface AdmitCard {
+    id?: string;
+    examId: string;
+    examName: string;
+    startDate: string;
+    endDate: string;
+    timing?: string;
+    instructions?: string;
+    studentId: string;
+    admissionNumber: string;
+    studentName: string;
+    className: string;
+    section: string;
+    dob: string;
+    fatherName: string;
+    generatedAt: number;
+    timetable?: {
+        subject: string;
+        date: string;
+        startTime: string;
+        endTime: string;
+        roomNo: string;
+    }[];
+}
