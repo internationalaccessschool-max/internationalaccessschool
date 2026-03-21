@@ -7,9 +7,10 @@ import { collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp }
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
-    Banknote, Search, Filter, CheckCircle2, AlertCircle, Clock,
-    Mail, Loader2, RefreshCw, ChevronDown
+    Banknote, Search, CheckCircle2, AlertCircle, Clock,
+    Mail, Loader2, RefreshCw, Bus
 } from "lucide-react";
+
 import toast from "react-hot-toast";
 import FeeReceiptModal from "@/components/accountant/FeeReceiptModal";
 
@@ -115,6 +116,40 @@ export default function ManageFeesPage() {
             toast.success(`Marked as paid! Receipt: ${receiptNo}`);
         } catch {
             toast.error("Failed to mark as paid");
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Mark transport fee as paid (only for bus students with breakdown.transportFee)
+    const handleMarkTransportPaid = async (record: FeeRecord) => {
+        setActionLoading(record.id + "_transport");
+        try {
+            const seq = Math.floor(Math.random() * 90000) + 10000;
+            const receiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+            // Save to transport fee records collection
+            const { setDoc, doc: firestoreDoc } = await import("firebase/firestore");
+            await setDoc(firestoreDoc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", record.id), {
+                studentId: record.id,
+                studentName: record.studentName,
+                className: record.class,
+                section: record.section || "",
+                busId: "BUS",
+                busNumber: "—",
+                routeDetails: "",
+                amount: record.breakdown?.transportFee || 0,
+                month: record.month,
+                year: record.year,
+                dueDate: record.dueDate,
+                status: "paid",
+                paidOn: new Date(),
+                receiptNo,
+                parentEmail: record.parentEmail || "",
+                markedBy: user?.uid || "",
+            }, { merge: true });
+            toast.success(`Transport fee marked paid! Receipt: ${receiptNo}`);
+        } catch {
+            toast.error("Failed to mark transport fee as paid");
         } finally {
             setActionLoading(null);
         }
@@ -428,6 +463,22 @@ export default function ManageFeesPage() {
                                                                 <Mail className="w-3 h-3" />
                                                             )}
                                                             Remind
+                                                        </button>
+                                                    )}
+                                                    {/* Transport Paid — only for bus students */}
+                                                    {record.status !== "paid" && record.breakdown?.transportFee && record.breakdown.transportFee > 0 && (
+                                                        <button
+                                                            onClick={() => handleMarkTransportPaid(record)}
+                                                            disabled={actionLoading === record.id + "_transport"}
+                                                            title={`Mark transport fee (₹${record.breakdown.transportFee}) as paid`}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {actionLoading === record.id + "_transport" ? (
+                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                            ) : (
+                                                                <Bus className="w-3 h-3" />
+                                                            )}
+                                                            Transport Paid
                                                         </button>
                                                     )}
                                                     {record.status !== "paid" && (
