@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    collection, getDocs, doc, getDoc, query, where,
+    collection, getDocs, doc, getDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -29,6 +29,16 @@ interface ExamResult {
     teacherRemarks?: string;
 }
 
+const calcGrade = (pct: number) => {
+    if (pct >= 90) return "A+";
+    if (pct >= 80) return "A";
+    if (pct >= 70) return "B+";
+    if (pct >= 60) return "B";
+    if (pct >= 50) return "C";
+    if (pct >= 40) return "D";
+    return "E";
+};
+
 const gradeColor = (grade: string) => {
     if (grade === "A+" || grade === "A") return "bg-green-100 text-green-700";
     if (grade === "B+" || grade === "B") return "bg-blue-100 text-blue-700";
@@ -37,7 +47,7 @@ const gradeColor = (grade: string) => {
     return "bg-red-100 text-red-700";
 };
 
-export default function StudentResultsPage() {
+export default function StudentMarksPage() {
     const { user } = useAuth();
     const [results, setResults] = useState<ExamResult[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -48,14 +58,11 @@ export default function StudentResultsPage() {
 
         const fetchResults = async () => {
             try {
-                // 1. Get student's class using the shared utility (fast via studentLookup)
-                const { className } = await getStudentClassInfo(user.uid);
+                // 1. Get student's class and section info
+                const { className, section } = await getStudentClassInfo(user.uid);
                 setStudentClass(className);
 
-                if (!className) {
-                    setIsLoading(false);
-                    return;
-                }
+                if (!className) { setIsLoading(false); return; }
 
                 // 2. Get all published exams applicable to student's class
                 const examsSnap = await getDocs(collection(db, "exams"));
@@ -75,15 +82,32 @@ export default function StudentResultsPage() {
                     });
                 }
 
-                // 4. Fetch result for each exam
+                // 4. Fetch result for each exam — NEW nested path first, fallback to old
                 const examResults: ExamResult[] = [];
                 await Promise.all(publishedExams.map(async exam => {
-                    const resultRef = doc(db, "results", `${exam.id}_${user.uid}`);
-                    const resultSnap = await getDoc(resultRef);
-                    if (!resultSnap.exists()) return;
+                    let resultData: Result | null = null;
 
-                    const data = resultSnap.data() as Result;
-                    const subjectRows: SubjectResult[] = Object.entries(data.marks).map(([subId, mark]) => ({
+                    // Try NEW nested path: results/{examId}/classes/{classId}/sections/{sectionId}/students/{studentId}
+                    if (section) {
+                        const newRef = doc(db, "results", exam.id!, "classes", className, "sections", section, "students", user.uid);
+                        const newSnap = await getDoc(newRef);
+                        if (newSnap.exists()) {
+                            resultData = newSnap.data() as Result;
+                        }
+                    }
+
+                    // Fallback: old flat path results/{examId}_{studentId}
+                    if (!resultData) {
+                        const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
+                        const oldSnap = await getDoc(oldRef);
+                        if (oldSnap.exists()) {
+                            resultData = oldSnap.data() as Result;
+                        }
+                    }
+
+                    if (!resultData) return;
+
+                    const subjectRows: SubjectResult[] = Object.entries(resultData.marks).map(([subId, mark]) => ({
                         subjectName: subjectMap[subId] || subId,
                         obtained: mark.obtained,
                         total: mark.total,
@@ -95,15 +119,14 @@ export default function StudentResultsPage() {
                     examResults.push({
                         exam,
                         subjects: subjectRows,
-                        totalObtained: data.totalObtained,
-                        totalMax: data.totalMax,
-                        percentage: data.percentage,
-                        overallGrade: data.overallGrade,
-                        teacherRemarks: data.teacherRemarks,
+                        totalObtained: resultData.totalObtained,
+                        totalMax: resultData.totalMax,
+                        percentage: resultData.percentage,
+                        overallGrade: resultData.overallGrade,
+                        teacherRemarks: resultData.teacherRemarks,
                     });
                 }));
 
-                // Sort by exam start date
                 examResults.sort((a, b) =>
                     new Date(b.exam.startDate).getTime() - new Date(a.exam.startDate).getTime()
                 );
@@ -117,16 +140,6 @@ export default function StudentResultsPage() {
 
         fetchResults();
     }, [user]);
-
-    const calcGrade = (pct: number) => {
-        if (pct >= 90) return "A+";
-        if (pct >= 80) return "A";
-        if (pct >= 70) return "B+";
-        if (pct >= 60) return "B";
-        if (pct >= 50) return "C";
-        if (pct >= 40) return "D";
-        return "E";
-    };
 
     if (isLoading) {
         return (
@@ -162,7 +175,6 @@ export default function StudentResultsPage() {
             ) : (
                 results.map(examResult => (
                     <Card key={examResult.exam.id} className="border-border/50 shadow-sm overflow-hidden">
-                        {/* Exam Header */}
                         <CardHeader className="bg-muted/20 border-b flex flex-row items-start justify-between gap-4">
                             <div>
                                 <CardTitle className="text-lg">{examResult.exam.name}</CardTitle>
@@ -180,7 +192,6 @@ export default function StudentResultsPage() {
                             </div>
                         </CardHeader>
 
-                        {/* Subject-wise marks */}
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -208,7 +219,6 @@ export default function StudentResultsPage() {
                                             </tr>
                                         ))}
                                     </tbody>
-                                    {/* Summary row */}
                                     <tfoot className="border-t bg-muted/10">
                                         <tr>
                                             <td className="px-6 py-3 font-semibold">Total</td>
@@ -225,7 +235,7 @@ export default function StudentResultsPage() {
                             </div>
                             {examResult.teacherRemarks && (
                                 <div className="px-6 py-3 text-sm text-muted-foreground border-t bg-muted/5 italic">
-                                    Teacher's Remarks: {examResult.teacherRemarks}
+                                    Teacher&apos;s Remarks: {examResult.teacherRemarks}
                                 </div>
                             )}
                         </CardContent>
