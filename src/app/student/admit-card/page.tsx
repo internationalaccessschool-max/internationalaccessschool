@@ -1,31 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { AdmitCard } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, FileCheck, School } from "lucide-react";
-
-interface AdmitCard {
-    id: string;
-    examId: string;
-    examName: string;
-    startDate: string;
-    endDate: string;
-    admissionNumber: string;
-    studentName: string;
-    className: string;
-    section: string;
-    dob: string;
-    fatherName: string;
-    timing?: string;
-    instructions?: string;
-    timetable?: { subject: string; date: string; startTime: string; endTime: string; roomNo: string; }[];
-    generatedAt: number;
-}
+import { getStudentClassInfo } from "@/lib/utils/studentProfile";
 
 export default function StudentAdmitCardPage() {
     const { user } = useAuth();
@@ -36,21 +20,34 @@ export default function StudentAdmitCardPage() {
         if (!user) return;
         const fetchCards = async () => {
             try {
-                // Fetch all exams first
+                // Get student's class info
+                const { className } = await getStudentClassInfo(user.uid);
+
+                // Fetch all exams
                 const examsSnap = await getDocs(collection(db, "exams"));
 
-                // For each exam, attempt to fetch this student's specific admit card
-                const fetchPromises = examsSnap.docs.map(examDoc =>
-                    getDoc(doc(db, "exams", examDoc.id, "admitCards", user.uid))
-                );
+                const cards: AdmitCard[] = [];
 
-                const admitCardDocs = await Promise.all(fetchPromises);
+                await Promise.all(examsSnap.docs.map(async examDoc => {
+                    // 1. Try NEW nested path: exams/{examId}/classes/{classId}/admitCards/{studentId}
+                    if (className) {
+                        const newRef = doc(db, "exams", examDoc.id, "classes", className, "admitCards", user.uid);
+                        const newSnap = await getDoc(newRef);
+                        if (newSnap.exists()) {
+                            cards.push({ id: newSnap.id, ...newSnap.data() } as AdmitCard);
+                            return; // found, skip old path
+                        }
+                    }
 
-                const cards = admitCardDocs
-                    .filter((d: any) => d.exists())
-                    .map((d: any) => ({ id: d.id, ...d.data() }) as AdmitCard);
+                    // 2. Fallback: old path exams/{examId}/admitCards/{studentId}
+                    const oldRef = doc(db, "exams", examDoc.id, "admitCards", user.uid);
+                    const oldSnap = await getDoc(oldRef);
+                    if (oldSnap.exists()) {
+                        cards.push({ id: oldSnap.id, ...oldSnap.data() } as AdmitCard);
+                    }
+                }));
 
-                cards.sort((a: AdmitCard, b: AdmitCard) => (b.generatedAt || 0) - (a.generatedAt || 0));
+                cards.sort((a, b) => (b.generatedAt || 0) - (a.generatedAt || 0));
                 setAdmitCards(cards);
             } catch (err) {
                 console.error("Error fetching admit cards:", err);
