@@ -2,7 +2,8 @@
 
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
-import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck } from "lucide-react";
+import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus } from "lucide-react";
+
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -36,6 +37,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 { href: "/student/admit-card", label: "Admit Cards", icon: FileCheck },
                 { href: "/student/homework", label: "Homework", icon: ClipboardList },
                 { href: "/student/fees", label: "My Fees", icon: Banknote },
+                { href: "/student/fees/transport", label: "Transport Fees", icon: Bus },
             ],
         },
         {
