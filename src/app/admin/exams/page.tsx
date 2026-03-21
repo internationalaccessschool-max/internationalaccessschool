@@ -174,16 +174,27 @@ export default function AdminExamsPage() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Delete exam "${name}"? This will also delete all generated admit cards for this exam! This cannot be undone.`)) return;
+        if (!window.confirm(`Delete exam "${name}"?\n\nNote: Student results will be preserved. Only the exam and its admit cards will be deleted.`)) return;
         try {
-            // Delete the exam document
+            // Delete the exam document itself
             await deleteDoc(doc(db, "exams", id));
 
-            // Delete all associated admit cards (they are now in a subcollection under this exam)
-            const subCol = collection(db, "exams", id, "admitCards");
-            const snap = await getDocs(subCol);
-            const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "exams", id, "admitCards", d.id)));
-            await Promise.all(deletePromises);
+            // Delete OLD flat-path admit cards (backward compat)
+            const oldSubCol = collection(db, "exams", id, "admitCards");
+            const oldSnap = await getDocs(oldSubCol);
+            await Promise.all(oldSnap.docs.map(d => deleteDoc(d.ref)));
+
+            // Delete NEW class-wise admit cards: exams/{id}/classes/{cls}/admitCards/*
+            const classesSnap = await getDocs(collection(db, "exams", id, "classes"));
+            await Promise.all(classesSnap.docs.map(async clsDoc => {
+                const cardsSnap = await getDocs(collection(db, "exams", id, "classes", clsDoc.id, "admitCards"));
+                await Promise.all(cardsSnap.docs.map(d => deleteDoc(d.ref)));
+                await deleteDoc(clsDoc.ref);
+            }));
+
+            // NOTE: Results (results/{id}/...) are intentionally NOT deleted.
+            // Student results are permanent academic records and must be preserved
+            // even if the exam is deleted.
         } catch (err: any) {
             alert("Failed to delete: " + err.message);
         }
