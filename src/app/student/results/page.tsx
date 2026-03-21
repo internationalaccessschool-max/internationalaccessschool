@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Award, FileText, ChevronRight, School } from "lucide-react";
+import { getStudentClassInfo } from "@/lib/utils/studentProfile";
 
 export default function StudentResultsPage() {
     const { user } = useAuth();
@@ -24,29 +25,50 @@ export default function StudentResultsPage() {
 
         const fetchData = async () => {
             try {
-                // Fetch student Results
-                const resultsRef = collection(db, "results");
-                const q = query(resultsRef, where("studentId", "==", user.uid));
-                const resultsSnap = await getDocs(q);
+                // 1. Get student's class & section
+                const { className, section } = await getStudentClassInfo(user.uid);
+
+                // 2. Fetch all published exams
+                const examsSnap = await getDocs(collection(db, "exams"));
+                const publishedExams = examsSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }) as Exam)
+                    .filter(e =>
+                        e.status === "Published" &&
+                        (e.classesApplicable ?? []).includes(className)
+                    );
 
                 const studentResults: (Result & { examDetails?: Exam })[] = [];
 
-                // Fetch exam details for each result
-                for (const d of resultsSnap.docs) {
-                    const resultData = { id: d.id, ...d.data() } as Result;
-                    // fetch exam metadata
-                    const examRef = doc(db, "exams", resultData.examId);
-                    const examSnap = await getDoc(examRef);
-                    if (examSnap.exists()) {
-                        const examData = examSnap.data() as Exam;
-                        // Only show published results
-                        if (examData.status === "Published") {
-                            studentResults.push({ ...resultData, examDetails: examData });
+                for (const exam of publishedExams) {
+                    let resultData: Result | null = null;
+
+                    // Try NEW nested path first
+                    if (section) {
+                        const newRef = doc(
+                            db, "results", exam.id!, "classes", className,
+                            "sections", section, "students", user.uid
+                        );
+                        const newSnap = await getDoc(newRef);
+                        if (newSnap.exists()) {
+                            resultData = { id: newSnap.id, ...newSnap.data() } as Result;
                         }
+                    }
+
+                    // Fallback: old composite ID path
+                    if (!resultData) {
+                        const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
+                        const oldSnap = await getDoc(oldRef);
+                        if (oldSnap.exists()) {
+                            resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
+                        }
+                    }
+
+                    if (resultData) {
+                        studentResults.push({ ...resultData, examDetails: exam });
                     }
                 }
 
-                // Sort by date descending
+                // Sort by exam end date descending
                 studentResults.sort((a, b) => {
                     const dateA = a.examDetails ? new Date(a.examDetails.endDate).getTime() : 0;
                     const dateB = b.examDetails ? new Date(b.examDetails.endDate).getTime() : 0;
@@ -55,11 +77,9 @@ export default function StudentResultsPage() {
 
                 setResults(studentResults);
 
-                // Build subject name map from classSubjects collection
-                // Marks are stored with IDs from classSubjects/{className}.subjects[]
-                if (studentResults.length > 0) {
-                    const classId = studentResults[0].classId;
-                    const classSubDoc = await getDoc(doc(db, "classSubjects", classId));
+                // Build subject map for this class
+                if (className) {
+                    const classSubDoc = await getDoc(doc(db, "classSubjects", className));
                     if (classSubDoc.exists()) {
                         const subjectList: { id: string; name: string; maxMarks: number }[] =
                             classSubDoc.data().subjects || [];
@@ -78,7 +98,6 @@ export default function StudentResultsPage() {
 
         fetchData();
     }, [user]);
-
 
     const handleDownloadPDF = () => {
         if (typeof window === "undefined" || !selectedResult) return;
@@ -184,7 +203,6 @@ th:not(:first-child){text-align:right;}
 
         return (
             <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6 print:p-0 print:m-0 print:max-w-none print:w-full">
-                {/* Print actions (hidden in print) */}
                 <div className="flex items-center justify-between no-print mb-6">
                     <Button variant="outline" onClick={() => setSelectedResult(null)}>
                         &larr; Back to all results
@@ -194,10 +212,8 @@ th:not(:first-child){text-align:right;}
                     </Button>
                 </div>
 
-                {/* Report Card (printable area) */}
                 <Card className="border-border shadow-md bg-white text-black overflow-hidden print:overflow-visible print:shadow-none print:border-none print:m-0 print:p-0" ref={reportCardRef}>
                     <CardContent className="p-0 print:p-0">
-                        {/* Header */}
                         <div className="bg-[#1a2e4c] text-white p-8 md:p-12 pb-16 print:p-10 print:pb-10 relative overflow-hidden print:overflow-visible flex items-center justify-between print:break-inside-avoid print:rounded-t-2xl border-b print:border-b-[#1a2e4c]">
                             <div className="absolute inset-0 opacity-10 print:hidden" style={{ backgroundImage: `radial-gradient(circle at 80% 50%, rgba(200,169,81,0.4) 0%, transparent 50%)` }} />
                             <div className="relative z-10 flex gap-6 items-center">
@@ -211,7 +227,6 @@ th:not(:first-child){text-align:right;}
                             </div>
                         </div>
 
-                        {/* Student Details Section */}
                         <div className="px-8 md:px-12 -mt-8 print:mt-0 relative z-20 print:break-inside-avoid print:px-10">
                             <Card className="border-0 shadow-xl ring-1 ring-black/5 bg-white p-6 md:p-8 rounded-2xl print:shadow-none print:ring-0 print:border print:border-gray-200 print:rounded-b-2xl print:rounded-t-none print:p-8">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 print:grid-cols-4 print:gap-4">
@@ -239,7 +254,6 @@ th:not(:first-child){text-align:right;}
                             </Card>
                         </div>
 
-                        {/* Marks Details Section */}
                         <div className="p-8 md:p-12 pt-10 print:p-10 print:pt-8">
                             <div className="border border-gray-100 rounded-2xl overflow-x-auto shadow-sm print:overflow-visible">
                                 <table className="w-full text-left border-collapse">
@@ -265,7 +279,6 @@ th:not(:first-child){text-align:right;}
                                 </table>
                             </div>
 
-                            {/* Summary Footer */}
                             <div className="mt-8 flex flex-col md:flex-row gap-6 print:flex-row print:break-inside-avoid print:mt-10">
                                 <div className="flex-1 bg-[#1a2e4c] text-white p-6 rounded-2xl shadow-md border border-[#2a4570] print:border-gray-200 flex flex-col justify-center print:p-6 print:shadow-none">
                                     <div className="flex justify-between items-end">
@@ -282,13 +295,12 @@ th:not(:first-child){text-align:right;}
                                     <p className="text-gray-500 text-sm font-medium mb-1 tracking-wide">Percentage</p>
                                     <span className="text-4xl font-bold tracking-tight text-[#1a2e4c]">{percentage}%</span>
                                 </div>
-                                <div className="flex-1 bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 border border-[#d4af37]/30 print:border-gray-200 print:bg-white print:bg-none p-6 rounded-2xl shadow-sm flex flex-col justify-center print:p-6 print:shadow-none">
+                                <div className="flex-1 bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 border border-[#d4af37]/30 print:border-gray-200 print:bg-white p-6 rounded-2xl shadow-sm flex flex-col justify-center print:p-6 print:shadow-none">
                                     <p className="text-[#a68a2b] print:text-gray-500 text-sm font-bold uppercase tracking-widest mb-1">Overall Grade</p>
                                     <span className="text-5xl font-black text-[#8c7423] print:text-[#1a2e4c] drop-shadow-sm print:drop-shadow-none">{overallGrade}</span>
                                 </div>
                             </div>
 
-                            {/* Signatures */}
                             <div className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-8 pt-8 border-t border-gray-100 text-center print:grid-cols-3 print:break-inside-avoid print:mt-24">
                                 <div className="space-y-8">
                                     <div className="border-b-2 border-dashed border-gray-300 mx-auto w-3/4"></div>
@@ -310,25 +322,10 @@ th:not(:first-child){text-align:right;}
                 <style dangerouslySetInnerHTML={{
                     __html: `
                     @media print {
-                        @page {
-                            margin: 10mm;
-                            size: A4 portrait;
-                        }
-                        
-                        * {
-                            -webkit-print-color-adjust: exact !important;
-                            print-color-adjust: exact !important;
-                        }
-                        
-                        .no-print { 
-                            display: none !important; 
-                        }
-                        
-                        body {
-                            background: white !important;
-                            margin: 0;
-                            padding: 0;
-                        }
+                        @page { margin: 10mm; size: A4 portrait; }
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .no-print { display: none !important; }
+                        body { background: white !important; margin: 0; padding: 0; }
                     }
                 `}} />
             </div>
