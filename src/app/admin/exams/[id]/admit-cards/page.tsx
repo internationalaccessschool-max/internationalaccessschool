@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
     doc, getDoc, setDoc,
-    collectionGroup, getDocs,
+    collectionGroup, getDocs, collection,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Exam } from "@/types";
@@ -27,8 +27,14 @@ interface SubjectTiming {
     roomNo: string;
 }
 
-// A dictionary to map: className -> subjectName -> SubjectTiming
 type ScheduleMap = Record<string, Record<string, SubjectTiming>>;
+
+/**
+ * New admit card path: exams/{examId}/classes/{classId}/admitCards/{studentId}
+ */
+function admitCardRef(examId: string, classId: string, studentId: string) {
+    return doc(db, "exams", examId, "classes", classId, "admitCards", studentId);
+}
 
 export default function AdvancedAdmitCardManagerPage() {
     const params = useParams();
@@ -37,37 +43,24 @@ export default function AdvancedAdmitCardManagerPage() {
 
     const [exam, setExam] = useState<Exam | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    // Dictionary mapping class name to its array of actual subjects
     const [classSubjects, setClassSubjects] = useState<Record<string, { id: string, name: string }[]>>({});
-
-    // The master schedule state that the user edits in the UI
     const [schedule, setSchedule] = useState<ScheduleMap>({});
-
     const [isGenerating, setIsGenerating] = useState(false);
     const [generateMsg, setGenerateMsg] = useState("");
 
-    // 1. Fetch Exam Data
     useEffect(() => {
         if (!examId) return;
         const fetchExamAndSubjects = async () => {
             try {
-                // Fetch Exam
                 const exSnap = await getDoc(doc(db, "exams", examId));
-                if (!exSnap.exists()) {
-                    setIsLoading(false);
-                    return;
-                }
+                if (!exSnap.exists()) { setIsLoading(false); return; }
+
                 const examData = { id: exSnap.id, ...exSnap.data() } as Exam;
                 setExam(examData);
 
-                // Initialize a local structure to hold subjects per class and the user's saved schedule
                 const subjectsObj: Record<string, any[]> = {};
                 const localSchedule: ScheduleMap = {};
-
-                // For each class the exam applies to, fetch its subjects
                 const applicable = examData.classesApplicable ?? [];
-
-                // Try fetching previous timetable if we've saved before (stored on exam doc)
                 const preSavedSchedule = (examData as any).admitCardSchedule as ScheduleMap | undefined;
 
                 for (const cls of applicable) {
@@ -77,8 +70,6 @@ export default function AdvancedAdmitCardManagerPage() {
                         subjectsList = subjSnap.data().subjects || [];
                     }
                     subjectsObj[cls] = subjectsList;
-
-                    // Pre-seed local schedule with either preSaved data or empty defaults
                     localSchedule[cls] = {};
                     subjectsList.forEach(sub => {
                         localSchedule[cls][sub.name] = {
@@ -92,7 +83,6 @@ export default function AdvancedAdmitCardManagerPage() {
 
                 setClassSubjects(subjectsObj);
                 setSchedule(localSchedule);
-
             } catch (err: any) {
                 console.error("Failed to fetch data:", err);
             } finally {
@@ -102,33 +92,25 @@ export default function AdvancedAdmitCardManagerPage() {
         fetchExamAndSubjects();
     }, [examId]);
 
-    // Handle changing input in the schedule grid
     const handleScheduleChange = (cls: string, subject: string, field: keyof SubjectTiming, val: string) => {
         setSchedule(prev => ({
             ...prev,
             [cls]: {
                 ...prev[cls],
-                [subject]: {
-                    ...prev[cls][subject],
-                    [field]: val
-                }
+                [subject]: { ...prev[cls][subject], [field]: val }
             }
         }));
     };
 
-    // Attempt to quickly clone the first subject's settings to all other subjects in that class to save user time
     const applyFirstToAll = (cls: string) => {
         const subjectsList = classSubjects[cls];
         if (!subjectsList || subjectsList.length === 0) return;
-
         const firstSubj = subjectsList[0].name;
         const firstData = schedule[cls][firstSubj];
-
         setSchedule(prev => {
             const nextCls = { ...prev[cls] };
             subjectsList.forEach(sub => {
                 if (sub.name !== firstSubj) {
-                    // We sync Time and Room, but keep date as is (or if user wants date synced too? We sync all)
                     nextCls[sub.name] = { ...firstData, date: nextCls[sub.name]?.date || firstData.date };
                 }
             });
@@ -138,13 +120,13 @@ export default function AdvancedAdmitCardManagerPage() {
 
     const handleSaveAndGenerate = async () => {
         if (!exam) return;
-        if (!window.confirm(`Generate detailed admit cards for all students in "${exam.name}"? This replaces old ones.`)) return;
+        if (!window.confirm(`Generate admit cards for all students in "${exam.name}"? This replaces old ones.`)) return;
 
         setIsGenerating(true);
         setGenerateMsg("");
 
         try {
-            // First, save the master schedule back to the exam document so it isn't lost if they come back to this page
+            // Save schedule back to exam doc for persistence
             await setDoc(doc(db, "exams", exam.id!), { admitCardSchedule: schedule }, { merge: true });
 
             // Fetch all student profiles
@@ -152,18 +134,15 @@ export default function AdvancedAdmitCardManagerPage() {
             let count = 0;
             const applicable = exam.classesApplicable ?? [];
 
-            // Generate an admit card per student matching the classes
             for (const d of snap.docs) {
                 const data = d.data();
                 const cls = normaliseClass(String(data.className || data.currentClass || ""));
 
-                // Skip if this student's class is not part of the exam config
                 if (!applicable.includes(cls)) continue;
 
                 const uid = d.id;
-                const admitCardId = `${exam.id}_${uid}`;
 
-                // Construct their personal timetable array using the exact schedule map we built above
+                // Build timetable for this student's class
                 const timetable = [];
                 const subjectsForMyClass = classSubjects[cls] || [];
                 for (const sub of subjectsForMyClass) {
@@ -179,16 +158,13 @@ export default function AdvancedAdmitCardManagerPage() {
                     }
                 }
 
-                // If no timetable exists (no subjects added for this class), we probably shouldn't generate an empty card
-                // but let's generate it anyway with basic info in case the school is lazy
-
-                await setDoc(doc(db, "exams", exam.id!, "admitCards", uid), {
+                const admitCardPayload = {
                     examId: exam.id,
                     examName: exam.name,
                     startDate: exam.startDate,
                     endDate: exam.endDate,
-                    timing: (exam as any).timing || "",            // fallback header timing
-                    instructions: (exam as any).instructions || "", // custom instructions
+                    timing: (exam as any).timing || "",
+                    instructions: (exam as any).instructions || "",
                     studentId: uid,
                     admissionNumber: data.admissionNumber || "",
                     studentName: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
@@ -197,8 +173,19 @@ export default function AdvancedAdmitCardManagerPage() {
                     dob: data.dob || "",
                     fatherName: data.fatherName || "",
                     generatedAt: Date.now(),
-                    timetable: timetable // <--- Here is the powerful new timetable feature!
-                }, { merge: true });
+                    timetable,
+                };
+
+                // NEW path: exams/{examId}/classes/{classId}/admitCards/{studentId}
+                await setDoc(admitCardRef(exam.id!, cls, uid), admitCardPayload, { merge: true });
+
+                // Also write to old path for backward compatibility with any existing readers
+                await setDoc(
+                    doc(db, "exams", exam.id!, "admitCards", uid),
+                    admitCardPayload,
+                    { merge: true }
+                );
+
                 count++;
             }
             setGenerateMsg(`✅ Successfully generated ${count} detailed admit cards!`);
@@ -222,21 +209,29 @@ export default function AdvancedAdmitCardManagerPage() {
 
     return (
         <div className="p-6 space-y-6 max-w-6xl mx-auto">
-            {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" onClick={() => router.back()}>
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold">Admit Card Manager</h1>
-                    <p className="text-muted-foreground">Configure specific subject schedules per class for <b>{exam.name}</b></p>
+                    <p className="text-muted-foreground">
+                        Configure subject schedules per class for <b>{exam.name}</b>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Cards saved at: <code className="bg-muted px-1 py-0.5 rounded text-[10px]">
+                            exams/{exam.id}/classes/&#123;class&#125;/admitCards/&#123;studentId&#125;
+                        </code>
+                    </p>
                 </div>
                 <Button
                     onClick={handleSaveAndGenerate}
                     disabled={isGenerating || applicable.length === 0}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
-                    {isGenerating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</> : <><FileCheck className="mr-2 h-4 w-4" /> Save & Generate Cards</>}
+                    {isGenerating
+                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
+                        : <><FileCheck className="mr-2 h-4 w-4" /> Save & Generate Cards</>}
                 </Button>
             </div>
 
@@ -255,15 +250,21 @@ export default function AdvancedAdmitCardManagerPage() {
             ) : (
                 <Card className="border-border/50 shadow-sm">
                     <CardHeader className="bg-muted/20 border-b pb-4">
-                        <CardTitle className="text-lg">Subject Timetables</CardTitle>
-                        <CardDescription>Configure the exact date, time, and room for every subject inside the students' admit cards.</CardDescription>
+                        <CardTitle className="text-lg">Subject Timetables by Class</CardTitle>
+                        <CardDescription>
+                            Configure the exact date, time, and room for every subject in each class's admit cards.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
                         <Tabs defaultValue={applicable[0]} className="w-full">
                             <div className="px-6 py-3 border-b bg-muted/5 w-full overflow-x-auto">
                                 <TabsList className="bg-muted/20 p-1 flex w-max h-auto">
                                     {applicable.map(cls => (
-                                        <TabsTrigger key={cls} value={cls} className="px-4 py-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+                                        <TabsTrigger
+                                            key={cls}
+                                            value={cls}
+                                            className="px-4 py-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                                        >
                                             Class {cls}
                                         </TabsTrigger>
                                     ))}
@@ -276,12 +277,15 @@ export default function AdvancedAdmitCardManagerPage() {
                                     <TabsContent key={cls} value={cls} className="p-0 m-0">
                                         {subjects.length === 0 ? (
                                             <div className="p-12 text-center text-muted-foreground">
-                                                No subjects mapped for Class {cls}. You can add some in the <a href="/admin/class-subjects" className="text-primary hover:underline">Manage Subjects</a> page.
+                                                No subjects mapped for Class {cls}. Add them in the{" "}
+                                                <a href="/admin/class-subjects" className="text-primary hover:underline">Manage Subjects</a> page.
                                             </div>
                                         ) : (
                                             <div className="p-6">
                                                 <div className="flex justify-between items-end mb-4">
-                                                    <p className="text-sm font-medium text-muted-foreground">Editing Schedule for Class {cls}</p>
+                                                    <p className="text-sm font-medium text-muted-foreground">
+                                                        Schedule for Class {cls}
+                                                    </p>
                                                     <Button variant="outline" size="sm" onClick={() => applyFirstToAll(cls)} className="text-xs h-7">
                                                         <Save className="w-3 h-3 mr-1" /> Copy first timing to all
                                                     </Button>
@@ -294,7 +298,7 @@ export default function AdvancedAdmitCardManagerPage() {
                                                                 <th className="px-4 py-3 font-medium">Exam Date</th>
                                                                 <th className="px-4 py-3 font-medium">Start Time</th>
                                                                 <th className="px-4 py-3 font-medium">End Time</th>
-                                                                <th className="px-4 py-3 font-medium">Room no.</th>
+                                                                <th className="px-4 py-3 font-medium">Room No.</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-border/50">
