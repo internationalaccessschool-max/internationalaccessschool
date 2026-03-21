@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    collection, collectionGroup, getDocs, doc, getDoc,
+    collection, getDocs, doc, getDoc,
     setDoc, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Exam, Result, SubjectMark } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -40,23 +40,28 @@ const calculateGrade = (pct: number) => {
     return "E";
 };
 
+/** New nested result path: results/{examId}/classes/{classId}/sections/{sectionId}/students/{studentId} */
+function resultDocRef(examId: string, classId: string, sectionId: string, studentId: string) {
+    return doc(db, "results", examId, "classes", classId, "sections", sectionId, "students", studentId);
+}
+
+function resultSectionCol(examId: string, classId: string, sectionId: string) {
+    return collection(db, "results", examId, "classes", classId, "sections", sectionId, "students");
+}
+
 export default function TeacherMarksPage() {
     const { user } = useAuth();
 
-    // Teacher's assigned class info
     const [myClass, setMyClass] = useState<{ className: string; section: string } | null>(null);
-    const [isClassTeacher, setIsClassTeacher] = useState<boolean | null>(null); // null = loading
+    const [isClassTeacher, setIsClassTeacher] = useState<boolean | null>(null);
 
-    // Data
     const [exams, setExams] = useState<Exam[]>([]);
     const [subjects, setSubjects] = useState<SubjectEntry[]>([]);
     const [students, setStudents] = useState<StudentRow[]>([]);
-    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, string>>>({}); // studentId -> subjectId -> marksStr
+    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, string>>>({});
 
-    // Selection
     const [selectedExamId, setSelectedExamId] = useState("");
 
-    // UI
     const [isLoadingMeta, setIsLoadingMeta] = useState(true);
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -67,11 +72,9 @@ export default function TeacherMarksPage() {
 
         const findClassTeacher = async () => {
             try {
-                // Try fetching teacher doc by UID
                 let teacherDocRef = doc(db, "teachers", user.uid);
                 let teacherSnap = await getDoc(teacherDocRef);
 
-                // If not found, try by email
                 if (!teacherSnap.exists() && user.email) {
                     const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
                     const emailSnaps = await getDocs(emailQ);
@@ -87,30 +90,27 @@ export default function TeacherMarksPage() {
                     const a = data.assignment;
                     let matches: { cls: string, section: string }[] = [];
 
-                    // Parse new classSections format: { "Class 12": ["A", "B"] }
                     if (a?.classSections) {
                         Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
                             if (Array.isArray(secs)) {
-                                secs.forEach((sec: string) => {
-                                    matches.push({ cls, section: sec });
-                                });
+                                secs.forEach((sec: string) => matches.push({ cls, section: sec }));
                             }
                         });
                     } else if (a?.classes?.length) {
-                        // Fallback to old flat array format
                         (a.classes as string[]).forEach((c: string) => {
-                            (a.sections || []).forEach((s: string) => {
-                                matches.push({ cls: c, section: s });
-                            });
+                            (a.sections || []).forEach((s: string) => matches.push({ cls: c, section: s }));
                         });
                     }
 
-                    // Fallback to old class_teachers collection
                     if (matches.length === 0) {
                         const ctSnap = await getDocs(collection(db, "class_teachers"));
                         ctSnap.docs.forEach(d => {
                             const ctData = d.data();
-                            if (ctData.teacherId === user.uid || (data.email && ctData.teacherEmail === data.email) || ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()) {
+                            if (
+                                ctData.teacherId === user.uid ||
+                                (data.email && ctData.teacherEmail === data.email) ||
+                                ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()
+                            ) {
                                 matches.push({ cls: ctData.cls, section: ctData.section });
                             }
                         });
@@ -126,16 +126,13 @@ export default function TeacherMarksPage() {
                     setMyClass(foundClass);
 
                     const rawClassName = (foundClass as any).className as string;
-                    // Normalise "Class 12" → "12" for lookups in classSubjects and exams
                     const normClass = rawClassName.replace(/^class\s*/i, "").trim();
 
-                    // Load subjects for this class — try both the normalised name and raw name
                     let subjectsLoaded = false;
                     for (const key of [normClass, rawClassName]) {
                         const subDoc = await getDoc(doc(db, "classSubjects", key));
                         if (subDoc.exists()) {
                             const rawSubjects = subDoc.data().subjects || [];
-                            // subjects are objects {id, name, maxMarks, type} — map to SubjectEntry
                             const subjectEntries = rawSubjects.map((s: any) =>
                                 typeof s === "object"
                                     ? { id: s.id || s.name, name: s.name, maxMarks: s.maxMarks || 100 }
@@ -148,9 +145,6 @@ export default function TeacherMarksPage() {
                     }
                     if (!subjectsLoaded) setSubjects([]);
 
-                    // Load published exams applicable to this class
-                    // Exams store classes as short names like "12"; class_teachers uses "Class 12"
-                    // Match on both the normalised short name and the raw full name
                     const examsSnap = await getDocs(collection(db, "exams"));
                     const applicableExams = examsSnap.docs
                         .map(d => ({ id: d.id, ...d.data() }) as Exam)
@@ -176,7 +170,6 @@ export default function TeacherMarksPage() {
         findClassTeacher();
     }, [user]);
 
-
     // Step 2: Load students and existing marks when exam is selected
     useEffect(() => {
         if (!myClass || !selectedExamId) {
@@ -188,15 +181,16 @@ export default function TeacherMarksPage() {
         const loadData = async () => {
             setIsLoadingStudents(true);
             try {
-                // ✅ Optimised: read directly from nested path - no whole-db scan
                 const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
+
+                // Try nested path first, then fallback to collectionGroup query
+                let allProfiles: any[] = [];
 
                 const directSnap = await getDocs(
                     collection(db, "users", "classes", myClass.className, "sections", myClass.section, "students", "profiles")
                 );
-                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                allProfiles = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // Fallback 1: normalised class name
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
                         collection(db, "users", "classes", normMyClass, "sections", myClass.section, "students", "profiles")
@@ -204,7 +198,6 @@ export default function TeacherMarksPage() {
                     allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 }
 
-                // Fallback 2: users collection filtered on className/section
                 if (allProfiles.length === 0) {
                     const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
                     allProfiles = usersSnap.docs
@@ -230,27 +223,38 @@ export default function TeacherMarksPage() {
                 filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
                 setStudents(filtered);
 
-                // Initialize marks map
                 const initMap: Record<string, Record<string, string>> = {};
                 filtered.forEach(s => { initMap[s.id] = {}; });
 
-                // Load existing results
-                const resultsSnap = await getDocs(query(
-                    collection(db, "results"),
-                    where("examId", "==", selectedExamId),
-                    where("classId", "==", myClass.className),
-                    where("sectionId", "==", myClass.section),
-                ));
+                // Fetch existing results from NEW nested path
+                const resultsSnap = await getDocs(
+                    resultSectionCol(selectedExamId, myClass.className, myClass.section)
+                );
                 resultsSnap.docs.forEach(d => {
                     const data = d.data() as Result;
-                    if (initMap[data.studentId]) {
+                    if (initMap[d.id]) {
                         Object.entries(data.marks).forEach(([subId, markData]) => {
                             if (markData.obtained !== null) {
-                                initMap[data.studentId][subId] = String(markData.obtained);
+                                initMap[d.id][subId] = String(markData.obtained);
                             }
                         });
                     }
                 });
+
+                // Fallback: check old flat path for any student without data yet
+                await Promise.all(filtered.map(async student => {
+                    if (Object.keys(initMap[student.id]).length > 0) return;
+                    const oldRef = doc(db, "results", `${selectedExamId}_${student.id}`);
+                    const oldSnap = await getDoc(oldRef);
+                    if (oldSnap.exists()) {
+                        const oldData = oldSnap.data() as Result;
+                        Object.entries(oldData.marks).forEach(([subId, markData]) => {
+                            if (markData.obtained !== null) {
+                                initMap[student.id][subId] = String(markData.obtained);
+                            }
+                        });
+                    }
+                }));
 
                 setResultsMap(initMap);
             } catch (err) {
@@ -309,8 +313,9 @@ export default function TeacherMarksPage() {
                     updatedAt: Date.now(),
                 };
 
+                // Save to NEW nested path
                 await setDoc(
-                    doc(db, "results", `${selectedExamId}_${student.id}`),
+                    resultDocRef(selectedExamId, myClass.className, myClass.section, student.id),
                     resultPayload,
                     { merge: true }
                 );
@@ -324,8 +329,6 @@ export default function TeacherMarksPage() {
             setIsSaving(false);
         }
     };
-
-    // --- Render States ---
 
     if (isLoadingMeta) {
         return (
@@ -377,7 +380,6 @@ export default function TeacherMarksPage() {
                 </div>
             </div>
 
-            {/* Exam Selector */}
             <Card className="border-border/50 shadow-sm">
                 <CardHeader className="bg-muted/10 border-b pb-4">
                     <div className="space-y-2 max-w-xs">
