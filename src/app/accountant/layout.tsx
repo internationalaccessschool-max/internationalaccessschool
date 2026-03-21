@@ -3,8 +3,9 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
-    LayoutDashboard, Banknote, Settings2, ClipboardList, PlusCircle, Loader2
+    LayoutDashboard, Banknote, Settings2, ClipboardList, PlusCircle, Loader2, Bus
 } from "lucide-react";
+
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -36,6 +37,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
                 { href: "/accountant/fees", label: "Manage Fees", icon: Banknote },
                 { href: "/accountant/fees/structure", label: "Fee Structure", icon: Settings2 },
                 { href: "/accountant/fees/generate", label: "Generate Monthly Fees", icon: PlusCircle },
+                { href: "/accountant/transport-fees", label: "Transport Fees", icon: Bus },
             ],
         },
     ];
