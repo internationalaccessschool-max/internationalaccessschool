@@ -9,13 +9,12 @@ import {
     where,
     doc,
     setDoc,
-    serverTimestamp,
     getDoc
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Exam, Subject, Result, SubjectMark } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
     Select,
@@ -36,8 +35,27 @@ interface StudentProfile {
     admissionNumber: string;
 }
 
+/** New nested path helper for a result document */
+function resultDocRef(examId: string, classId: string, sectionId: string, studentId: string) {
+    return doc(db, "results", examId, "classes", classId, "sections", sectionId, "students", studentId);
+}
+
+/** New nested collection path for reading all results of a class+section in an exam */
+function resultSectionCol(examId: string, classId: string, sectionId: string) {
+    return collection(db, "results", examId, "classes", classId, "sections", sectionId, "students");
+}
+
+const calculateGrade = (percentage: number): string => {
+    if (percentage >= 90) return "A+";
+    if (percentage >= 80) return "A";
+    if (percentage >= 70) return "B+";
+    if (percentage >= 60) return "B";
+    if (percentage >= 50) return "C";
+    if (percentage >= 40) return "D";
+    return "E";
+};
+
 export default function BulkMarksEntryPage() {
-    // Selection state
     const [exams, setExams] = useState<Exam[]>([]);
     const [classes, setClasses] = useState<string[]>([]);
     const [sections, setSections] = useState<string[]>([]);
@@ -47,25 +65,20 @@ export default function BulkMarksEntryPage() {
     const [selectedClass, setSelectedClass] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
 
-    // Data state
     const [students, setStudents] = useState<StudentProfile[]>([]);
-    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, string>>>({}); // studentId -> { subjectId -> marks as string }
+    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, string>>>({});
 
-    // UI state
     const [isFetchingMetadata, setIsFetchingMetadata] = useState(true);
     const [isFetchingData, setIsFetchingData] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Initial Fetch (Exams, Classes setup)
+    // Initial Fetch — Exams + Classes
     useEffect(() => {
         const fetchMetadata = async () => {
             try {
-                // Fetch Exams
                 const examsSnap = await getDocs(collection(db, "exams"));
-                const examsData = examsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Exam));
-                setExams(examsData);
+                setExams(examsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Exam)));
 
-                // Extract unique classes from student profiles
                 const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
                 const allClasses = new Set<string>();
                 profilesSnap.docs.forEach(d => {
@@ -80,11 +93,10 @@ export default function BulkMarksEntryPage() {
                 setIsFetchingMetadata(false);
             }
         };
-
         fetchMetadata();
     }, []);
 
-    // Fetch Sections AND Class-Specific Subjects when Class changes
+    // Fetch Sections + Subjects when class changes
     useEffect(() => {
         if (!selectedClass) {
             setSections([]);
@@ -95,7 +107,6 @@ export default function BulkMarksEntryPage() {
 
         const fetchSectionsAndSubjects = async () => {
             try {
-                // Fetch sections from student profiles
                 const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
                 const classSections = new Set<string>();
                 profilesSnap.docs.forEach(d => {
@@ -106,13 +117,10 @@ export default function BulkMarksEntryPage() {
                 });
                 setSections(Array.from(classSections).sort());
 
-                // Fetch class-specific subjects
                 const subDoc = await getDoc(doc(db, "classSubjects", selectedClass));
                 if (subDoc.exists()) {
-                    const classSubjects = (subDoc.data().subjects as Subject[]) || [];
-                    setSubjects(classSubjects);
+                    setSubjects((subDoc.data().subjects as Subject[]) || []);
                 } else {
-                    // Fallback to global subjects if no class-specific mapping exists
                     const subjectsSnap = await getDocs(collection(db, "subjects"));
                     setSubjects(subjectsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Subject)));
                 }
@@ -124,7 +132,7 @@ export default function BulkMarksEntryPage() {
         fetchSectionsAndSubjects();
     }, [selectedClass]);
 
-    // Fetch Students and existing Results when all three are selected
+    // Fetch Students + existing Results when all three are selected
     useEffect(() => {
         if (!selectedExamId || !selectedClass || !selectedSection) {
             setStudents([]);
@@ -135,50 +143,58 @@ export default function BulkMarksEntryPage() {
         const loadGridData = async () => {
             setIsFetchingData(true);
             try {
-                // 1. Fetch Students in Class + Section
+                // 1. Fetch Students
                 const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
                 const filteredStudents: StudentProfile[] = [];
-                // Handle duplicate profile doc issue
                 const seenIds = new Set();
 
                 profilesSnap.docs.forEach(d => {
                     const data = d.data() as StudentProfile;
                     const profileId = d.id;
-                    if (data.className === selectedClass && data.section === selectedSection && !seenIds.has(profileId)) {
+                    if (
+                        data.className === selectedClass &&
+                        data.section === selectedSection &&
+                        !seenIds.has(profileId)
+                    ) {
                         seenIds.add(profileId);
                         filteredStudents.push({ ...data, id: profileId });
                     }
                 });
 
-                // Sort students alphabetically
                 filteredStudents.sort((a, b) => a.firstName.localeCompare(b.firstName));
                 setStudents(filteredStudents);
 
-                // 2. Fetch existing results for these students + exam
+                // 2. Initialize marks map
                 const initialMap: Record<string, Record<string, string>> = {};
-                filteredStudents.forEach(s => {
-                    initialMap[s.id] = {};
-                });
+                filteredStudents.forEach(s => { initialMap[s.id] = {}; });
 
-                const resultsQuery = query(
-                    collection(db, "results"),
-                    where("examId", "==", selectedExamId),
-                    where("classId", "==", selectedClass),
-                    where("sectionId", "==", selectedSection)
-                );
-
-                const resultsSnap = await getDocs(resultsQuery);
+                // 3. Fetch existing results from NEW nested path
+                const resultsSnap = await getDocs(resultSectionCol(selectedExamId, selectedClass, selectedSection));
                 resultsSnap.forEach(d => {
                     const data = d.data() as Result;
-                    if (initialMap[data.studentId]) {
-                        // Populate existing marks
+                    if (initialMap[d.id]) {
                         Object.entries(data.marks).forEach(([subId, markData]) => {
                             if (markData.obtained !== null) {
-                                initialMap[data.studentId][subId] = markData.obtained.toString();
+                                initialMap[d.id][subId] = markData.obtained.toString();
                             }
                         });
                     }
                 });
+
+                // 4. Fallback: also check old flat collection for existing data
+                await Promise.all(filteredStudents.map(async student => {
+                    if (Object.keys(initialMap[student.id]).length > 0) return; // already found
+                    const oldRef = doc(db, "results", `${selectedExamId}_${student.id}`);
+                    const oldSnap = await getDoc(oldRef);
+                    if (oldSnap.exists()) {
+                        const oldData = oldSnap.data() as Result;
+                        Object.entries(oldData.marks).forEach(([subId, markData]) => {
+                            if (markData.obtained !== null) {
+                                initialMap[student.id][subId] = markData.obtained.toString();
+                            }
+                        });
+                    }
+                }));
 
                 setResultsMap(initialMap);
             } catch (err) {
@@ -192,28 +208,12 @@ export default function BulkMarksEntryPage() {
         loadGridData();
     }, [selectedExamId, selectedClass, selectedSection]);
 
-
     const handleMarkChange = (studentId: string, subjectId: string, value: string) => {
-        // Allow empty string or numbers
         if (value !== "" && isNaN(Number(value))) return;
-
         setResultsMap(prev => ({
             ...prev,
-            [studentId]: {
-                ...prev[studentId],
-                [subjectId]: value
-            }
+            [studentId]: { ...prev[studentId], [subjectId]: value }
         }));
-    };
-
-    const calculateGrade = (percentage: number): string => {
-        if (percentage >= 90) return "A+";
-        if (percentage >= 80) return "A";
-        if (percentage >= 70) return "B+";
-        if (percentage >= 60) return "B";
-        if (percentage >= 50) return "C";
-        if (percentage >= 40) return "D";
-        return "E"; // Fail
     };
 
     const handleSave = async () => {
@@ -226,12 +226,8 @@ export default function BulkMarksEntryPage() {
         let successCount = 0;
 
         try {
-            // We need to construct the Result object for each student
             const promises = students.map(async (student) => {
                 const marksData = resultsMap[student.id] || {};
-
-                // If the teacher hasn't entered any marks for this specific student, we might optionally skip.
-                // But generally, we create/update the document anyway.
                 if (Object.keys(marksData).length === 0) return;
 
                 const processedMarks: Record<string, SubjectMark> = {};
@@ -239,30 +235,16 @@ export default function BulkMarksEntryPage() {
                 let totalMax = 0;
 
                 subjects.forEach(sub => {
-                    // Only process subjects where a mark was actually entered, or represent as absent (null)
                     const valStr = marksData[sub.id!];
                     if (valStr && valStr.trim() !== "") {
-                        const obtained = Number(valStr);
-                        // Prevent exceeding max marks physically
-                        const finalObtained = Math.min(obtained, sub.maxMarks);
-
-                        processedMarks[sub.id!] = {
-                            subjectId: sub.id!,
-                            obtained: finalObtained,
-                            total: sub.maxMarks
-                        };
-                        totalObtained += finalObtained;
+                        const obtained = Math.min(Number(valStr), sub.maxMarks);
+                        processedMarks[sub.id!] = { subjectId: sub.id!, obtained, total: sub.maxMarks };
+                        totalObtained += obtained;
                         totalMax += sub.maxMarks;
                     }
                 });
 
-                // Calculate percentage and grade
                 const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
-                const overallGrade = calculateGrade(percentage);
-
-                // Use a composite ID or let Firestore generate it? Let's use a deterministic ID to avoid duplicates
-                const resultDocId = `${selectedExamId}_${student.id}`;
-                const resultRef = doc(db, "results", resultDocId);
 
                 const resultPayload: Partial<Result> = {
                     studentId: student.id,
@@ -273,11 +255,16 @@ export default function BulkMarksEntryPage() {
                     totalObtained,
                     totalMax,
                     percentage: Number(percentage.toFixed(2)),
-                    overallGrade,
+                    overallGrade: calculateGrade(percentage),
                     updatedAt: Date.now()
                 };
 
-                await setDoc(resultRef, resultPayload, { merge: true });
+                // Save to NEW nested path: results/{examId}/classes/{classId}/sections/{sectionId}/students/{studentId}
+                await setDoc(
+                    resultDocRef(selectedExamId, selectedClass, selectedSection, student.id),
+                    resultPayload,
+                    { merge: true }
+                );
                 successCount++;
             });
 
@@ -290,7 +277,6 @@ export default function BulkMarksEntryPage() {
             setIsSaving(false);
         }
     };
-
 
     if (isFetchingMetadata) {
         return (
@@ -319,9 +305,7 @@ export default function BulkMarksEntryPage() {
                         <div className="space-y-2">
                             <Label>Examination</Label>
                             <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Exam" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Select Exam" /></SelectTrigger>
                                 <SelectContent>
                                     {exams.map(ex => (
                                         <SelectItem key={ex.id} value={ex.id!}>{ex.name}</SelectItem>
@@ -332,9 +316,7 @@ export default function BulkMarksEntryPage() {
                         <div className="space-y-2">
                             <Label>Class</Label>
                             <Select value={selectedClass} onValueChange={setSelectedClass}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Class" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Select Class" /></SelectTrigger>
                                 <SelectContent>
                                     {classes.map(c => (
                                         <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -345,9 +327,7 @@ export default function BulkMarksEntryPage() {
                         <div className="space-y-2">
                             <Label>Section</Label>
                             <Select value={selectedSection} onValueChange={setSelectedSection} disabled={!selectedClass}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Section" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Select Section" /></SelectTrigger>
                                 <SelectContent>
                                     {sections.map(s => (
                                         <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -381,9 +361,7 @@ export default function BulkMarksEntryPage() {
                                         <th className="px-4 py-4 font-medium sticky left-0 bg-muted/40 backdrop-blur-sm z-20 min-w-[200px]">
                                             Student Name
                                         </th>
-                                        <th className="px-4 py-4 font-medium w-24">
-                                            Adm No
-                                        </th>
+                                        <th className="px-4 py-4 font-medium w-24">Adm No</th>
                                         {subjects.map(sub => (
                                             <th key={sub.id} className="px-4 py-4 font-medium text-center min-w-[120px]">
                                                 {sub.name} <br />
@@ -395,7 +373,7 @@ export default function BulkMarksEntryPage() {
                                 <tbody className="divide-y divide-border/50">
                                     {students.map((student) => (
                                         <tr key={student.id} className="hover:bg-muted/10 transition-colors">
-                                            <td className="px-4 py-3 font-medium sticky left-0 bg-white group-hover:bg-muted/10 transition-colors shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+                                            <td className="px-4 py-3 font-medium sticky left-0 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
                                                 {student.firstName} {student.lastName}
                                             </td>
                                             <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -403,7 +381,6 @@ export default function BulkMarksEntryPage() {
                                             </td>
                                             {subjects.map(sub => {
                                                 const value = resultsMap[student.id]?.[sub.id!] || "";
-                                                // Optional: warn if exceeding max marks
                                                 const isExceeding = Number(value) > sub.maxMarks;
                                                 return (
                                                     <td key={sub.id} className="px-4 py-2">
