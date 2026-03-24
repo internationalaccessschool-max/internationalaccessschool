@@ -3,12 +3,12 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
     Banknote, Search, CheckCircle2, AlertCircle, Clock,
-    Mail, Loader2, RefreshCw, Bus
+    Mail, Loader2, RefreshCw, Bus, School, X
 } from "lucide-react";
 
 import toast from "react-hot-toast";
@@ -17,6 +17,7 @@ import FeeReceiptModal from "@/components/accountant/FeeReceiptModal";
 interface FeeRecord {
     id: string;
     path: string;
+    studentId?: string;
     studentName: string;
     rollNo: string;
     class: string;
@@ -28,8 +29,10 @@ interface FeeRecord {
     year: number;
     dueDate: { toDate: () => Date } | null;
     status: "pending" | "paid" | "overdue";
+    transportStatus?: "pending" | "paid" | "overdue";
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
+    transportReceiptNo?: string | null;
     breakdown?: {
         tuitionFee?: number;
         examFee?: number;
@@ -40,6 +43,8 @@ interface FeeRecord {
         miscFee?: number;
     };
 }
+
+type MarkPaidType = "school" | "transport" | "both";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -56,6 +61,11 @@ export default function ManageFeesPage() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [selectedReceipt, setSelectedReceipt] = useState<FeeRecord | null>(null);
 
+    // Mark Paid Dialog
+    const [markPaidRecord, setMarkPaidRecord] = useState<FeeRecord | null>(null);
+    const [markPaidType, setMarkPaidType] = useState<MarkPaidType>("school");
+    const [markPaidLoading, setMarkPaidLoading] = useState(false);
+
     // Filters
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -68,11 +78,9 @@ export default function ManageFeesPage() {
     const fetchRecords = useCallback(async () => {
         setLoading(true);
         try {
-            // First get all classes from fee structure
             const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
             const classIds = classesSnap.docs.map(d => d.id);
 
-            // Fetch records for all classes concurrently
             const promises = classIds.map(classId =>
                 getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
             );
@@ -81,13 +89,28 @@ export default function ManageFeesPage() {
                 snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
             );
 
-            // Sort by class and then studentName
-            allRecords.sort((a, b) => {
+            // Also fetch transport status for these records
+            const transportSnap = await getDocs(
+                collection(db, "transportFeeRecords", filterYear.toString(), "months", filterMonth.toString(), "students")
+            ).catch(() => ({ docs: [] as any[] }));
+            const transportMap: Record<string, { status: string; receiptNo: string | null }> = {};
+            for (const d of transportSnap.docs) {
+                transportMap[d.id] = { status: d.data().status, receiptNo: d.data().receiptNo || null };
+            }
+
+            // Merge transport status into records
+            const merged = allRecords.map(r => {
+                const uid = r.studentId || r.id;
+                const t = transportMap[uid];
+                return t ? { ...r, transportStatus: t.status as any, transportReceiptNo: t.receiptNo } : r;
+            });
+
+            merged.sort((a, b) => {
                 if (a.class !== b.class) return a.class.localeCompare(b.class);
                 return a.studentName.localeCompare(b.studentName);
             });
 
-            setRecords(allRecords);
+            setRecords(merged);
         } catch (err: any) {
             toast.error("Failed to load fee records");
         } finally {
@@ -97,61 +120,67 @@ export default function ManageFeesPage() {
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
-    // Mark fee as paid
-    const handleMarkPaid = async (record: FeeRecord) => {
-        setActionLoading(record.id);
-        try {
-            const seq = Math.floor(Math.random() * 90000) + 10000;
-            const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+    // ---------- Mark Paid Logic ----------
+    const openMarkPaidDialog = (record: FeeRecord) => {
+        const hasTransport = (record.breakdown?.transportFee || 0) > 0;
+        setMarkPaidType(hasTransport ? "both" : "school");
+        setMarkPaidRecord(record);
+    };
 
-            await updateDoc(doc(db, record.path), {
-                status: "paid",
-                paidOn: new Date(),
-                receiptNo,
-                markedBy: user?.uid || "",
-            });
-            setRecords(prev => prev.map(r =>
-                r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
-            ));
-            toast.success(`Marked as paid! Receipt: ${receiptNo}`);
+    const handleConfirmMarkPaid = async () => {
+        if (!markPaidRecord) return;
+        const record = markPaidRecord;
+        setMarkPaidLoading(true);
+        try {
+            const studentUid = record.studentId || record.id;
+
+            if (markPaidType === "school" || markPaidType === "both") {
+                const seq = Math.floor(Math.random() * 90000) + 10000;
+                const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                await updateDoc(doc(db, record.path), {
+                    status: "paid",
+                    paidOn: new Date(),
+                    receiptNo,
+                    markedBy: user?.uid || "",
+                });
+                setRecords(prev => prev.map(r =>
+                    r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
+                ));
+                toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
+            }
+
+            if (markPaidType === "transport" || markPaidType === "both") {
+                const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+                const transportReceiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                await setDoc(doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid), {
+                    studentId: studentUid,
+                    studentName: record.studentName,
+                    className: record.class,
+                    section: record.section || "",
+                    busId: "BUS",
+                    busNumber: "—",
+                    routeDetails: "",
+                    amount: record.breakdown?.transportFee || 0,
+                    month: record.month,
+                    year: record.year,
+                    dueDate: record.dueDate,
+                    status: "paid",
+                    paidOn: new Date(),
+                    receiptNo: transportReceiptNo,
+                    parentEmail: record.parentEmail || "",
+                    markedBy: user?.uid || "",
+                }, { merge: true });
+                setRecords(prev => prev.map(r =>
+                    r.id === record.id ? { ...r, transportStatus: "paid", transportReceiptNo } : r
+                ));
+                toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
+            }
+
+            setMarkPaidRecord(null);
         } catch {
             toast.error("Failed to mark as paid");
         } finally {
-            setActionLoading(null);
-        }
-    };
-
-    // Mark transport fee as paid (only for bus students with breakdown.transportFee)
-    const handleMarkTransportPaid = async (record: FeeRecord) => {
-        setActionLoading(record.id + "_transport");
-        try {
-            const seq = Math.floor(Math.random() * 90000) + 10000;
-            const receiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            // Save to transport fee records collection
-            const { setDoc, doc: firestoreDoc } = await import("firebase/firestore");
-            await setDoc(firestoreDoc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", record.id), {
-                studentId: record.id,
-                studentName: record.studentName,
-                className: record.class,
-                section: record.section || "",
-                busId: "BUS",
-                busNumber: "—",
-                routeDetails: "",
-                amount: record.breakdown?.transportFee || 0,
-                month: record.month,
-                year: record.year,
-                dueDate: record.dueDate,
-                status: "paid",
-                paidOn: new Date(),
-                receiptNo,
-                parentEmail: record.parentEmail || "",
-                markedBy: user?.uid || "",
-            }, { merge: true });
-            toast.success(`Transport fee marked paid! Receipt: ${receiptNo}`);
-        } catch {
-            toast.error("Failed to mark transport fee as paid");
-        } finally {
-            setActionLoading(null);
+            setMarkPaidLoading(false);
         }
     };
 
@@ -258,8 +287,11 @@ export default function ManageFeesPage() {
         pending_amount: records.filter(r => r.status !== "paid").reduce((sum, r) => sum + (r.amount || 0), 0),
     };
 
-    // Generate years from 2024 to 2050
     const years = Array.from({ length: 2050 - 2024 + 1 }, (_, i) => 2024 + i);
+
+    const hasTransportFee = (r: FeeRecord) => (r.breakdown?.transportFee || 0) > 0;
+    const isSchoolPaid = (r: FeeRecord) => r.status === "paid";
+    const isTransportPaid = (r: FeeRecord) => r.transportStatus === "paid";
 
     return (
         <div className="space-y-6">
@@ -293,63 +325,35 @@ export default function ManageFeesPage() {
             {/* Filters */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
                 <div className="flex flex-wrap gap-3">
-                    {/* Month */}
-                    <select
-                        value={filterMonth}
-                        onChange={e => setFilterMonth(Number(e.target.value))}
-                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none"
-                    >
+                    <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none">
                         {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                     </select>
-
-                    {/* Year */}
-                    <select
-                        value={filterYear}
-                        onChange={e => setFilterYear(Number(e.target.value))}
-                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none"
-                    >
+                    <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none">
                         {years.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
-
-                    {/* Status */}
-                    <select
-                        value={filterStatus}
-                        onChange={e => setFilterStatus(e.target.value)}
-                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none"
-                    >
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none">
                         <option value="all">All Status</option>
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="overdue">Overdue</option>
                     </select>
-
-                    {/* Class */}
-                    <select
-                        value={filterClass}
-                        onChange={e => setFilterClass(e.target.value)}
-                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none"
-                    >
+                    <select value={filterClass} onChange={e => setFilterClass(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none">
                         <option value="all">All Classes</option>
                         {classes.map(c => <option key={c} value={c}>Class {c}</option>)}
                     </select>
-
-                    {/* Search */}
                     <div className="flex-1 min-w-[160px] relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
+                        <input value={search} onChange={e => setSearch(e.target.value)}
                             placeholder="Search student..."
-                            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none"
-                        />
+                            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none" />
                     </div>
-
-                    <button
-                        onClick={fetchRecords}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:border-navy hover:text-navy transition-colors"
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                        Refresh
+                    <button onClick={fetchRecords}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:border-navy hover:text-navy transition-colors">
+                        <RefreshCw className="w-4 h-4" />Refresh
                     </button>
                 </div>
             </div>
@@ -380,7 +384,7 @@ export default function ManageFeesPage() {
                                 <tr>
                                     <th className="px-4 py-3 text-left font-semibold">Student</th>
                                     <th className="px-4 py-3 text-left font-semibold">Class</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Amount</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Bill</th>
                                     <th className="px-4 py-3 text-left font-semibold">Due Date</th>
                                     <th className="px-4 py-3 text-left font-semibold">Status</th>
                                     <th className="px-4 py-3 text-left font-semibold">Receipt</th>
@@ -391,6 +395,11 @@ export default function ManageFeesPage() {
                                 {filtered.map(record => {
                                     const statusCfg = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending;
                                     const StatusIcon = statusCfg.icon;
+                                    const transportFee = record.breakdown?.transportFee || 0;
+                                    const isBusStudent = transportFee > 0;
+                                    const schoolPaid = isSchoolPaid(record);
+                                    const transportPaid = isTransportPaid(record);
+                                    const totalAmount = record.amount + (isBusStudent ? 0 : 0); // school amount already includes transport if in breakdown
                                     return (
                                         <tr key={record.id} className="hover:bg-gray-50/50 transition-colors">
                                             <td className="px-4 py-3">
@@ -400,39 +409,69 @@ export default function ManageFeesPage() {
                                             <td className="px-4 py-3 text-gray-600">
                                                 Class {record.class}{record.section ? ` - ${record.section}` : ""}
                                             </td>
-                                            <td className="px-4 py-3 font-bold text-navy">
-                                                ₹{record.amount?.toLocaleString()}
+                                            {/* Combined Bill Column */}
+                                            <td className="px-4 py-3">
+                                                <div className="font-bold text-navy">₹{record.amount?.toLocaleString()}</div>
+                                                {isBusStudent && (
+                                                    <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
+                                                        <div className="flex items-center gap-1">
+                                                            <School className="w-2.5 h-2.5" />
+                                                            <span>School: ₹{(record.amount - transportFee).toLocaleString()}</span>
+                                                            {schoolPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Bus className="w-2.5 h-2.5" />
+                                                            <span>Transport: ₹{transportFee.toLocaleString()}</span>
+                                                            {transportPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-gray-500 text-xs">
                                                 {record.dueDate?.toDate ? record.dueDate.toDate().toLocaleDateString("en-IN") : "—"}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
-                                                    <StatusIcon className="w-3 h-3" />
-                                                    {statusCfg.label}
-                                                </span>
-                                                {record.status === "paid" && record.paidOn?.toDate && (
-                                                    <div className="text-xs text-gray-400 mt-0.5">
-                                                        {record.paidOn.toDate().toLocaleDateString("en-IN")}
-                                                    </div>
+                                                <div className="space-y-1">
+                                                    {/* School status */}
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
+                                                        <StatusIcon className="w-3 h-3" />
+                                                        {isBusStudent ? `School: ${statusCfg.label}` : statusCfg.label}
+                                                    </span>
+                                                    {/* Transport status */}
+                                                    {isBusStudent && (() => {
+                                                        const tCfg = STATUS_CONFIG[record.transportStatus || "pending"] || STATUS_CONFIG.pending;
+                                                        const TIcon = tCfg.icon;
+                                                        return (
+                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${tCfg.bg} ${tCfg.text} ${tCfg.border}`}>
+                                                                <Bus className="w-3 h-3" />
+                                                                Transport: {tCfg.label}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                    {record.status === "paid" && record.paidOn?.toDate && (
+                                                        <div className="text-xs text-gray-400">
+                                                            {record.paidOn.toDate().toLocaleDateString("en-IN")}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-xs font-mono space-y-1">
+                                                {record.receiptNo
+                                                    ? <div className="text-gray-400">{record.receiptNo}</div>
+                                                    : <div className="text-gray-300">—</div>}
+                                                {isBusStudent && record.transportReceiptNo && (
+                                                    <div className="text-indigo-400">{record.transportReceiptNo}</div>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3 text-xs text-gray-400 font-mono">
-                                                {record.receiptNo || "—"}
-                                            </td>
                                             <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    {record.status !== "paid" && (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {/* Mark Paid — show if either school or transport is unpaid */}
+                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
                                                         <button
-                                                            onClick={() => handleMarkPaid(record)}
-                                                            disabled={actionLoading === record.id}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                                            onClick={() => openMarkPaidDialog(record)}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
                                                         >
-                                                            {actionLoading === record.id ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <CheckCircle2 className="w-3 h-3" />
-                                                            )}
+                                                            <CheckCircle2 className="w-3 h-3" />
                                                             Mark Paid
                                                         </button>
                                                     )}
@@ -463,22 +502,6 @@ export default function ManageFeesPage() {
                                                                 <Mail className="w-3 h-3" />
                                                             )}
                                                             Remind
-                                                        </button>
-                                                    )}
-                                                    {/* Transport Paid — only for bus students */}
-                                                    {record.status !== "paid" && record.breakdown?.transportFee && record.breakdown.transportFee > 0 && (
-                                                        <button
-                                                            onClick={() => handleMarkTransportPaid(record)}
-                                                            disabled={actionLoading === record.id + "_transport"}
-                                                            title={`Mark transport fee (₹${record.breakdown.transportFee}) as paid`}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors disabled:opacity-50"
-                                                        >
-                                                            {actionLoading === record.id + "_transport" ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <Bus className="w-3 h-3" />
-                                                            )}
-                                                            Transport Paid
                                                         </button>
                                                     )}
                                                     {record.status !== "paid" && (
@@ -521,6 +544,100 @@ export default function ManageFeesPage() {
                 record={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}
             />
+
+            {/* ── Mark Paid Dialog ───────────────────────────────────────────── */}
+            {markPaidRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Dialog Header */}
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-lg font-bold text-navy">Mark Fee as Paid</h3>
+                                <p className="text-sm text-gray-400 mt-0.5">{markPaidRecord.studentName} · {MONTHS[markPaidRecord.month - 1]} {markPaidRecord.year}</p>
+                            </div>
+                            <button onClick={() => setMarkPaidRecord(null)} className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Bill Summary */}
+                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                            <div className="space-y-2">
+                                {(() => {
+                                    const transportFee = markPaidRecord.breakdown?.transportFee || 0;
+                                    const schoolFeeOnly = markPaidRecord.amount - transportFee;
+                                    return (
+                                        <>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee</span>
+                                                <span className="font-semibold text-navy">₹{schoolFeeOnly.toLocaleString()}</span>
+                                            </div>
+                                            {transportFee > 0 && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="flex items-center gap-1.5 text-gray-600"><Bus className="w-4 h-4" /> Transport Fee</span>
+                                                    <span className="font-semibold text-navy">₹{transportFee.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
+                                                <span>Total</span>
+                                                <span>₹{markPaidRecord.amount.toLocaleString()}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+
+                        {/* Options */}
+                        <div className="px-6 py-5 space-y-3">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
+
+                            {([
+                                { value: "school" as MarkPaidType, label: "School Fee Only", desc: `₹${(markPaidRecord.amount - (markPaidRecord.breakdown?.transportFee || 0)).toLocaleString()}`, icon: School, disabled: isSchoolPaid(markPaidRecord) },
+                                ...(hasTransportFee(markPaidRecord) ? [
+                                    { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: `₹${(markPaidRecord.breakdown?.transportFee || 0).toLocaleString()}`, icon: Bus, disabled: isTransportPaid(markPaidRecord) },
+                                    { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${markPaidRecord.amount.toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) && isTransportPaid(markPaidRecord) },
+                                ] : []),
+                            ] as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
+                                <label
+                                    key={opt.value}
+                                    className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${opt.disabled ? "opacity-40 cursor-not-allowed border-gray-100 bg-gray-50" : markPaidType === opt.value ? "border-emerald-400 bg-emerald-50" : "border-gray-100 hover:border-gray-300"}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="markPaidType"
+                                        value={opt.value}
+                                        checked={markPaidType === opt.value}
+                                        onChange={() => !opt.disabled && setMarkPaidType(opt.value)}
+                                        disabled={opt.disabled}
+                                        className="accent-emerald-600"
+                                    />
+                                    <opt.icon className={`w-5 h-5 shrink-0 ${markPaidType === opt.value ? "text-emerald-600" : "text-gray-400"}`} />
+                                    <div className="flex-1">
+                                        <p className={`text-sm font-semibold ${markPaidType === opt.value ? "text-emerald-700" : "text-gray-700"}`}>{opt.label}</p>
+                                        <p className="text-xs text-gray-400">{opt.desc}{opt.disabled ? " — Already paid" : ""}</p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button onClick={() => setMarkPaidRecord(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmMarkPaid}
+                                disabled={markPaidLoading}
+                                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {markPaidLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Confirm Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
