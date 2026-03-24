@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import {
     Bus, CheckCircle2, Clock, AlertCircle, Loader2, Banknote,
-    Search, RefreshCw, Mail
+    Search, RefreshCw, Mail, Printer
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import toast from "react-hot-toast";
@@ -13,6 +14,7 @@ import toast from "react-hot-toast";
 interface TransportFeeRecord {
     id: string;
     path: string;
+    studentId?: string;
     studentName: string;
     className: string;
     section: string;
@@ -30,6 +32,8 @@ interface TransportFeeRecord {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = Array.from({ length: 2050 - 2024 + 1 }, (_, i) => 2024 + i);
 
 const STATUS_CFG = {
     paid: { label: "Paid", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", Icon: CheckCircle2 },
@@ -38,6 +42,7 @@ const STATUS_CFG = {
 };
 
 export default function AccountantTransportFeesPage() {
+    const { user } = useAuth();
     const now = new Date();
     const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
     const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -47,6 +52,7 @@ export default function AccountantTransportFeesPage() {
     const [search, setSearch] = useState("");
     const [filterStatus, setFilterStatus] = useState("all");
     const [filterBus, setFilterBus] = useState("all");
+    const [receiptRecord, setReceiptRecord] = useState<TransportFeeRecord | null>(null);
 
     const fetchRecords = useCallback(async () => {
         setLoading(true);
@@ -72,7 +78,7 @@ export default function AccountantTransportFeesPage() {
         try {
             const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
             const receiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            await updateDoc(doc(db, record.path), { status: "paid", paidOn: new Date(), receiptNo });
+            await updateDoc(doc(db, record.path), { status: "paid", paidOn: new Date(), receiptNo, markedBy: user?.uid || "" });
             setRecords(prev => prev.map(r => r.id === record.id
                 ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } }
                 : r
@@ -138,7 +144,6 @@ export default function AccountantTransportFeesPage() {
         }
     };
 
-    // Derived
     const busNumbers = [...new Set(records.map(r => r.busNumber).filter(Boolean))].sort();
     const filtered = records.filter(r => {
         if (filterStatus !== "all" && r.status !== filterStatus) return false;
@@ -190,9 +195,10 @@ export default function AccountantTransportFeesPage() {
                         className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-navy outline-none">
                         {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                     </select>
+                    {/* Year dropdown — 2024 to 2050 */}
                     <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
                         className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-navy outline-none">
-                        {[filterYear - 1, filterYear, filterYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                        {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                     <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                         className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-navy outline-none">
@@ -308,6 +314,13 @@ export default function AccountantTransportFeesPage() {
                                                             Remind
                                                         </button>
                                                     )}
+                                                    {record.status === "paid" && (
+                                                        <button onClick={() => setReceiptRecord(record)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 transition-colors">
+                                                            <Printer className="w-3 h-3" />
+                                                            Receipt
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -318,6 +331,124 @@ export default function AccountantTransportFeesPage() {
                     </div>
                 )}
             </div>
+
+            {/* Transport Receipt Modal */}
+            {receiptRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
+                    <style jsx global>{`
+                        @media print {
+                            body * { visibility: hidden; }
+                            #transport-receipt, #transport-receipt * { visibility: visible; }
+                            #transport-receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
+                            .no-print { display: none !important; }
+                        }
+                    `}</style>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        {/* Modal Header */}
+                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
+                            <h2 className="text-lg font-bold text-navy">Transport Fee Receipt</h2>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => window.print()}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
+                                    <Printer className="w-4 h-4" />Print / Download PDF
+                                </button>
+                                <button onClick={() => setReceiptRecord(null)}
+                                    className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Printable Content */}
+                        <div id="transport-receipt" className="p-8 sm:p-10 bg-white">
+                            <div className="text-center border-b-2 border-navy/20 pb-6 mb-8">
+                                <h1 className="text-3xl font-extrabold text-navy tracking-tight uppercase">International Access School</h1>
+                                <p className="text-sm text-gray-500 mt-2 font-medium">123 Education Lane, Knowledge City, State - 100001</p>
+                                <p className="text-xs text-gray-400 mt-1">Phone: +91 999 000 0000 | Email: admin@internationalaccessschool.com</p>
+                                <div className="inline-block mt-4 px-4 py-1.5 bg-indigo-50 text-indigo-800 text-sm font-bold uppercase tracking-widest border border-indigo-100 rounded-full">
+                                    Transport Fee Receipt
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Receipt Number</p>
+                                        <p className="font-mono text-base font-bold text-navy">{receiptRecord.receiptNo || "N/A"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Student Name</p>
+                                        <p className="font-bold text-gray-800 text-base">{receiptRecord.studentName}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Class / Section</p>
+                                        <p className="font-semibold text-gray-800">Class {receiptRecord.className}{receiptRecord.section ? ` - ${receiptRecord.section}` : ""}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Bus Number</p>
+                                        <p className="font-semibold text-gray-800">{receiptRecord.busNumber || "—"} {receiptRecord.routeDetails ? `· ${receiptRecord.routeDetails}` : ""}</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-4 text-right">
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Date of Payment</p>
+                                        <p className="font-semibold text-gray-800">
+                                            {receiptRecord.paidOn?.toDate ? receiptRecord.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "N/A"}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Month</p>
+                                        <p className="font-bold text-navy text-base">{MONTHS_FULL[(receiptRecord.month || 1) - 1]} {receiptRecord.year}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                            Paid Successfully
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 border rounded-xl overflow-hidden border-gray-200">
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase w-16">S.No</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Particulars</th>
+                                            <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Amount (₹)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        <tr>
+                                            <td className="px-6 py-4 text-gray-500">1.</td>
+                                            <td className="px-6 py-4 font-medium text-gray-800">Bus Transport Fee — {MONTHS_FULL[(receiptRecord.month || 1) - 1]} {receiptRecord.year}</td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-600">{receiptRecord.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
+                                        <tr>
+                                            <th colSpan={2} className="px-6 py-5 text-right font-extrabold text-navy text-base uppercase">Total Amount Paid</th>
+                                            <td className="px-6 py-5 text-right font-extrabold text-navy text-lg">₹{receiptRecord.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div className="mt-20 pt-8 flex justify-between items-end border-t border-dashed border-gray-300">
+                                <div className="text-center">
+                                    <div className="w-32 border-b border-gray-400 mb-2"></div>
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Parent/Guardian Sign</p>
+                                </div>
+                                <div className="text-center">
+                                    <strong className="text-lg font-bold text-navy opacity-30 block mb-1">IAS Auth</strong>
+                                    <div className="w-40 border-b border-gray-400 mb-2"></div>
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Authorized Signatory</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
