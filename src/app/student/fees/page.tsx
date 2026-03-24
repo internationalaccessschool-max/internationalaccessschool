@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
+import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X } from "lucide-react";
 
 interface FeeRecord {
     id: string;
@@ -19,6 +19,19 @@ interface FeeRecord {
     studentId?: string;
     admissionNumber?: string;
     rollNo?: string;
+    // Extra fields for receipt
+    studentName?: string;
+    class?: string;
+    section?: string;
+    breakdown?: {
+        tuitionFee?: number;
+        examFee?: number;
+        computerFee?: number;
+        transportFee?: number;
+        libraryFee?: number;
+        sportsFee?: number;
+        miscFee?: number;
+    };
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -35,6 +48,9 @@ export default function StudentFeesPage() {
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [debugInfo, setDebugInfo] = useState("");
+    const [receiptRecord, setReceiptRecord] = useState<FeeRecord | null>(null);
+    const [studentName, setStudentName] = useState("");
+    const [studentRoll, setStudentRoll] = useState("");
 
     useEffect(() => {
         if (!user) return;
@@ -42,12 +58,11 @@ export default function StudentFeesPage() {
         const fetchFees = async () => {
             setLoading(true);
             try {
-                // ── Get admission number from email (e.g. "222534@ias.edu" → "222534")
                 const admNo = user.email?.split("@")[0] || "";
 
-                // ── Try studentLookup for class info ─────────────────────────────────
                 let studentClass = "";
                 let admissionNumber = admNo;
+                let sName = "";
 
                 try {
                     const lookupDoc = await getDoc(doc(db, "studentLookup", user.uid));
@@ -56,34 +71,29 @@ export default function StudentFeesPage() {
                         const rawCls = (data.className || data.currentClass || "").toString();
                         studentClass = rawCls.replace(/^class\s*/i, "").trim();
                         admissionNumber = data.admissionNumber || admNo;
+                        sName = data.studentName || data.name || "";
+                        setStudentName(sName);
+                        setStudentRoll(admissionNumber);
                     }
                 } catch (e) {
                     console.warn("studentLookup failed:", e);
                 }
 
-                // ── Determine which classes to search ────────────────────────────────
-                // If we know the student's class, only search that class.
-                // Otherwise, get ALL classes from fee structure and search all of them.
                 let classesToSearch: string[] = [];
-
                 if (studentClass) {
                     classesToSearch = [studentClass];
                 } else {
-                    // Fallback: get all class IDs from fee structure
                     try {
                         const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
                         classesToSearch = classesSnap.docs.map(d => d.id);
                     } catch (e) {
                         console.warn("Could not fetch fee classes:", e);
                     }
-
-                    // Extra fallback: try common class numbers
                     if (classesToSearch.length === 0) {
                         classesToSearch = Array.from({ length: 12 }, (_, i) => String(i + 1));
                     }
                 }
 
-                // ── Fetch fee records across all months/years/classes ────────────────
                 const currentYear = new Date().getFullYear();
                 const currentMonth = new Date().getMonth() + 1;
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -92,7 +102,6 @@ export default function StudentFeesPage() {
                 for (const cls of classesToSearch) {
                     for (const year of [currentYear - 1, currentYear]) {
                         for (const month of months) {
-                            // Skip future months for current year
                             if (year === currentYear && month > currentMonth) continue;
                             promises.push(
                                 getDocs(
@@ -109,7 +118,6 @@ export default function StudentFeesPage() {
                 for (const snap of snapshots) {
                     for (const d of snap.docs) {
                         const data = d.data();
-                        // Match by ANY identifier
                         const isMatch =
                             data.studentId === user.uid ||
                             (admissionNumber && data.admissionNumber === admissionNumber) ||
@@ -120,11 +128,14 @@ export default function StudentFeesPage() {
 
                         if (isMatch) {
                             allRecords.push({ id: d.id, path: d.ref.path, ...data } as FeeRecord);
+                            // Capture student name from first matching record if not found in lookup
+                            if (!sName && data.studentName) {
+                                setStudentName(data.studentName);
+                            }
                         }
                     }
                 }
 
-                // De-duplicate by record id
                 const uniqueRecords = Array.from(new Map(allRecords.map(r => [r.id, r])).values());
                 uniqueRecords.sort((a, b) => b.year - a.year || b.month - a.month);
                 setRecords(uniqueRecords);
@@ -145,6 +156,21 @@ export default function StudentFeesPage() {
 
     const totalPaid = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
     const totalDue = records.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
+
+    // Build breakdown items for receipt
+    const getBreakdownItems = (record: FeeRecord) => {
+        if (!record.breakdown) return [{ label: "School Fee", amount: record.amount }];
+        const items = [
+            { label: "Tuition Fee", amount: record.breakdown.tuitionFee || 0 },
+            { label: "Examination Fee", amount: record.breakdown.examFee || 0 },
+            { label: "Computer Fee", amount: record.breakdown.computerFee || 0 },
+            { label: "Transport Fee", amount: record.breakdown.transportFee || 0 },
+            { label: "Library Fee", amount: record.breakdown.libraryFee || 0 },
+            { label: "Sports Fee", amount: record.breakdown.sportsFee || 0 },
+            { label: "Miscellaneous Fee", amount: record.breakdown.miscFee || 0 },
+        ].filter(i => i.amount > 0);
+        return items.length > 0 ? items : [{ label: "School Fee", amount: record.amount }];
+    };
 
     return (
         <div className="space-y-6 p-4 md:p-6 max-w-3xl mx-auto">
@@ -203,7 +229,7 @@ export default function StudentFeesPage() {
                             const cfg = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending;
                             const StatusIcon = cfg.icon;
                             return (
-                                <div key={record.id} className="flex items-center justify-between p-5 hover:bg-gray-50/50 transition-colors">
+                                <div key={record.id} className="flex items-center justify-between p-5 hover:bg-gray-50/50 transition-colors gap-4">
                                     <div className="flex items-center gap-4">
                                         <div className={`w-10 h-10 rounded-xl ${cfg.bg} border ${cfg.border} flex items-center justify-center shrink-0`}>
                                             <StatusIcon className={`w-5 h-5 ${cfg.text}`} />
@@ -218,7 +244,7 @@ export default function StudentFeesPage() {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right shrink-0">
                                         <p className="text-lg font-bold text-navy">₹{record.amount?.toLocaleString()}</p>
                                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                                             <StatusIcon className="w-3 h-3" />
@@ -228,6 +254,16 @@ export default function StudentFeesPage() {
                                             <p className="text-xs text-gray-400 mt-1">
                                                 Paid {record.paidOn.toDate().toLocaleDateString("en-IN")}
                                             </p>
+                                        )}
+                                        {/* Download Receipt Button */}
+                                        {record.status === "paid" && record.receiptNo && (
+                                            <button
+                                                onClick={() => setReceiptRecord(record)}
+                                                className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-navy/5 text-navy text-xs font-medium hover:bg-navy/10 transition-colors"
+                                            >
+                                                <Printer className="w-3 h-3" />
+                                                Download Receipt
+                                            </button>
                                         )}
                                     </div>
                                 </div>
@@ -245,6 +281,126 @@ export default function StudentFeesPage() {
                     You will receive an email reminder if your fee is due or overdue.
                 </p>
             </div>
+
+            {/* ── Receipt Modal ─────────────────────────────────────────────────── */}
+            {receiptRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
+                    <style jsx global>{`
+                        @media print {
+                            body * { visibility: hidden; }
+                            #student-fee-receipt, #student-fee-receipt * { visibility: visible; }
+                            #student-fee-receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
+                            .no-print { display: none !important; }
+                        }
+                    `}</style>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
+                            <h2 className="text-lg font-bold text-navy">Fee Receipt</h2>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => window.print()}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
+                                    <Printer className="w-4 h-4" />Print / Download PDF
+                                </button>
+                                <button onClick={() => setReceiptRecord(null)}
+                                    className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                        <div id="student-fee-receipt" className="p-8 sm:p-10 bg-white">
+                            <div className="text-center border-b-2 border-navy/20 pb-6 mb-8">
+                                <h1 className="text-3xl font-extrabold text-navy tracking-tight uppercase">International Access School</h1>
+                                <p className="text-sm text-gray-500 mt-2 font-medium">123 Education Lane, Knowledge City, State - 100001</p>
+                                <p className="text-xs text-gray-400 mt-1">Phone: +91 999 000 0000 | Email: admin@internationalaccessschool.com</p>
+                                <div className="inline-block mt-4 px-4 py-1.5 bg-navy/5 text-navy text-sm font-bold uppercase tracking-widest border border-navy/10 rounded-full">
+                                    Fee Receipt
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Receipt Number</p>
+                                        <p className="font-mono text-base font-bold text-navy">{receiptRecord.receiptNo || "N/A"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Student Name</p>
+                                        <p className="font-bold text-gray-800 text-base">{receiptRecord.studentName || studentName || "—"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Class / Section</p>
+                                        <p className="font-semibold text-gray-800">Class {receiptRecord.class || "—"} {receiptRecord.section ? `- ${receiptRecord.section}` : ""}</p>
+                                    </div>
+                                    {(receiptRecord.rollNo || studentRoll) && (
+                                        <div>
+                                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Roll / Admission No</p>
+                                            <p className="font-semibold text-gray-800">{receiptRecord.rollNo || studentRoll}</p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-4 text-right">
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Date of Payment</p>
+                                        <p className="font-semibold text-gray-800">
+                                            {receiptRecord.paidOn?.toDate ? receiptRecord.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "N/A"}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Month</p>
+                                        <p className="font-bold text-navy text-base">{MONTHS[(receiptRecord.month || 1) - 1]} {receiptRecord.year}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                            Paid Successfully
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-8 border rounded-xl overflow-hidden border-gray-200">
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase w-16">S.No</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Particulars</th>
+                                            <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Amount (₹)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        {getBreakdownItems(receiptRecord).map((item, index) => (
+                                            <tr key={index}>
+                                                <td className="px-6 py-4 text-gray-500">{index + 1}.</td>
+                                                <td className="px-6 py-4 font-medium text-gray-800">{item.label}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-gray-600">
+                                                    {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
+                                        <tr>
+                                            <th colSpan={2} className="px-6 py-5 text-right font-extrabold text-navy text-base uppercase">Total Amount Paid</th>
+                                            <td className="px-6 py-5 text-right font-extrabold text-navy text-lg">
+                                                ₹{receiptRecord.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <div className="mt-20 pt-8 flex justify-between items-end border-t border-dashed border-gray-300">
+                                <div className="text-center">
+                                    <div className="w-32 border-b border-gray-400 mb-2"></div>
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Parent/Guardian Sign</p>
+                                </div>
+                                <div className="text-center">
+                                    <strong className="text-lg font-bold text-navy opacity-30 block mb-1">IAS Auth</strong>
+                                    <div className="w-40 border-b border-gray-400 mb-2"></div>
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Authorized Signatory</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
