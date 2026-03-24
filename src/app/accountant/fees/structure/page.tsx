@@ -27,7 +27,6 @@ interface FeeStructure {
     tuitionFee: number;
     examFee: number;
     computerFee: number;
-    transportFee: number;
     libraryFee: number;
     sportsFee: number;
     miscFee: number;
@@ -47,7 +46,7 @@ export default function FeeStructurePage() {
                     const feeDoc = await getDoc(doc(db, "fees", "structure", "classes", cls.id));
                     structureMap[cls.id] = feeDoc.exists()
                         ? (feeDoc.data() as FeeStructure)
-                        : { monthly: 0, tuitionFee: 0, examFee: 0, computerFee: 0, transportFee: 0, libraryFee: 0, sportsFee: 0, miscFee: 0, dueDay: 10 };
+                        : { monthly: 0, tuitionFee: 0, examFee: 0, computerFee: 0, libraryFee: 0, sportsFee: 0, miscFee: 0, dueDay: 10 };
                 }
                 setStructure(structureMap);
             } catch (err) {
@@ -68,7 +67,6 @@ export default function FeeStructurePage() {
                 tuitionFee: structure[classId]?.tuitionFee || 0,
                 examFee: structure[classId]?.examFee || 0,
                 computerFee: structure[classId]?.computerFee || 0,
-                transportFee: structure[classId]?.transportFee || 0,
                 libraryFee: structure[classId]?.libraryFee || 0,
                 sportsFee: structure[classId]?.sportsFee || 0,
                 miscFee: structure[classId]?.miscFee || 0,
@@ -93,7 +91,6 @@ export default function FeeStructurePage() {
                     (classStructure.tuitionFee || 0) +
                     (classStructure.examFee || 0) +
                     (classStructure.computerFee || 0) +
-                    (classStructure.transportFee || 0) +
                     (classStructure.libraryFee || 0) +
                     (classStructure.sportsFee || 0) +
                     (classStructure.miscFee || 0);
@@ -156,12 +153,11 @@ export default function FeeStructurePage() {
                 <div className="overflow-x-auto">
                     <div className="min-w-[1000px] divide-y divide-gray-50">
                         {/* Column Headers */}
-                        <div className="grid grid-cols-[100px_repeat(7,1fr)_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
+                        <div className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
                             <div className="text-left">Class</div>
                             <div>Tuition</div>
                             <div>Exam</div>
                             <div>Computer</div>
-                            <div>Transport</div>
                             <div>Library</div>
                             <div>Sports</div>
                             <div>Misc</div>
@@ -171,10 +167,10 @@ export default function FeeStructurePage() {
                         </div>
 
                         {CLASS_LIST.map(cls => (
-                            <div key={cls.id} className="grid grid-cols-[100px_repeat(7,1fr)_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
+                            <div key={cls.id} className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
                                 <div className="font-semibold text-navy text-sm">{cls.name}</div>
 
-                                {['tuitionFee', 'examFee', 'computerFee', 'transportFee', 'libraryFee', 'sportsFee', 'miscFee'].map(feeKey => (
+                                {['tuitionFee', 'examFee', 'computerFee', 'libraryFee', 'sportsFee', 'miscFee'].map(feeKey => (
                                     <div key={feeKey}>
                                         <input
                                             type="number"
