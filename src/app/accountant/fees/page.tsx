@@ -29,15 +29,17 @@ interface FeeRecord {
     year: number;
     dueDate: { toDate: () => Date } | null;
     status: "pending" | "paid" | "overdue";
+    // Transport — only populated when a real transport record exists for this student+month+year
     transportStatus?: "pending" | "paid" | "overdue";
+    transportFeeAmount?: number;   // from transportFeeRecords, NOT from breakdown
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
     transportReceiptNo?: string | null;
+    isTransportOnly?: boolean;     // true if student only has transport fee (no school fee record)
     breakdown?: {
         tuitionFee?: number;
         examFee?: number;
         computerFee?: number;
-        transportFee?: number;
         libraryFee?: number;
         sportsFee?: number;
         miscFee?: number;
@@ -78,6 +80,7 @@ export default function ManageFeesPage() {
     const fetchRecords = useCallback(async () => {
         setLoading(true);
         try {
+            // ── 1. Fetch school fee records ───────────────────────────────────────
             const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
             const classIds = classesSnap.docs.map(d => d.id);
 
@@ -85,29 +88,89 @@ export default function ManageFeesPage() {
                 getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
             );
             const snapshots = await Promise.all(promises);
-            const allRecords = snapshots.flatMap(snap =>
+            const schoolRecords = snapshots.flatMap(snap =>
                 snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
             );
 
-            // Also fetch transport status for these records
+            // ── 2. Fetch transport fee records for the SAME month+year ────────────
             const transportSnap = await getDocs(
                 collection(db, "transportFeeRecords", filterYear.toString(), "months", filterMonth.toString(), "students")
             ).catch(() => ({ docs: [] as any[] }));
-            const transportMap: Record<string, { status: string; receiptNo: string | null }> = {};
+
+            // Map: studentUID → transport record data
+            const transportMap: Record<string, {
+                status: string;
+                receiptNo: string | null;
+                amount: number;
+                studentName: string;
+                className: string;
+                section: string;
+                parentEmail: string;
+                dueDate: any;
+            }> = {};
             for (const d of transportSnap.docs) {
-                transportMap[d.id] = { status: d.data().status, receiptNo: d.data().receiptNo || null };
+                const td = d.data();
+                transportMap[d.id] = {
+                    status: td.status || "pending",
+                    receiptNo: td.receiptNo || null,
+                    amount: td.amount || 0,
+                    studentName: td.studentName || "",
+                    className: td.className || "",
+                    section: td.section || "",
+                    parentEmail: td.parentEmail || "",
+                    dueDate: td.dueDate || null,
+                };
             }
 
-            // Merge transport status into records
-            const merged = allRecords.map(r => {
+            // ── 3. Merge transport into school records ────────────────────────────
+            // Use studentId (UID) for lookup — this is what transport records are keyed by
+            const schoolUids = new Set<string>();
+            const merged: FeeRecord[] = schoolRecords.map(r => {
                 const uid = r.studentId || r.id;
+                schoolUids.add(uid);
                 const t = transportMap[uid];
-                return t ? { ...r, transportStatus: t.status as any, transportReceiptNo: t.receiptNo } : r;
+                if (t) {
+                    return {
+                        ...r,
+                        transportStatus: t.status as any,
+                        transportFeeAmount: t.amount,
+                        transportReceiptNo: t.receiptNo,
+                    };
+                }
+                return r;
             });
 
+            // ── 4. Add transport-ONLY students (in transport records but no school fee) ──
+            for (const [uid, t] of Object.entries(transportMap)) {
+                if (!schoolUids.has(uid)) {
+                    merged.push({
+                        id: uid,
+                        path: "",
+                        studentId: uid,
+                        studentName: t.studentName,
+                        rollNo: "",
+                        class: t.className,
+                        section: t.section,
+                        parentEmail: t.parentEmail,
+                        amount: 0,           // no school fee
+                        month: filterMonth,
+                        year: filterYear,
+                        dueDate: t.dueDate,
+                        status: "paid",      // placeholder — school fee doesn't exist
+                        transportStatus: t.status as any,
+                        transportFeeAmount: t.amount,
+                        transportReceiptNo: t.receiptNo,
+                        paidOn: null,
+                        receiptNo: null,
+                        isTransportOnly: true,
+                    });
+                }
+            }
+
             merged.sort((a, b) => {
-                if (a.class !== b.class) return a.class.localeCompare(b.class);
-                return a.studentName.localeCompare(b.studentName);
+                const cmp = (a.class || "").localeCompare(b.class || "", undefined, { numeric: true });
+                if (cmp !== 0) return cmp;
+                return (a.studentName || "").localeCompare(b.studentName || "");
             });
 
             setRecords(merged);
@@ -122,7 +185,8 @@ export default function ManageFeesPage() {
 
     // ---------- Mark Paid Logic ----------
     const openMarkPaidDialog = (record: FeeRecord) => {
-        const hasTransport = (record.breakdown?.transportFee || 0) > 0;
+        // hasTransport: only if a real transport record exists (transportFeeAmount set from transportFeeRecords)
+        const hasTransport = (record.transportFeeAmount || 0) > 0;
         setMarkPaidType(hasTransport ? "both" : "school");
         setMarkPaidRecord(record);
     };
@@ -160,7 +224,7 @@ export default function ManageFeesPage() {
                     busId: "BUS",
                     busNumber: "—",
                     routeDetails: "",
-                    amount: record.breakdown?.transportFee || 0,
+                    amount: record.transportFeeAmount || 0,
                     month: record.month,
                     year: record.year,
                     dueDate: record.dueDate,
@@ -289,7 +353,9 @@ export default function ManageFeesPage() {
 
     const years = Array.from({ length: 2050 - 2024 + 1 }, (_, i) => 2024 + i);
 
-    const hasTransportFee = (r: FeeRecord) => (r.breakdown?.transportFee || 0) > 0;
+    // A student is a "bus student" ONLY if they have an actual transport record for this month/year
+    // (transportFeeAmount is set from transportFeeRecords, NOT from breakdown)
+    const hasTransportFee = (r: FeeRecord) => (r.transportFeeAmount || 0) > 0;
     const isSchoolPaid = (r: FeeRecord) => r.status === "paid";
     const isTransportPaid = (r: FeeRecord) => r.transportStatus === "paid";
 
@@ -395,11 +461,11 @@ export default function ManageFeesPage() {
                                 {filtered.map(record => {
                                     const statusCfg = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending;
                                     const StatusIcon = statusCfg.icon;
-                                    const transportFee = record.breakdown?.transportFee || 0;
-                                    const isBusStudent = transportFee > 0;
+                                    const transportFee = record.transportFeeAmount || 0;
+                                    const isBusStudent = transportFee > 0 || record.isTransportOnly;
+                                    const schoolFeeOnly = record.amount; // school amount never includes transport anymore
                                     const schoolPaid = isSchoolPaid(record);
                                     const transportPaid = isTransportPaid(record);
-                                    const totalAmount = record.amount + (isBusStudent ? 0 : 0); // school amount already includes transport if in breakdown
                                     return (
                                         <tr key={record.id} className="hover:bg-gray-50/50 transition-colors">
                                             <td className="px-4 py-3">
@@ -411,14 +477,21 @@ export default function ManageFeesPage() {
                                             </td>
                                             {/* Combined Bill Column */}
                                             <td className="px-4 py-3">
-                                                <div className="font-bold text-navy">₹{record.amount?.toLocaleString()}</div>
+                                                {record.isTransportOnly ? (
+                                                    // Transport-only student — no school fee record
+                                                    <div className="text-xs text-indigo-500 font-medium">— (transport only)</div>
+                                                ) : (
+                                                    <div className="font-bold text-navy">₹{record.amount?.toLocaleString()}</div>
+                                                )}
                                                 {isBusStudent && (
                                                     <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
-                                                        <div className="flex items-center gap-1">
-                                                            <School className="w-2.5 h-2.5" />
-                                                            <span>School: ₹{(record.amount - transportFee).toLocaleString()}</span>
-                                                            {schoolPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
-                                                        </div>
+                                                        {!record.isTransportOnly && (
+                                                            <div className="flex items-center gap-1">
+                                                                <School className="w-2.5 h-2.5" />
+                                                                <span>School: ₹{record.amount.toLocaleString()}</span>
+                                                                {schoolPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
+                                                            </div>
+                                                        )}
                                                         <div className="flex items-center gap-1">
                                                             <Bus className="w-2.5 h-2.5" />
                                                             <span>Transport: ₹{transportFee.toLocaleString()}</span>
@@ -564,14 +637,16 @@ export default function ManageFeesPage() {
                         <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
                             <div className="space-y-2">
                                 {(() => {
-                                    const transportFee = markPaidRecord.breakdown?.transportFee || 0;
-                                    const schoolFeeOnly = markPaidRecord.amount - transportFee;
+                                    const transportFee = markPaidRecord.transportFeeAmount || 0;
+                                    const schoolFeeOnly = markPaidRecord.amount; // school fee is independent now
                                     return (
                                         <>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee</span>
-                                                <span className="font-semibold text-navy">₹{schoolFeeOnly.toLocaleString()}</span>
-                                            </div>
+                                            {!markPaidRecord.isTransportOnly && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee</span>
+                                                    <span className="font-semibold text-navy">₹{schoolFeeOnly.toLocaleString()}</span>
+                                                </div>
+                                            )}
                                             {transportFee > 0 && (
                                                 <div className="flex justify-between text-sm">
                                                     <span className="flex items-center gap-1.5 text-gray-600"><Bus className="w-4 h-4" /> Transport Fee</span>
@@ -580,7 +655,7 @@ export default function ManageFeesPage() {
                                             )}
                                             <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
                                                 <span>Total</span>
-                                                <span>₹{markPaidRecord.amount.toLocaleString()}</span>
+                                                <span>₹{(markPaidRecord.amount + transportFee).toLocaleString()}</span>
                                             </div>
                                         </>
                                     );
@@ -593,10 +668,14 @@ export default function ManageFeesPage() {
                             <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
 
                             {([
-                                { value: "school" as MarkPaidType, label: "School Fee Only", desc: `₹${(markPaidRecord.amount - (markPaidRecord.breakdown?.transportFee || 0)).toLocaleString()}`, icon: School, disabled: isSchoolPaid(markPaidRecord) },
+                                ...(!markPaidRecord.isTransportOnly ? [
+                                    { value: "school" as MarkPaidType, label: "School Fee Only", desc: `₹${markPaidRecord.amount.toLocaleString()}`, icon: School, disabled: isSchoolPaid(markPaidRecord) },
+                                ] : []),
                                 ...(hasTransportFee(markPaidRecord) ? [
-                                    { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: `₹${(markPaidRecord.breakdown?.transportFee || 0).toLocaleString()}`, icon: Bus, disabled: isTransportPaid(markPaidRecord) },
-                                    { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${markPaidRecord.amount.toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) && isTransportPaid(markPaidRecord) },
+                                    { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: `₹${(markPaidRecord.transportFeeAmount || 0).toLocaleString()}`, icon: Bus, disabled: isTransportPaid(markPaidRecord) },
+                                    ...(!markPaidRecord.isTransportOnly ? [
+                                        { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${(markPaidRecord.amount + (markPaidRecord.transportFeeAmount || 0)).toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) && isTransportPaid(markPaidRecord) },
+                                    ] : []),
                                 ] : []),
                             ] as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
                                 <label
