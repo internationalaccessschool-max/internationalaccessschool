@@ -3,6 +3,7 @@
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { HeroSlider } from "@/components/home/HeroSlider";
+import { QuickStats } from "@/components/home/QuickStats";
 import { AcademicsSection } from "@/components/home/AcademicsSection";
 import { FeaturesSection } from "@/components/home/FeaturesSection";
 import { TestimonialsSection } from "@/components/home/TestimonialsSection";
@@ -19,6 +20,7 @@ export default function Home() {
 
       <main className="flex-1">
         <HeroSlider />
+        <QuickStats />
         <AboutSection />
         <AcademicsSection />
         <AdmissionsSection />
