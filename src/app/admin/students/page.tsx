@@ -71,6 +71,20 @@ export default function AdminStudentsPage() {
     // Disable dialog state
     const [disableTarget, setDisableTarget] = useState<Student | null>(null);
     const [isDisabling, setIsDisabling] = useState(false);
+    const [disableForm, setDisableForm] = useState({ lastClass: "", leftYear: "", lastDate: "", branch: "", remarks: "" });
+
+    // When opening disable modal, auto-fill from student record
+    const openDisableModal = (student: Student) => {
+        const today = new Date().toISOString().slice(0, 10);
+        setDisableForm({
+            lastClass: safeStr(student.currentClass) || "",
+            leftYear: new Date().getFullYear().toString(),
+            lastDate: today,
+            branch: safeStr(student.branch) || "",
+            remarks: "",
+        });
+        setDisableTarget(student);
+    };
 
     // Re-activate dialog state
     const [reactivateTarget, setReactivateTarget] = useState<Student | null>(null);
@@ -98,8 +112,8 @@ export default function AdminStudentsPage() {
 
     const classes = ["All", ...Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
-            .map(s => getClass(s)).filter(Boolean)
-    )).sort()];
+            .map(s => getClass(s)).filter(c => c != null && c !== "" && c !== "—")
+    )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
 
     const sections = ["All", ...Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
@@ -133,13 +147,20 @@ export default function AdminStudentsPage() {
             const docRef = snap.docs.find(d => d.id === disableTarget.id)?.ref;
             if (!docRef) throw new Error("Student document not found");
 
-            await updateDoc(docRef, {
+            const updatePayload: Record<string, any> = {
                 status: "LEFT",
                 disabledAt: new Date().toISOString(),
-            });
+            };
+            if (disableForm.lastClass) updatePayload.lastClass = disableForm.lastClass;
+            if (disableForm.leftYear) updatePayload.leftYear = disableForm.leftYear;
+            if (disableForm.lastDate) updatePayload.lastDate = disableForm.lastDate;
+            if (disableForm.branch) updatePayload.branch = disableForm.branch;
+            if (disableForm.remarks) updatePayload.remarks = disableForm.remarks;
+
+            await updateDoc(docRef, updatePayload);
 
             setStudents(prev => prev.map(s =>
-                s.id === disableTarget.id ? { ...s, status: "LEFT" } : s
+                s.id === disableTarget.id ? { ...s, status: "LEFT", ...updatePayload } : s
             ));
             toast.success(`${getDisplayName(disableTarget)} moved to Left Students`);
             setDisableTarget(null);
@@ -359,7 +380,7 @@ export default function AdminStudentsPage() {
                                                 <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} /> Edit
                                             </button>
                                             {activeTab === "active" ? (
-                                                <button onClick={() => setDisableTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-white hover:bg-red-50 ring-1 ring-slate-200 hover:ring-red-200 shadow-sm transition-all focus:outline-none">
+                                                <button onClick={() => openDisableModal(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-white hover:bg-red-50 ring-1 ring-slate-200 hover:ring-red-200 shadow-sm transition-all focus:outline-none">
                                                     <PowerOff className="w-3.5 h-3.5" strokeWidth={2.5} /> Disable
                                                 </button>
                                             ) : (
@@ -389,18 +410,52 @@ export default function AdminStudentsPage() {
             {/* Disable Confirmation Modal */}
             {disableTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
-                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-5">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
                             <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
                                 <PowerOff className="w-7 h-7 text-red-500" strokeWidth={2.5} />
                             </div>
                             <h2 className="text-xl font-bold text-slate-900 mt-2">Disable Student?</h2>
                             <p className="text-sm text-slate-500 leading-relaxed font-medium">
-                                <span className="font-bold text-slate-800">{getDisplayName(disableTarget)}</span> (ENR: <span className="font-mono font-bold text-slate-800">{disableTarget.admissionNumber}</span>) will be marked as <span className="text-red-500 font-bold">LEFT</span> and moved to the Left Students panel.
-                                <br /><span className="text-slate-400 text-xs mt-2 block">No data will be deleted. You can re-activate anytime.</span>
+                                <span className="font-bold text-slate-800">{getDisplayName(disableTarget)}</span> (ENR: <span className="font-mono font-bold text-slate-800">{disableTarget.admissionNumber}</span>) will be moved to Left Students.
+                                <span className="text-slate-400 text-xs mt-1 block">Fill in details below (auto-filled from student record).</span>
                             </p>
                         </div>
-                        <div className="flex gap-3 pt-2">
+
+                        {/* Auto-filled form fields */}
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-500 block mb-1">Last Class</label>
+                                    <input value={disableForm.lastClass} onChange={e => setDisableForm(p => ({ ...p, lastClass: e.target.value }))}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="e.g. 5" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-500 block mb-1">Left Year</label>
+                                    <input value={disableForm.leftYear} onChange={e => setDisableForm(p => ({ ...p, leftYear: e.target.value }))}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="e.g. 2025" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-500 block mb-1">Last Date</label>
+                                    <input type="date" value={disableForm.lastDate} onChange={e => setDisableForm(p => ({ ...p, lastDate: e.target.value }))}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-500 block mb-1">Branch</label>
+                                    <input value={disableForm.branch} onChange={e => setDisableForm(p => ({ ...p, branch: e.target.value }))}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="e.g. ATR" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold text-slate-500 block mb-1">Remarks (optional)</label>
+                                <input value={disableForm.remarks} onChange={e => setDisableForm(p => ({ ...p, remarks: e.target.value }))}
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="Reason for leaving..." />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-1">
                             <button onClick={() => setDisableTarget(null)} disabled={isDisabling} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors outline-none focus:ring-2 focus:ring-slate-200">
                                 Cancel
                             </button>
