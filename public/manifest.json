@@ -1,12 +1,16 @@
 {
+  "id": "/?source=pwa",
   "name": "International Access School",
   "short_name": "IAS App",
   "description": "International Access School provides world-class education focused on academic excellence.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
   "icons": [
     {
       "src": "/LOGO.png",
