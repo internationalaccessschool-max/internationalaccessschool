@@ -55,3 +55,10 @@ build_cache.log
 # backup files
 *.bak.*
 __layout_backup.*
+
+# PWA files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/fallback-*.js
+public/swe-worker-*.js
