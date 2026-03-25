@@ -241,8 +241,8 @@ export default function StudentTransportFeePage() {
                         <div id="student-transport-receipt" className="p-8 sm:p-10 bg-white">
                             <div className="text-center border-b-2 border-navy/20 pb-6 mb-8">
                                 <h1 className="text-3xl font-extrabold text-navy tracking-tight uppercase">International Access School</h1>
-                                <p className="text-sm text-gray-500 mt-2 font-medium">123 Education Lane, Knowledge City, State - 100001</p>
-                                <p className="text-xs text-gray-400 mt-1">Phone: +91 999 000 0000 | Email: admin@internationalaccessschool.com</p>
+                                <p className="text-sm text-gray-500 mt-2 font-medium">Atarsua, Siwan, Bihar, India, 841227</p>
+                                <p className="text-xs text-gray-400 mt-1">Phone: +91 84060 00830 | Email: info@iaschool.edu.in</p>
                                 <div className="inline-block mt-4 px-4 py-1.5 bg-indigo-50 text-indigo-800 text-sm font-bold uppercase tracking-widest border border-indigo-100 rounded-full">
                                     Transport Fee Receipt
                                 </div>
