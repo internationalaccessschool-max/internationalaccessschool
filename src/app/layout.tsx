@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -14,10 +14,15 @@ export const metadata: Metadata = {
   description:
     "International Access School provides world-class education focused on academic excellence, innovation, and holistic development. Apply now for admissions.",
   keywords: ["international school", "education", "admissions", "academics", "global leaders"],
+  manifest: "/manifest.json",
   icons: {
     icon: '/LOGO.png',
     apple: '/LOGO.png',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
