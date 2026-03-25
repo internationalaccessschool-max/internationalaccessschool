@@ -32,8 +32,11 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export default function AccountantDashboard() {
     const { user } = useAuth();
-    const [currentMonth] = useState(() => new Date().getMonth() + 1);
-    const [currentYear] = useState(() => new Date().getFullYear());
+    const NOW_MONTH = new Date().getMonth() + 1;
+    const NOW_YEAR = new Date().getFullYear();
+
+    const [filterMonth, setFilterMonth] = useState(NOW_MONTH);
+    const [filterYear, setFilterYear] = useState(NOW_YEAR);
 
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -51,7 +54,7 @@ export default function AccountantDashboard() {
 
             // Fetch records from nested path
             const promises = classIds.map(classId =>
-                getDocs(collection(db, `feeRecords/${currentYear}/months/${currentMonth}/classes/${classId}/records`))
+                getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
             );
 
             const snapshots = await Promise.all(promises);
@@ -61,7 +64,7 @@ export default function AccountantDashboard() {
 
             // Sort by class and name
             allRecords.sort((a, b) => {
-                const classCompare = (a.class || "").localeCompare(b.class || "");
+                const classCompare = (a.class || "").localeCompare(b.class || "", undefined, { numeric: true });
                 if (classCompare !== 0) return classCompare;
                 return (a.studentName || "").localeCompare(b.studentName || "");
             });
@@ -72,7 +75,7 @@ export default function AccountantDashboard() {
         } finally {
             setLoading(false);
         }
-    }, [currentMonth, currentYear]);
+    }, [filterMonth, filterYear]);
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -81,7 +84,7 @@ export default function AccountantDashboard() {
         try {
             const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
             const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            const recordPath = (record as any).path || `feeRecords/${record.year}/months/${record.month}/classes/${record.class}/records/${record.id}`;
+            const recordPath = (record as any).path || `feeRecords/${filterYear}/months/${filterMonth}/classes/${record.class}/records/${record.id}`;
             await updateDoc(doc(db, recordPath), {
                 status: "paid",
                 paidOn: new Date(),
@@ -163,16 +166,26 @@ export default function AccountantDashboard() {
                     <div>
                         <p className="text-white/50 text-sm font-medium">Finance Portal</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">
-                            {MONTHS[currentMonth - 1]} {currentYear} — Fee Overview
+                            {MONTHS[filterMonth - 1]} {filterYear} — Fee Overview
                         </h1>
                         <p className="text-white/40 text-sm mt-1">
                             Welcome{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}! Manage all student fee payments below.
                         </p>
                     </div>
-                    <button onClick={fetchRecords}
-                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 text-white text-sm hover:bg-white/20 transition-all">
-                        <RefreshCw className="w-4 h-4" /> Refresh
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <select value={filterMonth} onChange={e => { setFilterMonth(Number(e.target.value)); setSearch(""); setFilterClass("all"); }}
+                            className="px-3 py-2 rounded-xl bg-white/10 text-white text-sm border border-white/20 focus:outline-none focus:bg-white/20 transition-all">
+                            {MONTHS.map((m, i) => <option key={m} value={i + 1} className="text-navy bg-white">{m}</option>)}
+                        </select>
+                        <select value={filterYear} onChange={e => { setFilterYear(Number(e.target.value)); setSearch(""); setFilterClass("all"); }}
+                            className="px-3 py-2 rounded-xl bg-white/10 text-white text-sm border border-white/20 focus:outline-none focus:bg-white/20 transition-all">
+                            {Array.from({ length: 5 }, (_, i) => NOW_YEAR - 1 + i).map(y => <option key={y} value={y} className="text-navy bg-white">{y}</option>)}
+                        </select>
+                        <button onClick={fetchRecords}
+                            className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 text-white text-sm hover:bg-white/20 transition-all">
+                            <RefreshCw className="w-4 h-4" /> Refresh
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -216,7 +229,7 @@ export default function AccountantDashboard() {
                 <div className="p-4 border-b border-gray-100">
                     <div className="flex flex-wrap gap-3 items-center">
                         <h2 className="font-bold text-navy text-lg mr-auto">
-                            Fee Records — {MONTHS[currentMonth - 1]} {currentYear}
+                            Fee Records — {MONTHS[filterMonth - 1]} {filterYear}
                         </h2>
 
                         {/* Search */}
