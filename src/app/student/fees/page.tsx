@@ -5,6 +5,7 @@ import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X } from "lucide-react";
+import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
 
 interface FeeRecord {
     id: string;
@@ -285,19 +286,27 @@ export default function StudentFeesPage() {
             {/* ── Receipt Modal ─────────────────────────────────────────────────── */}
             {receiptRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
-                    <style jsx global>{`
-                        @media print {
-                            body * { visibility: hidden; }
-                            #student-fee-receipt, #student-fee-receipt * { visibility: visible; }
-                            #student-fee-receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
-                            .no-print { display: none !important; }
-                        }
-                    `}</style>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
+                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-2xl">
                             <h2 className="text-lg font-bold text-navy">Fee Receipt</h2>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => window.print()}
+                                <button onClick={() => {
+                                    const items = getBreakdownItems(receiptRecord);
+                                    const html = buildReceiptHTML({
+                                        title: "School Fee Receipt",
+                                        receiptNo: receiptRecord.receiptNo || "N/A",
+                                        studentName: receiptRecord.studentName || studentName || "—",
+                                        classSection: `Class ${receiptRecord.class || "—"}${receiptRecord.section ? ` - ${receiptRecord.section}` : ""}`,
+                                        rollNo: receiptRecord.rollNo || studentRoll || undefined,
+                                        paidOn: receiptRecord.paidOn?.toDate
+                                            ? receiptRecord.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+                                            : "N/A",
+                                        feeMonth: `${MONTHS[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
+                                        lineItems: items,
+                                        totalAmount: receiptRecord.amount,
+                                    });
+                                    printReceiptHTML(html, "School Fee Receipt");
+                                }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
                                     <Printer className="w-4 h-4" />Print / Download PDF
                                 </button>
