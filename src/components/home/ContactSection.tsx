@@ -8,17 +8,17 @@ const contactDetails = [
     {
         icon: MapPin,
         title: "Our Campus",
-        details: ["123 Education Boulevard", "Academic District, City 10001"],
+        details: ["Atarsua, Barhan Gopal", "Siwan, Bihar, India, 841227"],
     },
     {
         icon: Phone,
         title: "Phone",
-        details: ["+1 (555) 123-4567", "+1 (555) 987-6543"],
+        details: ["+91 84060 00830", "+91 99347 76670"],
     },
     {
         icon: Mail,
         title: "Email",
-        details: ["info@ias.edu", "admissions@ias.edu"],
+        details: ["info@iaschool.edu.in"],
     },
 ];
 
