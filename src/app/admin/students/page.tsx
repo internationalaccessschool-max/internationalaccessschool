@@ -22,7 +22,7 @@ interface Student {
     lastName?: string;
     admissionNumber: string;
     serialNumber?: string;
-    currentClass?: string;
+    currentClass?: string | number;  // Stored as number in Firestore for class 0
     section?: string;
     fatherName?: string;
     mobileNo?: string;
@@ -40,8 +40,9 @@ interface Student {
 
 // Helper: Safe string render
 const safeStr = (val: any): string => {
-    if (!val) return "";
+    if (val == null) return "";           // null or undefined → empty string
     if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);  // 0 → "0", not ""
     if (typeof val === 'object') {
         return val.name || val.label || val.id || JSON.stringify(val);
     }
@@ -54,9 +55,11 @@ const getDisplayName = (s: Student) => {
     return n || "Unknown Student";
 };
 
-// Helper: get class display
-const getClass = (s: Student) => {
-    return safeStr(s.currentClass) || "—";
+// Helper: get class display (handles numeric 0 and string "0")
+const getClass = (s: Student): string => {
+    const cls = s.currentClass;
+    if (cls === 0 || cls === "0") return "0";   // explicit check for class 0
+    return safeStr(cls) || "—";
 };
 
 export default function AdminStudentsPage() {
