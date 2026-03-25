@@ -8,12 +8,15 @@ import Image from "next/image";
 import { NewsTicker } from "@/components/news-ticker";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 
 export function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [academicsOpen, setAcademicsOpen] = useState(false);
     const [academicLinks, setAcademicLinks] = useState<any[]>([]);
+
+    const { isInstallable, install } = usePWAInstall();
 
     const pathname = usePathname();
     const isHome = pathname === "/";
@@ -252,6 +255,20 @@ export function Navbar() {
                     <Link href="/admissions" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Admissions</Link>
                     <Link href="/gallery" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Gallery</Link>
                     <Link href="/contact" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Contact</Link>
+                    
+                    {isInstallable && (
+                        <div className="mt-4 px-4 pb-4 border-t border-gray-100 pt-4">
+                            <button
+                                onClick={() => {
+                                    install();
+                                    setMobileOpen(false);
+                                }}
+                                className="w-full text-center px-5 py-3 rounded-xl bg-gold text-navy font-bold text-sm shadow-md hover:bg-gold-light transition-colors"
+                            >
+                                Install App
+                            </button>
+                        </div>
+                    )}
                 </nav>
             </div>
         </>
