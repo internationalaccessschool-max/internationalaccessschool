@@ -36,6 +36,7 @@ interface FeeRecord {
     receiptNo: string | null;
     transportReceiptNo?: string | null;
     isTransportOnly?: boolean;     // true if student only has transport fee (no school fee record)
+    receiptType?: "school" | "transport"; // used to select which receipt to show
     breakdown?: {
         tuitionFee?: number;
         examFee?: number;
@@ -599,13 +600,24 @@ export default function ManageFeesPage() {
                                                             WhatsApp
                                                         </a>
                                                     )}
-                                                    {record.status === "paid" && (
+                                                    {/* School receipt */}
+                                                    {!record.isTransportOnly && record.status === "paid" && (
                                                         <button
-                                                            onClick={() => setSelectedReceipt(record)}
+                                                            onClick={() => setSelectedReceipt({ ...record, receiptType: "school" })}
                                                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 transition-colors"
                                                         >
                                                             <CheckCircle2 className="w-3 h-3" />
-                                                            View Receipt
+                                                            School Receipt
+                                                        </button>
+                                                    )}
+                                                    {/* Transport receipt */}
+                                                    {isBusStudent && record.transportStatus === "paid" && record.transportReceiptNo && (
+                                                        <button
+                                                            onClick={() => setSelectedReceipt({ ...record, receiptType: "transport" })}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors"
+                                                        >
+                                                            <Bus className="w-3 h-3" />
+                                                            Transport Receipt
                                                         </button>
                                                     )}
                                                 </div>
