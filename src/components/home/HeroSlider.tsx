@@ -85,7 +85,7 @@ export function HeroSlider() {
     const slide = slides[current];
 
     return (
-        <section className="relative min-h-[400px] h-[50dvh] md:min-h-[600px] md:h-[100dvh] w-full overflow-hidden bg-navy">
+        <section className="relative w-full aspect-video md:h-[100dvh] md:min-h-[600px] md:aspect-auto overflow-hidden bg-navy group">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={current}
@@ -109,27 +109,41 @@ export function HeroSlider() {
             </AnimatePresence>
 
             {/* Text Content */}
-            <div className="relative z-10 h-full flex items-center justify-center text-center px-4 sm:px-6 lg:px-8">
-                <div className="max-w-4xl space-y-6">
+            <div className="relative z-10 h-full flex items-center justify-center text-center px-4 sm:px-6 lg:px-8 mt-4 md:mt-0">
+                <div className="max-w-4xl w-full">
                     <motion.div
                         key={`text-${current}`}
-                        initial={{ y: 30, opacity: 0 }}
+                        initial={{ y: 20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.8, delay: 0.2 }}
+                        transition={{ duration: 0.8, delay: 0.1 }}
+                        className="flex flex-col items-center justify-center w-full"
                     >
-                        <h1 className="text-5xl md:text-7xl font-bold text-white mb-4 leading-tight">
+                        {/* Pill Badge matching the ref layout */}
+                         <div className="inline-block px-3 py-1 md:px-4 md:py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white text-[9px] sm:text-xs font-bold tracking-[0.15em] uppercase mb-1.5 md:mb-4">
+                            Welcome to IAS
+                        </div>
+
+                        <h1 className="text-xl sm:text-4xl md:text-7xl font-extrabold text-white mb-1.5 md:mb-4 leading-tight drop-shadow-lg max-w-[90%] md:max-w-full">
                             {slide.title}
                         </h1>
-                        <p className="text-xl md:text-2xl text-[clamp(1rem,4vw,1.5rem)] text-gray-200 mb-6 lg:mb-8 max-w-2xl mx-auto px-4">
+                        <p className="text-[10px] sm:text-sm md:text-xl text-gray-200 mb-4 md:mb-8 font-light max-w-2xl px-2 leading-snug hidden sm:block">
                             {slide.subtitle}
                         </p>
-                        <Link
-                            href={slide.ctaLink || "/admissions"}
-                            className="inline-flex items-center gap-2 px-8 py-4 bg-gold text-navy font-bold rounded-full hover:bg-gold-light transition-all transform hover:scale-105 shadow-lg group"
-                        >
-                            {slide.cta || "Apply Now"}
-                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                        </Link>
+
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 w-full max-w-[200px] sm:max-w-none mt-1 md:mt-4">
+                            <Link
+                                href={slide.ctaLink || "/admissions"}
+                                className="w-full sm:w-auto inline-flex justify-center items-center px-5 py-2 md:px-8 md:py-4 bg-gold text-navy font-bold rounded-full hover:bg-gold-light transition-all transform hover:scale-105 shadow-lg text-[11px] md:text-base"
+                            >
+                                {slide.cta || "Learn More"}
+                            </Link>
+                            <Link
+                                href="/contact"
+                                className="w-full sm:w-auto inline-flex justify-center items-center px-5 py-2 md:px-8 md:py-4 bg-transparent border-2 border-white/90 text-white font-bold rounded-full hover:bg-white/10 transition-all shadow-lg text-[11px] md:text-base"
+                            >
+                                Contact Us
+                            </Link>
+                        </div>
                     </motion.div>
                 </div>
             </div>
@@ -150,13 +164,15 @@ export function HeroSlider() {
                         <ChevronRight className="w-8 h-8" />
                     </button>
 
-                    {/* Dots */}
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3 z-20">
+                    {/* Dots at bottom */}
+                    <div className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 flex gap-1.5 md:gap-3 z-20">
                         {slides.map((_, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => setCurrent(idx)}
-                                className={`h-3 rounded-full transition-all ${idx === current ? "bg-gold w-8" : "bg-white/50 hover:bg-white w-3"
+                                className={`h-1.5 md:h-3 rounded-full transition-all ${idx === current 
+                                    ? "bg-gold w-4 md:w-8" 
+                                    : "bg-white/50 hover:bg-white w-1.5 md:w-3"
                                     }`}
                             />
                         ))}
