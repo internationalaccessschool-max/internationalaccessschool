@@ -1,7 +1,7 @@
 "use client";
 
 import { X, Printer, Bus, School } from "lucide-react";
-import { useEffect } from "react";
+import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
 
 interface FeeRecordBreakdown {
     tuitionFee?: number;
@@ -45,24 +45,12 @@ interface FeeReceiptModalProps {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProps) {
-    useEffect(() => {
-        if (record) {
-            document.body.style.overflow = "hidden";
-        } else {
-            document.body.style.overflow = "unset";
-        }
-        return () => { document.body.style.overflow = "unset"; };
-    }, [record]);
-
     if (!record) return null;
 
-    const handlePrint = () => window.print();
-
-    // Determine if we're showing a transport receipt
     const isTransportReceipt = record.receiptType === "transport";
 
-    // ── School fee breakdown ──────────────────────────────────────
-    const breakdownItems = [
+    // Build school fee breakdown for preview
+    const schoolBreakdownItems = [
         { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
         { label: "Examination Fee", amount: record.breakdown?.examFee || 0 },
         { label: "Computer Fee", amount: record.breakdown?.computerFee || 0 },
@@ -71,82 +59,80 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
         { label: "Miscellaneous Fee", amount: record.breakdown?.miscFee || 0 },
     ].filter(item => item.amount > 0);
 
-    if (!isTransportReceipt && breakdownItems.length === 0) {
-        breakdownItems.push({ label: "School Fee", amount: record.amount });
+    if (!isTransportReceipt && schoolBreakdownItems.length === 0) {
+        schoolBreakdownItems.push({ label: "School Fee", amount: record.amount });
     }
 
-    // ── Transport fee breakdown ───────────────────────────────────
     const transportAmount = record.transportFeeAmount || 0;
-    const transportReceiptNo = record.transportReceiptNo || "N/A";
-
-    // Receipt display values
-    const displayReceiptNo = isTransportReceipt ? transportReceiptNo : (record.receiptNo || "N/A");
+    const displayReceiptNo = isTransportReceipt ? (record.transportReceiptNo || "N/A") : (record.receiptNo || "N/A");
     const displayAmount = isTransportReceipt ? transportAmount : record.amount;
-    const displayPaidOn = record.paidOn?.toDate ? record.paidOn.toDate() : null;
+    const displayPaidOn = record.paidOn?.toDate
+        ? record.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+        : "N/A";
+    const feeMonth = `${MONTHS[(record.month || 1) - 1]} ${record.year}`;
+
+    const handlePrint = () => {
+        const lineItems = isTransportReceipt
+            ? [{ label: "Transport / Bus Fee", amount: transportAmount }]
+            : schoolBreakdownItems;
+
+        const html = buildReceiptHTML({
+            title: isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt",
+            receiptNo: displayReceiptNo,
+            studentName: record.studentName || "—",
+            classSection: `Class ${record.class || "—"}${record.section ? ` - ${record.section}` : ""}`,
+            rollNo: record.rollNo || undefined,
+            paidOn: displayPaidOn,
+            feeMonth,
+            lineItems,
+            totalAmount: displayAmount,
+        });
+        printReceiptHTML(html, isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt");
+    };
+
+    const fmtAmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
-            <style jsx global>{`
-                @media print {
-                    body * { visibility: hidden; }
-                    #printable-receipt, #printable-receipt * { visibility: visible; }
-                    #printable-receipt {
-                        position: absolute; left: 0; top: 0;
-                        width: 100%; margin: 0; padding: 20px;
-                        box-shadow: none; border: none;
-                    }
-                    .no-print { display: none !important; }
-                }
-            `}</style>
-
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative flex flex-col">
-                {/* Header (No print) */}
-                <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
+                {/* Header */}
+                <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-2xl">
                     <div className="flex items-center gap-2">
                         {isTransportReceipt
                             ? <Bus className="w-5 h-5 text-indigo-500" />
-                            : <School className="w-5 h-5 text-navy" />
-                        }
+                            : <School className="w-5 h-5 text-navy" />}
                         <h2 className="text-lg font-bold text-navy">
                             {isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt"}
                         </h2>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={handlePrint}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-navy-light transition-colors shadow-sm shadow-navy/20"
-                        >
+                        <button onClick={handlePrint}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-navy-light transition-colors shadow-sm shadow-navy/20">
                             <Printer className="w-4 h-4" />
                             Print / Download PDF
                         </button>
-                        <button
-                            onClick={onClose}
-                            className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
-                        >
+                        <button onClick={onClose}
+                            className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
 
-                {/* Printable Content */}
-                <div id="printable-receipt" className="p-8 sm:p-10 bg-white">
+                {/* Preview Content */}
+                <div className="p-8 sm:p-10 bg-white">
                     {/* School Header */}
                     <div className="text-center border-b-2 border-navy/20 pb-6 mb-8">
                         <h1 className="text-3xl font-extrabold text-navy tracking-tight uppercase">International Access School</h1>
                         <p className="text-sm text-gray-500 mt-2 font-medium">Atarsua, Siwan, Bihar, India, 841227</p>
                         <p className="text-xs text-gray-400 mt-1">Phone: +91 84060 00830 | Email: info@iaschool.edu.in</p>
-
                         <div className={`inline-flex items-center gap-2 mt-4 px-4 py-1.5 text-sm font-bold uppercase tracking-widest border rounded-full
-                            ${isTransportReceipt
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                : "bg-navy/5 text-navy border-navy/10"}`}>
+                            ${isTransportReceipt ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-navy/5 text-navy border-navy/10"}`}>
                             {isTransportReceipt ? <Bus className="w-4 h-4" /> : <School className="w-4 h-4" />}
                             {isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt"}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
-                        {/* Student Details */}
                         <div className="space-y-4">
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Receipt Number</p>
@@ -167,28 +153,20 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                                 </div>
                             )}
                         </div>
-
-                        {/* Payment Details */}
                         <div className="space-y-4 text-right">
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Date of Payment</p>
-                                <p className="font-semibold text-gray-800">
-                                    {displayPaidOn
-                                        ? displayPaidOn.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-                                        : "N/A"}
-                                </p>
+                                <p className="font-semibold text-gray-800">{displayPaidOn}</p>
                             </div>
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Month</p>
-                                <p className="font-bold text-navy text-base">{MONTHS[(record.month || 1) - 1]} {record.year}</p>
+                                <p className="font-bold text-navy text-base">{feeMonth}</p>
                             </div>
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
-                                <div className="inline-flex items-center justify-end">
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold leading-5 bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
-                                        Paid Successfully
-                                    </span>
-                                </div>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                    Paid Successfully
+                                </span>
                             </div>
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Type</p>
@@ -202,40 +180,30 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-16">S.No</th>
-                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Particulars</th>
-                                    <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount (₹)</th>
+                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase w-16">S.No</th>
+                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Particulars</th>
+                                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Amount (₹)</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
                                 {isTransportReceipt ? (
                                     <tr>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">1.</td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800">Transport / Bus Fee</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right font-medium text-gray-600">
-                                            {transportAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
+                                        <td className="px-6 py-4 text-gray-500">1.</td>
+                                        <td className="px-6 py-4 font-medium text-gray-800">Transport / Bus Fee</td>
+                                        <td className="px-6 py-4 text-right font-medium text-gray-600">{fmtAmt(transportAmount)}</td>
                                     </tr>
-                                ) : (
-                                    breakdownItems.map((item, index) => (
-                                        <tr key={index}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-gray-500">{index + 1}.</td>
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800">{item.label}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right font-medium text-gray-600">
-                                                {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
+                                ) : schoolBreakdownItems.map((item, i) => (
+                                    <tr key={i}>
+                                        <td className="px-6 py-4 text-gray-500">{i + 1}.</td>
+                                        <td className="px-6 py-4 font-medium text-gray-800">{item.label}</td>
+                                        <td className="px-6 py-4 text-right font-medium text-gray-600">{fmtAmt(item.amount)}</td>
+                                    </tr>
+                                ))}
                             </tbody>
                             <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
                                 <tr>
-                                    <th scope="row" colSpan={2} className="px-6 py-5 text-right font-extrabold text-navy text-base uppercase">
-                                        Total Amount Paid
-                                    </th>
-                                    <td className="px-6 py-5 text-right font-extrabold text-navy text-lg">
-                                        ₹{displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
+                                    <th colSpan={2} className="px-6 py-5 text-right font-extrabold text-navy text-base uppercase">Total Amount Paid</th>
+                                    <td className="px-6 py-5 text-right font-extrabold text-navy text-lg">₹{fmtAmt(displayAmount)}</td>
                                 </tr>
                             </tfoot>
                         </table>
