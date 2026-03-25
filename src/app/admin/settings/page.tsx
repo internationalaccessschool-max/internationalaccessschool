@@ -22,9 +22,9 @@ interface GlobalSettings {
 
 const DEFAULT_SETTINGS: GlobalSettings = {
     contact: {
-        email: "info@iaschool.edu",
-        phone: "+91 98765 43210",
-        address: "123 Education Lane, Knowledge City, India",
+        email: "info@iaschool.edu.in",
+        phone: "+91 84060 00830",
+        address: "Atarsua, Siwan, Bihar, India, 841227",
         adminEmail: "internationalaccessschool@gmail.com"
     },
     social: {
