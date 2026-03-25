@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import toast from "react-hot-toast";
+import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
 
 interface TransportFeeRecord {
     id: string;
@@ -335,20 +336,29 @@ export default function AccountantTransportFeesPage() {
             {/* Transport Receipt Modal */}
             {receiptRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
-                    <style jsx global>{`
-                        @media print {
-                            body * { visibility: hidden; }
-                            #transport-receipt, #transport-receipt * { visibility: visible; }
-                            #transport-receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
-                            .no-print { display: none !important; }
-                        }
-                    `}</style>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
                         {/* Modal Header */}
-                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
+                        <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-2xl">
                             <h2 className="text-lg font-bold text-navy">Transport Fee Receipt</h2>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => window.print()}
+                                <button onClick={() => {
+                                    const html = buildReceiptHTML({
+                                        title: "Transport Fee Receipt",
+                                        receiptNo: receiptRecord.receiptNo || "N/A",
+                                        studentName: receiptRecord.studentName,
+                                        classSection: `Class ${receiptRecord.className}${receiptRecord.section ? ` - ${receiptRecord.section}` : ""}`,
+                                        extraInfo: [
+                                            { label: "Bus Number", value: `${receiptRecord.busNumber || "—"}${receiptRecord.routeDetails ? " · " + receiptRecord.routeDetails : ""}` },
+                                        ],
+                                        paidOn: receiptRecord.paidOn?.toDate
+                                            ? receiptRecord.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+                                            : "N/A",
+                                        feeMonth: `${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
+                                        lineItems: [{ label: `Bus Transport Fee — ${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`, amount: receiptRecord.amount }],
+                                        totalAmount: receiptRecord.amount,
+                                    });
+                                    printReceiptHTML(html, "Transport Fee Receipt");
+                                }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
                                     <Printer className="w-4 h-4" />Print / Download PDF
                                 </button>
