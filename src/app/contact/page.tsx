@@ -6,10 +6,10 @@ import { MapPin, Phone, Mail, Clock, Send } from "lucide-react";
 import { useState } from "react";
 
 const contactInfo = [
-    { icon: MapPin, title: "Address", value: "123 Education Lane, Knowledge City, India", sub: "Near Central Park" },
-    { icon: Phone, title: "Phone", value: "+91 98765 43210", sub: "Mon-Fri, 8 AM - 4 PM" },
-    { icon: Mail, title: "Email", value: "info@iaschool.edu", sub: "We reply within 24 hours" },
-    { icon: Clock, title: "Office Hours", value: "Mon - Fri: 8:00 AM - 4:00 PM", sub: "Sat: 9:00 AM - 12:00 PM" },
+    { icon: MapPin, title: "Address", value: "Atarsua, Siwan, Bihar, India, 841227", sub: "Greater Siwan Campus" },
+    { icon: Phone, title: "Phone", value: "+91 84060 00830", sub: "Mon-Sat, 8 AM - 4 PM" },
+    { icon: Mail, title: "Email", value: "info@iaschool.edu.in", sub: "We reply within 24 hours" },
+    { icon: Clock, title: "Office Hours", value: "Mon - Sat: 8:00 AM - 4:00 PM", sub: "Sun: Closed" },
 ];
 
 export default function ContactPage() {
