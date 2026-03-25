@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Printer, Download } from "lucide-react";
+import { X, Printer, Bus, School } from "lucide-react";
 import { useEffect } from "react";
 
 interface FeeRecordBreakdown {
@@ -28,6 +28,12 @@ interface FeeRecord {
     status: "pending" | "paid" | "overdue";
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
+    // Transport fields
+    transportStatus?: "pending" | "paid" | "overdue";
+    transportFeeAmount?: number;
+    transportReceiptNo?: string | null;
+    isTransportOnly?: boolean;
+    receiptType?: "school" | "transport";
     breakdown?: FeeRecordBreakdown;
 }
 
@@ -39,69 +45,72 @@ interface FeeReceiptModalProps {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProps) {
-    // Prevent scrolling on body when modal is open
     useEffect(() => {
         if (record) {
             document.body.style.overflow = "hidden";
         } else {
             document.body.style.overflow = "unset";
         }
-        return () => {
-            document.body.style.overflow = "unset";
-        };
+        return () => { document.body.style.overflow = "unset"; };
     }, [record]);
 
     if (!record) return null;
 
-    const handlePrint = () => {
-        window.print();
-    };
+    const handlePrint = () => window.print();
 
+    // Determine if we're showing a transport receipt
+    const isTransportReceipt = record.receiptType === "transport";
+
+    // ── School fee breakdown ──────────────────────────────────────
     const breakdownItems = [
         { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
         { label: "Examination Fee", amount: record.breakdown?.examFee || 0 },
         { label: "Computer Fee", amount: record.breakdown?.computerFee || 0 },
-        { label: "Transport Fee", amount: record.breakdown?.transportFee || 0 },
         { label: "Library Fee", amount: record.breakdown?.libraryFee || 0 },
         { label: "Sports Fee", amount: record.breakdown?.sportsFee || 0 },
         { label: "Miscellaneous Fee", amount: record.breakdown?.miscFee || 0 },
     ].filter(item => item.amount > 0);
 
-    // If no breakdown exists, just show a general "School Fee"
-    if (breakdownItems.length === 0) {
+    if (!isTransportReceipt && breakdownItems.length === 0) {
         breakdownItems.push({ label: "School Fee", amount: record.amount });
     }
+
+    // ── Transport fee breakdown ───────────────────────────────────
+    const transportAmount = record.transportFeeAmount || 0;
+    const transportReceiptNo = record.transportReceiptNo || "N/A";
+
+    // Receipt display values
+    const displayReceiptNo = isTransportReceipt ? transportReceiptNo : (record.receiptNo || "N/A");
+    const displayAmount = isTransportReceipt ? transportAmount : record.amount;
+    const displayPaidOn = record.paidOn?.toDate ? record.paidOn.toDate() : null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
             <style jsx global>{`
                 @media print {
-                    body * {
-                        visibility: hidden;
-                    }
-                    #printable-receipt, #printable-receipt * {
-                        visibility: visible;
-                    }
+                    body * { visibility: hidden; }
+                    #printable-receipt, #printable-receipt * { visibility: visible; }
                     #printable-receipt {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        margin: 0;
-                        padding: 20px;
-                        box-shadow: none;
-                        border: none;
+                        position: absolute; left: 0; top: 0;
+                        width: 100%; margin: 0; padding: 20px;
+                        box-shadow: none; border: none;
                     }
-                    .no-print {
-                        display: none !important;
-                    }
+                    .no-print { display: none !important; }
                 }
             `}</style>
 
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative flex flex-col">
                 {/* Header (No print) */}
                 <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 no-print rounded-t-2xl">
-                    <h2 className="text-lg font-bold text-navy">Fee Receipt</h2>
+                    <div className="flex items-center gap-2">
+                        {isTransportReceipt
+                            ? <Bus className="w-5 h-5 text-indigo-500" />
+                            : <School className="w-5 h-5 text-navy" />
+                        }
+                        <h2 className="text-lg font-bold text-navy">
+                            {isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt"}
+                        </h2>
+                    </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handlePrint}
@@ -127,8 +136,12 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                         <p className="text-sm text-gray-500 mt-2 font-medium">Atarsua, Siwan, Bihar, India, 841227</p>
                         <p className="text-xs text-gray-400 mt-1">Phone: +91 84060 00830 | Email: info@iaschool.edu.in</p>
 
-                        <div className="inline-block mt-4 px-4 py-1.5 bg-navy/5 text-navy text-sm font-bold uppercase tracking-widest border border-navy/10 rounded-full">
-                            Fee Receipt
+                        <div className={`inline-flex items-center gap-2 mt-4 px-4 py-1.5 text-sm font-bold uppercase tracking-widest border rounded-full
+                            ${isTransportReceipt
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : "bg-navy/5 text-navy border-navy/10"}`}>
+                            {isTransportReceipt ? <Bus className="w-4 h-4" /> : <School className="w-4 h-4" />}
+                            {isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt"}
                         </div>
                     </div>
 
@@ -137,7 +150,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                         <div className="space-y-4">
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Receipt Number</p>
-                                <p className="font-mono text-base font-bold text-navy">{record.receiptNo || "N/A"}</p>
+                                <p className="font-mono text-base font-bold text-navy">{displayReceiptNo}</p>
                             </div>
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Student Name</p>
@@ -160,9 +173,9 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Date of Payment</p>
                                 <p className="font-semibold text-gray-800">
-                                    {record.paidOn?.toDate ? record.paidOn.toDate().toLocaleDateString("en-IN", {
-                                        day: "numeric", month: "long", year: "numeric"
-                                    }) : "N/A"}
+                                    {displayPaidOn
+                                        ? displayPaidOn.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+                                        : "N/A"}
                                 </p>
                             </div>
                             <div>
@@ -177,6 +190,10 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                                     </span>
                                 </div>
                             </div>
+                            <div>
+                                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Type</p>
+                                <p className="font-semibold text-gray-700">{isTransportReceipt ? "Transport Fee" : "School Fee"}</p>
+                            </div>
                         </div>
                     </div>
 
@@ -185,31 +202,31 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-16">
-                                        S.No
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                        Particulars
-                                    </th>
-                                    <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                        Amount (₹)
-                                    </th>
+                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-16">S.No</th>
+                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Particulars</th>
+                                    <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount (₹)</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
-                                {breakdownItems.map((item, index) => (
-                                    <tr key={index}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                                            {index + 1}.
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800">
-                                            {item.label}
-                                        </td>
+                                {isTransportReceipt ? (
+                                    <tr>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500">1.</td>
+                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800">Transport / Bus Fee</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right font-medium text-gray-600">
-                                            {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {transportAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    breakdownItems.map((item, index) => (
+                                        <tr key={index}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-500">{index + 1}.</td>
+                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800">{item.label}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right font-medium text-gray-600">
+                                                {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                             <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
                                 <tr>
@@ -217,7 +234,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                                         Total Amount Paid
                                     </th>
                                     <td className="px-6 py-5 text-right font-extrabold text-navy text-lg">
-                                        ₹{record.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        ₹{displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                 </tr>
                             </tfoot>
