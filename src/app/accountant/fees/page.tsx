@@ -333,7 +333,7 @@ export default function ManageFeesPage() {
     };
 
     // Filter records
-    const classes = [...new Set(records.map(r => r.class).filter(Boolean))].sort();
+    const classes = [...new Set(records.map(r => r.class).filter(c => c != null && c !== ""))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const filtered = records.filter(r => {
         if (filterStatus !== "all" && r.status !== filterStatus) return false;
         if (filterClass !== "all" && r.class !== filterClass) return false;
@@ -505,11 +505,18 @@ export default function ManageFeesPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="space-y-1">
-                                                    {/* School status */}
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
-                                                        <StatusIcon className="w-3 h-3" />
-                                                        {isBusStudent ? `School: ${statusCfg.label}` : statusCfg.label}
-                                                    </span>
+                                                    {/* School status — NOT generated for transport-only students */}
+                                                    {record.isTransportOnly ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-gray-50 text-gray-400 border-gray-200">
+                                                            <School className="w-3 h-3" />
+                                                            School: Not Generated
+                                                        </span>
+                                                    ) : (
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
+                                                            <StatusIcon className="w-3 h-3" />
+                                                            {isBusStudent ? `School: ${statusCfg.label}` : statusCfg.label}
+                                                        </span>
+                                                    )}
                                                     {/* Transport status */}
                                                     {isBusStudent && (() => {
                                                         const tCfg = STATUS_CONFIG[record.transportStatus || "pending"] || STATUS_CONFIG.pending;
@@ -521,7 +528,7 @@ export default function ManageFeesPage() {
                                                             </span>
                                                         );
                                                     })()}
-                                                    {record.status === "paid" && record.paidOn?.toDate && (
+                                                    {!record.isTransportOnly && record.status === "paid" && record.paidOn?.toDate && (
                                                         <div className="text-xs text-gray-400">
                                                             {record.paidOn.toDate().toLocaleDateString("en-IN")}
                                                         </div>
