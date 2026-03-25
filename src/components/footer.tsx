@@ -17,9 +17,9 @@ const quickLinks = [
 
 export function Footer() {
     const [contact, setContact] = useState({
-        email: "info@iaschool.edu",
-        phone: "+91 98765 43210",
-        address: "123 Education Lane, Knowledge City, India",
+        email: "info@iaschool.edu.in",
+        phone: "+91 84060 00830",
+        address: "Atarsua, Siwan, Bihar, India, 841227",
     });
 
     const [social, setSocial] = useState([
@@ -35,9 +35,9 @@ export function Footer() {
                 const data = snap.data();
                 if (data.contact) {
                     setContact({
-                        email: data.contact.email || "info@iaschool.edu",
-                        phone: data.contact.phone || "+91 98765 43210",
-                        address: data.contact.address || "123 Education Lane, Knowledge City, India",
+                        email: data.contact.email || "info@iaschool.edu.in",
+                        phone: data.contact.phone || "+91 84060 00830",
+                        address: data.contact.address || "Atarsua, Siwan, Bihar, India, 841227",
                     });
                 }
                 if (data.social) {
