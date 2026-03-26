@@ -30,8 +30,9 @@ export default function TCLookupPage() {
     const [searched, setSearched] = useState(false);
 
     const handleSearch = async () => {
-        if (!admissionNo.trim() || !studentName.trim() || !dob.trim()) {
-            alert("Please fill in all fields to search.");
+        const filledCount = [admissionNo.trim(), studentName.trim(), dob.trim()].filter(Boolean).length;
+        if (filledCount < 2) {
+            alert("Please fill in at least 2 of the 3 fields to search.");
             return;
         }
         setIsSearching(true);
@@ -53,13 +54,25 @@ export default function TCLookupPage() {
                 const docStatus = (data.status || "").toUpperCase();
                 const hasTc = !!data.tcUrl;
 
-                return (
-                    docAdmNo === admissionNo.trim().toLowerCase() &&
-                    (docFullName.includes(nameLower) || docFirst.includes(nameLower) || docLast.includes(nameLower)) &&
-                    docDob === dob &&
-                    docStatus === "LEFT" &&
-                    hasTc
-                );
+                if (docStatus !== "LEFT" || !hasTc) return false;
+
+                // Check only the fields that were filled in — at least 2 must match
+                let matchCount = 0;
+                if (admissionNo.trim()) {
+                    if (docAdmNo === admissionNo.trim().toLowerCase()) matchCount++;
+                    else return false; // if provided, must match
+                }
+                if (studentName.trim()) {
+                    const nameLower = studentName.trim().toLowerCase();
+                    if (docFullName.includes(nameLower) || docFirst.includes(nameLower) || docLast.includes(nameLower)) matchCount++;
+                    else return false;
+                }
+                if (dob.trim()) {
+                    if (docDob === dob.trim()) matchCount++;
+                    else return false;
+                }
+
+                return matchCount >= 2;
             });
 
             if (match) {
@@ -102,16 +115,17 @@ export default function TCLookupPage() {
                         </div>
                         <h1 className="text-3xl font-bold text-navy">Transfer Certificate</h1>
                         <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                            Enter the student's details below to retrieve their Transfer Certificate (TC).<br />
-                            All three fields are required to verify identity.
+                            Enter any <strong>2 out of 3</strong> fields below to retrieve the Transfer Certificate.
+                            All provided details must exactly match school records.
                         </p>
                     </div>
 
                     {/* Search Card */}
                     <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-200/60 p-8 space-y-5">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                 Admission / Enrollment Number
+                                <span className="text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-normal normal-case">optional if 2 others filled</span>
                             </label>
                             <input
                                 value={admissionNo}
@@ -121,8 +135,9 @@ export default function TCLookupPage() {
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                 Student's Full Name
+                                <span className="text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-normal normal-case">optional if 2 others filled</span>
                             </label>
                             <input
                                 value={studentName}
@@ -132,8 +147,9 @@ export default function TCLookupPage() {
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                 Date of Birth
+                                <span className="text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-normal normal-case">optional if 2 others filled</span>
                             </label>
                             <input
                                 type="date"
@@ -161,8 +177,8 @@ export default function TCLookupPage() {
                             <div>
                                 <p className="font-semibold text-red-800 text-sm">No Transfer Certificate Found</p>
                                 <p className="text-red-600 text-xs mt-1">
-                                    Please check the details entered. The admission number, name, and date of birth must
-                                    exactly match our records. If the issue persists, contact the school office.
+                                    Please check the details entered. The provided fields must exactly match school records.
+                                    If the issue persists, contact the school office.
                                 </p>
                             </div>
                         </div>
