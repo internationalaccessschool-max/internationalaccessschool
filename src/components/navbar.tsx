@@ -82,6 +82,7 @@ export function Navbar() {
         { href: "/admissions", label: "Admissions" },
         { href: "/career", label: "Career" },
         { href: "/gallery", label: "Gallery" },
+        { href: "/tc", label: "View TC" },
         { href: "/contact", label: "Contact" },
     ];
 
@@ -254,6 +255,7 @@ export function Navbar() {
 
                     <Link href="/admissions" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Admissions</Link>
                     <Link href="/gallery" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Gallery</Link>
+                    <Link href="/tc" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">📄 View TC</Link>
                     <Link href="/contact" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Contact</Link>
                     
                     {isInstallable && (
