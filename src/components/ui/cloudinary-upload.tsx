@@ -26,7 +26,8 @@ export type UploadFolder =
     | "admin-docs"
     | "teachers"
     | "mark-sheets"
-    | "applications";
+    | "applications"
+    | "student-tcs";
 
 interface CloudinaryUploadProps {
     folder: UploadFolder;
@@ -49,6 +50,7 @@ const FOLDER_CONFIG: Record<UploadFolder, { icon: string; color: string; label: 
     "teachers": { icon: "👩‍🏫", color: "teal", label: "Teacher Document" },
     "mark-sheets": { icon: "📝", color: "orange", label: "Mark Sheet" },
     "applications": { icon: "📄", color: "cyan", label: "Job Application" },
+    "student-tcs": { icon: "🎓", color: "green", label: "Transfer Certificate" },
 };
 
 const ACCEPT_TYPES = {
