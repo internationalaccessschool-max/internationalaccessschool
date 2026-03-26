@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -18,7 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
-            if (!user || role !== "admin" || user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+            if (!user || role !== "admin") {
                 router.push("/login");
             }
         }
@@ -76,6 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {
             section: "System",
             items: [
+                { href: "/admin/manage-admins", label: "Manage Admins", icon: UserCog },
                 { href: "/admin/supervisors", label: "Supervisors", icon: ShieldCheck },
                 { href: "/admin/accountants", label: "Accountants", icon: Banknote },
                 { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -87,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return <>{children}</>;
     }
 
-    if (loading || !user || role !== "admin" || user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+    if (loading || !user || role !== "admin") {
         return (
             <div className="h-screen w-full flex items-center justify-center bg-gray-50">
                 <Loader2 className="w-8 h-8 animate-spin text-navy" />
