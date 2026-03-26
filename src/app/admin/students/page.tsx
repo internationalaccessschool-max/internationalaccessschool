@@ -14,6 +14,7 @@ import Link from "next/link";
 import { StudentEditModal } from "@/components/student/StudentEditModal";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
+import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
 
 interface Student {
     id: string;
@@ -74,7 +75,7 @@ export default function AdminStudentsPage() {
     // Disable dialog state
     const [disableTarget, setDisableTarget] = useState<Student | null>(null);
     const [isDisabling, setIsDisabling] = useState(false);
-    const [disableForm, setDisableForm] = useState({ lastClass: "", leftYear: "", lastDate: "", branch: "", remarks: "" });
+    const [disableForm, setDisableForm] = useState({ lastClass: "", leftYear: "", lastDate: "", branch: "", remarks: "", tcUrl: "" });
 
     // When opening disable modal, auto-fill from student record
     const openDisableModal = (student: Student) => {
@@ -85,6 +86,7 @@ export default function AdminStudentsPage() {
             lastDate: today,
             branch: safeStr(student.branch) || "",
             remarks: "",
+            tcUrl: "",
         });
         setDisableTarget(student);
     };
@@ -159,6 +161,7 @@ export default function AdminStudentsPage() {
             if (disableForm.lastDate) updatePayload.lastDate = disableForm.lastDate;
             if (disableForm.branch) updatePayload.branch = disableForm.branch;
             if (disableForm.remarks) updatePayload.remarks = disableForm.remarks;
+            if (disableForm.tcUrl) updatePayload.tcUrl = disableForm.tcUrl;
 
             await updateDoc(docRef, updatePayload);
 
@@ -455,6 +458,27 @@ export default function AdminStudentsPage() {
                                 <label className="text-xs font-semibold text-slate-500 block mb-1">Remarks (optional)</label>
                                 <input value={disableForm.remarks} onChange={e => setDisableForm(p => ({ ...p, remarks: e.target.value }))}
                                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="Reason for leaving..." />
+                            </div>
+                            {/* TC Upload */}
+                            <div>
+                                <label className="text-xs font-semibold text-slate-500 block mb-1">Transfer Certificate (TC) — Optional</label>
+                                {disableForm.tcUrl ? (
+                                    <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm">
+                                        <span className="text-emerald-700 font-semibold">✓ TC Uploaded</span>
+                                        <div className="flex gap-2">
+                                            <a href={disableForm.tcUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">View</a>
+                                            <button onClick={() => setDisableForm(p => ({ ...p, tcUrl: "" }))} className="text-xs text-red-500 hover:underline">Remove</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <CloudinaryUpload
+                                        folder="student-tcs"
+                                        subFolder={disableTarget?.admissionNumber || "unknown"}
+                                        acceptedFileTypes="all"
+                                        label="Upload TC (PDF or Image)"
+                                        onUpload={(url) => setDisableForm(p => ({ ...p, tcUrl: url }))}
+                                    />
+                                )}
                             </div>
                         </div>
 
