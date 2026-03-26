@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collectionGroup, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Result, Exam, Subject } from "@/types";
+import { Result, Subject } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +13,10 @@ import { getStudentClassInfo } from "@/lib/utils/studentProfile";
 
 export default function StudentResultsPage() {
     const { user } = useAuth();
-    const [results, setResults] = useState<(Result & { examDetails?: Exam })[]>([]);
+    const [results, setResults] = useState<Result[]>([]);
     const [subjects, setSubjects] = useState<Record<string, Subject>>({});
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedResult, setSelectedResult] = useState<(Result & { examDetails?: Exam }) | null>(null);
+    const [selectedResult, setSelectedResult] = useState<Result | null>(null);
 
     const reportCardRef = useRef<HTMLDivElement>(null);
 
@@ -25,59 +25,34 @@ export default function StudentResultsPage() {
 
         const fetchData = async () => {
             try {
-                // 1. Get student's class & section
-                const { className, section } = await getStudentClassInfo(user.uid);
+                // 1. Get student class for subject lookup
+                const { className } = await getStudentClassInfo(user.uid);
 
-                // 2. Fetch all published exams
-                const examsSnap = await getDocs(collection(db, "exams"));
-                const publishedExams = examsSnap.docs
-                    .map(d => ({ id: d.id, ...d.data() }) as Exam)
-                    .filter(e =>
-                        e.status === "Published" &&
-                        (e.classesApplicable ?? []).includes(className)
-                    );
+                // 2. Fetch ALL results for this student DIRECTLY via collectionGroup.
+                //    This works even when the parent exam document has been deleted.
+                const resultsSnap = await getDocs(
+                    query(collectionGroup(db, "students"), where("studentId", "==", user.uid))
+                );
 
-                const studentResults: (Result & { examDetails?: Exam })[] = [];
-
-                for (const exam of publishedExams) {
-                    let resultData: Result | null = null;
-
-                    // Try NEW nested path first
-                    if (section) {
-                        const newRef = doc(
-                            db, "results", exam.id!, "classes", className,
-                            "sections", section, "students", user.uid
-                        );
-                        const newSnap = await getDoc(newRef);
-                        if (newSnap.exists()) {
-                            resultData = { id: newSnap.id, ...newSnap.data() } as Result;
-                        }
+                const studentResults: Result[] = [];
+                resultsSnap.forEach(d => {
+                    const data = d.data() as Result;
+                    // Guard: only include proper result docs
+                    if (data.studentId === user.uid && data.marks && data.totalObtained !== undefined) {
+                        studentResults.push({ ...data, id: d.id });
                     }
+                });
 
-                    // Fallback: old composite ID path
-                    if (!resultData) {
-                        const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
-                        const oldSnap = await getDoc(oldRef);
-                        if (oldSnap.exists()) {
-                            resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
-                        }
-                    }
-
-                    if (resultData) {
-                        studentResults.push({ ...resultData, examDetails: exam });
-                    }
-                }
-
-                // Sort by exam end date descending
+                // Sort newest first
                 studentResults.sort((a, b) => {
-                    const dateA = a.examDetails ? new Date(a.examDetails.endDate).getTime() : 0;
-                    const dateB = b.examDetails ? new Date(b.examDetails.endDate).getTime() : 0;
+                    const dateA = a.examEndDate ? new Date(a.examEndDate).getTime() : (a.updatedAt || 0);
+                    const dateB = b.examEndDate ? new Date(b.examEndDate).getTime() : (b.updatedAt || 0);
                     return dateB - dateA;
                 });
 
                 setResults(studentResults);
 
-                // Build subject map for this class
+                // 3. Build subject name map from class subjects
                 if (className) {
                     const classSubDoc = await getDoc(doc(db, "classSubjects", className));
                     if (classSubDoc.exists()) {
@@ -99,9 +74,10 @@ export default function StudentResultsPage() {
         fetchData();
     }, [user]);
 
+
     const handleDownloadPDF = () => {
         if (typeof window === "undefined" || !selectedResult) return;
-        const { marks, totalObtained, totalMax, percentage, overallGrade, examDetails } = selectedResult;
+        const { marks, totalObtained, totalMax, percentage, overallGrade, examName, examStartDate, examEndDate } = selectedResult;
         const markEntries = Object.values(marks);
         const studentName = user?.displayName || "Student";
 
@@ -143,11 +119,11 @@ th:not(:first-child){text-align:right;}
 </style></head><body>
 <div class="hdr"><div class="logo">🏫</div>
 <div><div class="school">International Access School</div>
-<div class="exam">${examDetails?.name || "Report Card"}</div></div></div>
+<div class="exam">${examName || "Report Card"}</div></div></div>
 <div class="info">
 <div><label>Student Name</label><span>${studentName}</span></div>
 <div><label>Class</label><span>${selectedResult.classId} – ${selectedResult.sectionId}</span></div>
-<div><label>Period</label><span>${examDetails?.startDate || ""}–${examDetails?.endDate || ""}</span></div>
+<div><label>Period</label><span>${examStartDate || ""}–${examEndDate || ""}</span></div>
 <div><label>Year</label><span>${new Date().getFullYear()}</span></div>
 </div>
 <div class="tbl"><table>
@@ -198,7 +174,7 @@ th:not(:first-child){text-align:right;}
     }
 
     if (selectedResult) {
-        const { marks, totalObtained, totalMax, percentage, overallGrade, examDetails } = selectedResult;
+        const { marks, totalObtained, totalMax, percentage, overallGrade, examName, examStartDate } = selectedResult;
         const markEntries = Object.values(marks);
 
         return (
@@ -222,7 +198,7 @@ th:not(:first-child){text-align:right;}
                                 </div>
                                 <div>
                                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-2 shadow-sm">International Access School</h1>
-                                    <p className="text-blue-100/80 font-medium text-lg tracking-wide uppercase">{examDetails?.name || "Official Report Card"}</p>
+                                    <p className="text-blue-100/80 font-medium text-lg tracking-wide uppercase">{examName || "Official Report Card"}</p>
                                 </div>
                             </div>
                         </div>
@@ -241,7 +217,7 @@ th:not(:first-child){text-align:right;}
                                     <div className="space-y-1">
                                         <p className="text-[11px] font-bold tracking-widest text-[#1a2e4c]/50 uppercase">Date of Exam</p>
                                         <p className="font-semibold text-lg text-[#1a2e4c]">
-                                            {examDetails?.startDate ? new Date(examDetails.startDate).toLocaleDateString() : "N/A"}
+                                            {examStartDate ? new Date(examStartDate).toLocaleDateString() : "N/A"}
                                         </p>
                                     </div>
                                     <div className="space-y-1">
@@ -356,7 +332,7 @@ th:not(:first-child){text-align:right;}
                                     {res.percentage}%
                                 </Badge>
                             </div>
-                            <CardTitle className="text-xl line-clamp-1">{res.examDetails?.name || "Exam Term"}</CardTitle>
+                            <CardTitle className="text-xl line-clamp-1">{res.examName || res.examId}</CardTitle>
                             <CardDescription>
                                 {res.overallGrade} Grade • Class {res.classId}-{res.sectionId}
                             </CardDescription>
@@ -364,7 +340,7 @@ th:not(:first-child){text-align:right;}
                         <CardContent>
                             <div className="flex items-center justify-between text-sm pt-4 border-t border-dashed border-gray-200">
                                 <span className="text-muted-foreground">
-                                    {res.examDetails?.startDate ? new Date(res.examDetails.startDate).toLocaleDateString() : "View details"}
+                                    {res.examStartDate ? new Date(res.examStartDate).toLocaleDateString() : "View details"}
                                 </span>
                                 <span className="text-primary font-medium flex items-center group-hover:translate-x-1 transition-transform">
                                     View Report <ChevronRight className="ml-1 h-4 w-4" />
