@@ -42,7 +42,7 @@ export function NewsTicker() {
 
     // Duplicate notices for seamless loop
     const displayNotices = [...notices, ...notices];
-    const speed = Math.max(25, notices.length * 12);
+    const speed = Math.max(15, notices.length * 6);
 
     return (
         <div className="bg-navy text-white relative z-50 h-9 sm:h-10 flex items-center overflow-hidden">
