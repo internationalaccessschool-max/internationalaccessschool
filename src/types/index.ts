@@ -99,6 +99,10 @@ export interface Result {
     id?: string;
     studentId: string;
     examId: string;
+    /** Snapshotted from exam at save time — survives exam deletion */
+    examName?: string;
+    examStartDate?: string;
+    examEndDate?: string;
     classId: string;
     sectionId: string; // the section of the student
     marks: Record<string, SubjectMark>; // Map of subjectId -> SubjectMark
