@@ -249,6 +249,11 @@ export default function BulkMarksEntryPage() {
                 const resultPayload: Partial<Result> = {
                     studentId: student.id,
                     examId: selectedExamId,
+                    // ── Snapshot exam info so results survive exam deletion ──────
+                    examName: exams.find(e => e.id === selectedExamId)?.name || "",
+                    examStartDate: exams.find(e => e.id === selectedExamId)?.startDate || "",
+                    examEndDate: exams.find(e => e.id === selectedExamId)?.endDate || "",
+                    // ─────────────────────────────────────────────────────────────
                     classId: selectedClass,
                     sectionId: selectedSection,
                     marks: processedMarks,
