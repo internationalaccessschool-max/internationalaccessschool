@@ -27,7 +27,7 @@ import {
     Dialog, DialogContent, DialogDescription, DialogHeader,
     DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck } from "lucide-react";
+import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck, FileText } from "lucide-react";
 
 // Fixed canonical class list — always show NUR, LKG, UKG, 1-12
 const FIXED_CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -327,6 +327,13 @@ export default function AdminExamsPage() {
                                                             ? <><Lock className="h-3 w-3 mr-1" /> Unpublish</>
                                                             : <><Globe className="h-3 w-3 mr-1" /> Publish</>}
                                                     </Button>
+                                                    <Link href={`/admin/exams/${exam.id}/results/view`}>
+                                                        <Button variant="ghost" size="icon"
+                                                            className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                            title="View Generated Results">
+                                                            <FileText className="h-4 w-4" />
+                                                        </Button>
+                                                    </Link>
                                                     <Link href={`/admin/exams/${exam.id}/admit-cards`}>
                                                         <Button variant="ghost" size="icon"
                                                             className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50"
