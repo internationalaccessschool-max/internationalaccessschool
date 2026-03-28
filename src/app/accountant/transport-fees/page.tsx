@@ -369,7 +369,7 @@ export default function AccountantTransportFeesPage() {
                                         feeMonth: `${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
                                         lineItems: [{ label: `Bus Transport Fee — ${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`, amount: receiptRecord.amount }],
                                         totalAmount: receiptRecord.amount,
-                                        paymentMode: receiptRecord.paymentMode
+                                        paymentMode: receiptRecord.paymentMode || "CASH"
                                     });
                                     printReceiptHTML(html, "Transport Fee Receipt");
                                 }}
@@ -430,11 +430,9 @@ export default function AccountantTransportFeesPage() {
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
                                                 Paid Successfully
                                             </span>
-                                            {receiptRecord.paymentMode && (
-                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                                    Via {receiptRecord.paymentMode}
-                                                </span>
-                                            )}
+                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                                Via {receiptRecord.paymentMode || "CASH"}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
