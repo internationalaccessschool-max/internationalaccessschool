@@ -93,7 +93,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
         .join("");
 
     const extraRows = [
-        rollNo ? { label: "Roll / Admission No", value: rollNo } : null,
+        rollNo ? { label: "Admission No", value: rollNo } : null,
         ...extraInfo,
     ]
         .filter(Boolean)
@@ -151,7 +151,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
         <span style="display:inline-block;background:#d1fae5;color:#065f46;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 12px;border-radius:999px;border:1px solid #a7f3d0;">
           Paid Successfully
         </span>
-        ${paymentMode ? `<div style="margin-top:4px;"><span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">VIA ${paymentMode}</span></div>` : ""}
+        <div style="margin-top:4px;"><span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">VIA ${paymentMode || "CASH"}</span></div>
       </div>
     </div>
   </div>
