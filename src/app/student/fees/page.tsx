@@ -26,13 +26,14 @@ interface FeeRecord {
     section?: string;
     breakdown?: {
         tuitionFee?: number;
-        examFee?: number;
-        computerFee?: number;
+        annualFee?: number;
+        admissionFee?: number;
         transportFee?: number;
-        libraryFee?: number;
+        registrationFee?: number;
         sportsFee?: number;
         miscFee?: number;
     };
+    paymentMode?: "CASH" | "UPI";
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -163,10 +164,10 @@ export default function StudentFeesPage() {
         if (!record.breakdown) return [{ label: "School Fee", amount: record.amount }];
         const items = [
             { label: "Tuition Fee", amount: record.breakdown.tuitionFee || 0 },
-            { label: "Examination Fee", amount: record.breakdown.examFee || 0 },
-            { label: "Computer Fee", amount: record.breakdown.computerFee || 0 },
+            { label: "Annual Fee", amount: record.breakdown.annualFee || 0 },
+            { label: "Admission Fee", amount: record.breakdown.admissionFee || 0 },
             { label: "Transport Fee", amount: record.breakdown.transportFee || 0 },
-            { label: "Library Fee", amount: record.breakdown.libraryFee || 0 },
+            { label: "Registration Fee", amount: record.breakdown.registrationFee || 0 },
             { label: "Sports Fee", amount: record.breakdown.sportsFee || 0 },
             { label: "Miscellaneous Fee", amount: record.breakdown.miscFee || 0 },
         ].filter(i => i.amount > 0);
@@ -304,7 +305,11 @@ export default function StudentFeesPage() {
                                         feeMonth: `${MONTHS[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
                                         lineItems: items,
                                         totalAmount: receiptRecord.amount,
+                                        paymentMode: receiptRecord.paymentMode
                                     });
+                                    if(receiptRecord.paymentMode) {
+                                      // Note: we can visually add the Payment Mode in the UI too
+                                    }
                                     printReceiptHTML(html, "School Fee Receipt");
                                 }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
@@ -358,10 +363,17 @@ export default function StudentFeesPage() {
                                         <p className="font-bold text-navy text-base">{MONTHS[(receiptRecord.month || 1) - 1]} {receiptRecord.year}</p>
                                     </div>
                                     <div>
-                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
-                                            Paid Successfully
-                                        </span>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status / Mode</p>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                                Paid Successfully
+                                            </span>
+                                            {receiptRecord.paymentMode && (
+                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                                    Via {receiptRecord.paymentMode}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
