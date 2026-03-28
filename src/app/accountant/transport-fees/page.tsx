@@ -30,6 +30,7 @@ interface TransportFeeRecord {
     paidOn: any;
     receiptNo: string | null;
     parentEmail?: string;
+    paymentMode?: "CASH" | "UPI";
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -54,6 +55,11 @@ export default function AccountantTransportFeesPage() {
     const [filterStatus, setFilterStatus] = useState("all");
     const [filterBus, setFilterBus] = useState("all");
     const [receiptRecord, setReceiptRecord] = useState<TransportFeeRecord | null>(null);
+    
+    // Mark Paid Dialog
+    const [markPaidRecord, setMarkPaidRecord] = useState<TransportFeeRecord | null>(null);
+    const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
+    const [markPaidLoading, setMarkPaidLoading] = useState(false);
 
     const fetchRecords = useCallback(async () => {
         setLoading(true);
@@ -74,21 +80,29 @@ export default function AccountantTransportFeesPage() {
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
-    const handleMarkPaid = async (record: TransportFeeRecord) => {
-        setActionLoading(record.id);
+    const handleConfirmMarkPaid = async () => {
+        if (!markPaidRecord) return;
+        setMarkPaidLoading(true);
         try {
             const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
-            const receiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-            await updateDoc(doc(db, record.path), { status: "paid", paidOn: new Date(), receiptNo, markedBy: user?.uid || "" });
-            setRecords(prev => prev.map(r => r.id === record.id
-                ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } }
+            const receiptNo = `TRP-${markPaidRecord.year}-${String(markPaidRecord.month).padStart(2, "0")}-${seq}`;
+            await updateDoc(doc(db, markPaidRecord.path), { 
+                status: "paid", 
+                paidOn: new Date(), 
+                receiptNo, 
+                paymentMode,
+                markedBy: user?.uid || "" 
+            });
+            setRecords(prev => prev.map(r => r.id === markPaidRecord.id
+                ? { ...r, status: "paid", receiptNo, paymentMode, paidOn: { toDate: () => new Date() } }
                 : r
             ));
             toast.success(`Marked paid — Receipt: ${receiptNo}`);
+            setMarkPaidRecord(null);
         } catch {
             toast.error("Failed to mark as paid");
         } finally {
-            setActionLoading(null);
+            setMarkPaidLoading(false);
         }
     };
 
@@ -292,10 +306,9 @@ export default function AccountantTransportFeesPage() {
                                             <td className="px-4 py-3">
                                                 <div className="flex gap-1.5 flex-wrap">
                                                     {record.status !== "paid" && (
-                                                        <button onClick={() => handleMarkPaid(record)}
-                                                            disabled={actionLoading === record.id}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors">
-                                                            {actionLoading === record.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                                        <button onClick={() => setMarkPaidRecord(record)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
+                                                            <CheckCircle2 className="w-3 h-3" />
                                                             Mark Paid
                                                         </button>
                                                     )}
@@ -356,6 +369,7 @@ export default function AccountantTransportFeesPage() {
                                         feeMonth: `${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
                                         lineItems: [{ label: `Bus Transport Fee — ${MONTHS_FULL[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`, amount: receiptRecord.amount }],
                                         totalAmount: receiptRecord.amount,
+                                        paymentMode: receiptRecord.paymentMode
                                     });
                                     printReceiptHTML(html, "Transport Fee Receipt");
                                 }}
@@ -411,10 +425,17 @@ export default function AccountantTransportFeesPage() {
                                         <p className="font-bold text-navy text-base">{MONTHS_FULL[(receiptRecord.month || 1) - 1]} {receiptRecord.year}</p>
                                     </div>
                                     <div>
-                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
-                                            Paid Successfully
-                                        </span>
+                                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status / Mode</p>
+                                        <div className="flex flex-col gap-1 items-end">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                                Paid Successfully
+                                            </span>
+                                            {receiptRecord.paymentMode && (
+                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                                    Via {receiptRecord.paymentMode}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -455,6 +476,54 @@ export default function AccountantTransportFeesPage() {
                                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Authorized Signatory</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Mark Paid Dialog */}
+            {markPaidRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-lg font-bold text-navy">Mark Fee as Paid</h3>
+                                <p className="text-sm text-gray-400 mt-0.5">{markPaidRecord.studentName}</p>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Total Amount</span>
+                                <span className="font-bold text-navy">₹{markPaidRecord.amount.toLocaleString()}</span>
+                            </div>
+
+                            <div className="border-t border-gray-100 pt-4">
+                                <p className="text-sm font-semibold text-gray-700 mb-3">Payment Mode</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className={`flex justify-center items-center py-2.5 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all ${paymentMode === "CASH" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                        <input type="radio" name="paymentMode" value="CASH" checked={paymentMode === "CASH"} onChange={() => setPaymentMode("CASH")} className="hidden"/>
+                                        💵 Cash
+                                    </label>
+                                    <label className={`flex justify-center items-center py-2.5 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all ${paymentMode === "UPI" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                        <input type="radio" name="paymentMode" value="UPI" checked={paymentMode === "UPI"} onChange={() => setPaymentMode("UPI")} className="hidden"/>
+                                        📱 UPI
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button onClick={() => setMarkPaidRecord(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmMarkPaid}
+                                disabled={markPaidLoading}
+                                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {markPaidLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Confirm
+                            </button>
                         </div>
                     </div>
                 </div>
