@@ -305,7 +305,7 @@ export default function StudentFeesPage() {
                                         feeMonth: `${MONTHS[(receiptRecord.month || 1) - 1]} ${receiptRecord.year}`,
                                         lineItems: items,
                                         totalAmount: receiptRecord.amount,
-                                        paymentMode: receiptRecord.paymentMode
+                                        paymentMode: receiptRecord.paymentMode || "CASH"
                                     });
                                     if(receiptRecord.paymentMode) {
                                       // Note: we can visually add the Payment Mode in the UI too
@@ -346,7 +346,7 @@ export default function StudentFeesPage() {
                                     </div>
                                     {(receiptRecord.rollNo || studentRoll) && (
                                         <div>
-                                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Roll / Admission No</p>
+                                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Admission No</p>
                                             <p className="font-semibold text-gray-800">{receiptRecord.rollNo || studentRoll}</p>
                                         </div>
                                     )}
@@ -368,11 +368,9 @@ export default function StudentFeesPage() {
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
                                                 Paid Successfully
                                             </span>
-                                            {receiptRecord.paymentMode && (
-                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                                    Via {receiptRecord.paymentMode}
-                                                </span>
-                                            )}
+                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                                Via {receiptRecord.paymentMode || "CASH"}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
