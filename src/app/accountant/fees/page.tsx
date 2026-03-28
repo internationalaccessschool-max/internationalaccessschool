@@ -39,12 +39,13 @@ interface FeeRecord {
     receiptType?: "school" | "transport"; // used to select which receipt to show
     breakdown?: {
         tuitionFee?: number;
-        examFee?: number;
-        computerFee?: number;
-        libraryFee?: number;
+        annualFee?: number;
+        admissionFee?: number;
+        registrationFee?: number;
         sportsFee?: number;
         miscFee?: number;
     };
+    paymentMode?: "CASH" | "UPI";
 }
 
 type MarkPaidType = "school" | "transport" | "both";
@@ -67,6 +68,7 @@ export default function ManageFeesPage() {
     // Mark Paid Dialog
     const [markPaidRecord, setMarkPaidRecord] = useState<FeeRecord | null>(null);
     const [markPaidType, setMarkPaidType] = useState<MarkPaidType>("school");
+    const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
     const [markPaidLoading, setMarkPaidLoading] = useState(false);
 
     // Filters
@@ -206,6 +208,7 @@ export default function ManageFeesPage() {
                     status: "paid",
                     paidOn: new Date(),
                     receiptNo,
+                    paymentMode,
                     markedBy: user?.uid || "",
                 });
                 setRecords(prev => prev.map(r =>
@@ -232,6 +235,7 @@ export default function ManageFeesPage() {
                     status: "paid",
                     paidOn: new Date(),
                     receiptNo: transportReceiptNo,
+                    paymentMode,
                     parentEmail: record.parentEmail || "",
                     markedBy: user?.uid || "",
                 }, { merge: true });
@@ -707,8 +711,6 @@ export default function ManageFeesPage() {
                                         value={opt.value}
                                         checked={markPaidType === opt.value}
                                         onChange={() => !opt.disabled && setMarkPaidType(opt.value)}
-                                        disabled={opt.disabled}
-                                        className="accent-emerald-600"
                                     />
                                     <opt.icon className={`w-5 h-5 shrink-0 ${markPaidType === opt.value ? "text-emerald-600" : "text-gray-400"}`} />
                                     <div className="flex-1">
@@ -717,6 +719,20 @@ export default function ManageFeesPage() {
                                     </div>
                                 </label>
                             ))}
+                            
+                            <div className="pt-3 mt-3 border-t border-gray-100">
+                                <p className="text-sm font-semibold text-gray-700 mb-3">Payment Mode</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className={`flex justify-center items-center py-2.5 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all ${paymentMode === "CASH" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                        <input type="radio" name="paymentMode" value="CASH" checked={paymentMode === "CASH"} onChange={() => setPaymentMode("CASH")} className="hidden"/>
+                                        💵 Cash
+                                    </label>
+                                    <label className={`flex justify-center items-center py-2.5 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all ${paymentMode === "UPI" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                        <input type="radio" name="paymentMode" value="UPI" checked={paymentMode === "UPI"} onChange={() => setPaymentMode("UPI")} className="hidden"/>
+                                        📱 UPI
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Actions */}
