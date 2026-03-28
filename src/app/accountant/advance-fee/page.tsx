@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
     collection, collectionGroup, getDocs, doc, getDoc, setDoc
 } from "firebase/firestore";
@@ -91,11 +91,62 @@ export default function AdvanceFeePage() {
 
     // ── Step 1: Student search ─────────────────────────────────────────────
     const [searchQuery, setSearchQuery]     = useState("");
-    const [searchResults, setSearchResults] = useState<StudentProfile[]>([]);
-    const [searching, setSearching]         = useState(false);
+    const [allStudents, setAllStudents]     = useState<StudentProfile[]>([]);
+    const [studentsLoading, setStudentsLoading] = useState(true);
     const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
     const [feeStructure, setFeeStructure]   = useState<FeeStructure | null>(null);
     const [loadingStructure, setLoadingStructure] = useState(false);
+
+    // ── Fetch all students on mount ───────────────────────────────────────
+    useEffect(() => {
+        const fetchAllProfiles = async () => {
+            setStudentsLoading(true);
+            try {
+                const snap = await getDocs(collectionGroup(db, "profiles"));
+                const results: StudentProfile[] = [];
+                snap.docs.forEach(d => {
+                    const data = d.data() as any;
+                    const rawClass = (data.className || data.currentClass || data.class || "").toString();
+                    const classId  = rawClass.replace(/^class\s*/i, "").trim();
+                    const fullName = (
+                        data.name || data.fullName ||
+                        `${data.firstName || ""} ${data.middleName || ""} ${data.lastName || ""}`.replace(/\s+/g, " ").trim() ||
+                        "Unknown"
+                    );
+                    const rollNo = data.rollNo || data.admissionNumber || "";
+                    results.push({
+                        id: d.id,
+                        studentName: fullName,
+                        rollNo,
+                        class: classId,
+                        section: data.section || "",
+                        parentEmail: data.parentEmail || data.fatherEmail || data.email || "",
+                        parentPhone: data.mobileNo || data.fatherMobile || data.phone || "",
+                        busId: data.busId || "",
+                        busNumber: data.busNumber || "",
+                        routeDetails: data.routeDetails || "",
+                        transportFee: data.transportFee || 0,
+                    });
+                });
+                results.sort((a, b) => a.studentName.localeCompare(b.studentName));
+                setAllStudents(results);
+            } catch {
+                toast.error("Failed to load students");
+            } finally {
+                setStudentsLoading(false);
+            }
+        };
+        fetchAllProfiles();
+    }, []);
+
+    const filteredStudents = allStudents.filter(s => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return s.studentName.toLowerCase().includes(q) || 
+               s.rollNo.toLowerCase().includes(q) || 
+               s.class.includes(q) ||
+               (s.busNumber || "").toLowerCase().includes(q);
+    });
 
     // ── Step 2: Month selection ────────────────────────────────────────────
     const [selectedMonths, setSelectedMonths] = useState<{ month: number; year: number }[]>([]);
@@ -115,58 +166,9 @@ export default function AdvanceFeePage() {
     // ── Receipt modal ──────────────────────────────────────────────────────
     const [showReceipt, setShowReceipt] = useState(false);
 
-    // ─── Search students ───────────────────────────────────────────────────
-    const handleSearch = useCallback(async () => {
-        const q = searchQuery.trim().toLowerCase();
-        if (!q) return;
-        setSearching(true);
-        setSearchResults([]);
-        try {
-            const snap = await getDocs(collectionGroup(db, "profiles"));
-            const results: StudentProfile[] = [];
-            snap.docs.forEach(d => {
-                const data = d.data() as any;
-                const rawClass = (data.className || data.currentClass || data.class || "").toString();
-                const classId  = rawClass.replace(/^class\s*/i, "").trim();
-                const fullName = (
-                    data.name || data.fullName ||
-                    `${data.firstName || ""} ${data.middleName || ""} ${data.lastName || ""}`.replace(/\s+/g, " ").trim() ||
-                    "Unknown"
-                );
-                const rollNo = data.rollNo || data.admissionNumber || "";
-                if (
-                    fullName.toLowerCase().includes(q) ||
-                    rollNo.toLowerCase().includes(q) ||
-                    classId.includes(q)
-                ) {
-                    results.push({
-                        id: d.id,
-                        studentName: fullName,
-                        rollNo,
-                        class: classId,
-                        section: data.section || "",
-                        parentEmail: data.parentEmail || data.fatherEmail || data.email || "",
-                        parentPhone: data.mobileNo || data.fatherMobile || data.phone || "",
-                        busId: data.busId || "",
-                        busNumber: data.busNumber || "",
-                        routeDetails: data.routeDetails || "",
-                        transportFee: data.transportFee || 0,
-                    });
-                }
-            });
-            results.sort((a, b) => a.studentName.localeCompare(b.studentName));
-            setSearchResults(results.slice(0, 30));
-        } catch {
-            toast.error("Failed to search students");
-        } finally {
-            setSearching(false);
-        }
-    }, [searchQuery]);
-
     // ─── Select student → fetch fee structure ─────────────────────────────
     const handleSelectStudent = async (student: StudentProfile) => {
         setSelectedStudent(student);
-        setSearchResults([]);
         setSelectedMonths([]);
         setMonthRows([]);
         setPaidResult(null);
@@ -443,7 +445,6 @@ export default function AdvanceFeePage() {
         setMonthRows([]);
         setPaidResult(null);
         setSearchQuery("");
-        setSearchResults([]);
     };
 
     // ─── UI helpers ───────────────────────────────────────────────────────
@@ -496,7 +497,7 @@ export default function AdvanceFeePage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
                     <div>
                         <h2 className="font-bold text-navy text-lg">Search Student</h2>
-                        <p className="text-xs text-gray-400 mt-0.5">Search by student name, admission number, or class</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Search by name, roll no, bus, or class</p>
                     </div>
 
                     <div className="flex gap-3">
@@ -505,51 +506,51 @@ export default function AdvanceFeePage() {
                             <input
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                onKeyDown={e => e.key === "Enter" && handleSearch()}
-                                placeholder="Search by name, roll no, or class…"
+                                placeholder="Search by name, roll no, class, or bus…"
                                 className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy focus:ring-1 focus:ring-navy outline-none"
                             />
                         </div>
-                        <button
-                            onClick={handleSearch}
-                            disabled={searching || !searchQuery.trim()}
-                            className="px-5 py-3 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
-                            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                            Search
-                        </button>
                     </div>
 
                     {/* Results */}
-                    {searchResults.length > 0 && (
-                        <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50">
-                            {searchResults.map(student => (
+                    {studentsLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-navy mb-3" />
+                            <p className="text-sm text-gray-500 font-medium">Loading students...</p>
+                        </div>
+                    ) : filteredStudents.length > 0 ? (
+                        <div className="border border-gray-100 rounded-xl overflow-y-auto max-h-[450px] divide-y divide-gray-50 mb-2">
+                            {filteredStudents.map(student => (
                                 <button
                                     key={student.id}
                                     onClick={() => handleSelectStudent(student)}
-                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-blue-50/40 transition-colors text-left">
-                                    <div className="w-9 h-9 rounded-xl bg-navy/10 flex items-center justify-center shrink-0">
-                                        <User className="w-4 h-4 text-navy" />
+                                    className="w-full flex sm:items-center gap-4 px-5 py-4 hover:bg-emerald-50/50 transition-colors text-left group">
+                                    <div className="w-10 h-10 rounded-xl bg-navy/5 flex items-center justify-center shrink-0 group-hover:bg-emerald-100 transition-colors hidden sm:flex">
+                                        <User className="w-5 h-5 text-navy group-hover:text-emerald-700 transition-colors" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="font-semibold text-navy text-sm">{student.studentName}</div>
-                                        <div className="text-xs text-gray-400">
-                                            Class {student.class}{student.section ? ` - ${student.section}` : ""}
-                                            {student.rollNo && ` · Adm: ${student.rollNo}`}
+                                        <div className="font-bold text-navy text-[15px]">{student.studentName}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                            <span><strong className="text-gray-400 font-medium">Class:</strong> {student.class}{student.section ? ` - ${student.section}` : ""}</span>
+                                            {student.rollNo && <span><strong className="text-gray-400 font-medium">Adm No:</strong> {student.rollNo}</span>}
                                         </div>
                                     </div>
                                     {student.busId && (
-                                        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">
-                                            <Bus className="w-3 h-3" /> Bus
+                                        <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hidden sm:inline-flex">
+                                            <Bus className="w-3.5 h-3.5" /> Bus {student.busNumber}
                                         </span>
                                     )}
+                                    <div className="shrink-0 text-emerald-600 border border-emerald-200 bg-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm group-hover:bg-emerald-50 transition-colors">
+                                        Select
+                                    </div>
                                 </button>
                             ))}
                         </div>
-                    )}
-
-                    {searching && (
-                        <div className="flex items-center justify-center py-6">
-                            <Loader2 className="w-6 h-6 animate-spin text-navy" />
+                    ) : (
+                        <div className="text-center py-12 text-gray-400 bg-gray-50/50 rounded-xl border border-gray-100 border-dashed">
+                            <User className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                            <p className="text-sm font-medium text-gray-500">No students found</p>
+                            <p className="text-xs mt-1">Try adjusting your search query</p>
                         </div>
                     )}
                 </div>
