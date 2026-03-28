@@ -4,52 +4,151 @@
             "collectionGroup": "profiles",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                {
-                    "fieldPath": "status",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "admissionNumber",
-                    "order": "ASCENDING"
-                }
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "admissionNumber", "order": "ASCENDING" }
             ]
         },
         {
             "collectionGroup": "profiles",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                {
-                    "fieldPath": "className",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "section",
-                    "order": "ASCENDING"
-                }
+                { "fieldPath": "className", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" }
             ]
         },
         {
             "collectionGroup": "profiles",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                {
-                    "fieldPath": "currentClass",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "section",
-                    "order": "ASCENDING"
-                }
+                { "fieldPath": "currentClass", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "profiles",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "className", "order": "ASCENDING" }
             ]
         },
         {
             "collectionGroup": "admitCards",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                {
-                    "fieldPath": "studentId",
-                    "order": "ASCENDING"
-                }
+                { "fieldPath": "studentId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "students",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "studentId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "notices",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "isActive", "order": "ASCENDING" },
+                { "fieldPath": "priority", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "homework",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "teacherId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "homework",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "className", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "homework",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "className", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "date", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "admission_requests",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "submittedAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "exams",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "startDate", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "exams",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "results",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "studentId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "results",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "studentId", "order": "ASCENDING" },
+                { "fieldPath": "examId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "users",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "role", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "teachers",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "email", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
             ]
         }
     ],
