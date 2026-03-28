@@ -28,9 +28,9 @@ const CLASS_LIST = [
 interface FeeStructure {
     monthly: number;
     tuitionFee: number;
-    examFee: number;
-    computerFee: number;
-    libraryFee: number;
+    annualFee: number;
+    admissionFee: number;
+    registrationFee: number;
     sportsFee: number;
     miscFee: number;
     dueDay: number;
@@ -49,7 +49,7 @@ export default function FeeStructurePage() {
                     const feeDoc = await getDoc(doc(db, "fees", "structure", "classes", cls.id));
                     structureMap[cls.id] = feeDoc.exists()
                         ? (feeDoc.data() as FeeStructure)
-                        : { monthly: 0, tuitionFee: 0, examFee: 0, computerFee: 0, libraryFee: 0, sportsFee: 0, miscFee: 0, dueDay: 10 };
+                        : { monthly: 0, tuitionFee: 0, annualFee: 0, admissionFee: 0, registrationFee: 0, sportsFee: 0, miscFee: 0, dueDay: 10 };
                 }
                 setStructure(structureMap);
             } catch (err) {
@@ -68,9 +68,9 @@ export default function FeeStructurePage() {
             await setDoc(doc(db, "fees", "structure", "classes", classId), {
                 monthly: structure[classId]?.monthly || 0,
                 tuitionFee: structure[classId]?.tuitionFee || 0,
-                examFee: structure[classId]?.examFee || 0,
-                computerFee: structure[classId]?.computerFee || 0,
-                libraryFee: structure[classId]?.libraryFee || 0,
+                annualFee: structure[classId]?.annualFee || 0,
+                admissionFee: structure[classId]?.admissionFee || 0,
+                registrationFee: structure[classId]?.registrationFee || 0,
                 sportsFee: structure[classId]?.sportsFee || 0,
                 miscFee: structure[classId]?.miscFee || 0,
                 dueDay: structure[classId]?.dueDay || 10,
@@ -92,9 +92,9 @@ export default function FeeStructurePage() {
             if (field !== "dueDay" && field !== "monthly") {
                 classStructure.monthly =
                     (classStructure.tuitionFee || 0) +
-                    (classStructure.examFee || 0) +
-                    (classStructure.computerFee || 0) +
-                    (classStructure.libraryFee || 0) +
+                    (classStructure.annualFee || 0) +
+                    (classStructure.admissionFee || 0) +
+                    (classStructure.registrationFee || 0) +
                     (classStructure.sportsFee || 0) +
                     (classStructure.miscFee || 0);
             }
@@ -159,9 +159,9 @@ export default function FeeStructurePage() {
                         <div className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
                             <div className="text-left">Class</div>
                             <div>Tuition</div>
-                            <div>Exam</div>
-                            <div>Computer</div>
-                            <div>Library</div>
+                            <div>Annual</div>
+                            <div>Admission</div>
+                            <div>Registration</div>
                             <div>Sports</div>
                             <div>Misc</div>
                             <div className="text-navy">Total (₹)</div>
@@ -173,7 +173,7 @@ export default function FeeStructurePage() {
                             <div key={cls.id} className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
                                 <div className="font-semibold text-navy text-sm">{cls.name}</div>
 
-                                {['tuitionFee', 'examFee', 'computerFee', 'libraryFee', 'sportsFee', 'miscFee'].map(feeKey => (
+                                {['tuitionFee', 'annualFee', 'admissionFee', 'registrationFee', 'sportsFee', 'miscFee'].map(feeKey => (
                                     <div key={feeKey}>
                                         <input
                                             type="number"
