@@ -1,0 +1,979 @@
+"use client";
+
+import { useState, useCallback, useRef } from "react";
+import {
+    collection, collectionGroup, getDocs, doc, getDoc, setDoc
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
+import {
+    Search, Loader2, X, CheckCircle2, CreditCard,
+    School, Bus, User, ChevronDown, ChevronUp, AlertCircle,
+    Printer, RefreshCw, Calendar
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StudentProfile {
+    id: string;
+    studentName: string;
+    rollNo: string;
+    class: string;          // normalised classId e.g. "7"
+    section: string;
+    parentEmail: string;
+    parentPhone: string;
+    busId?: string;
+    busNumber?: string;
+    routeDetails?: string;
+    transportFee?: number;  // from student profile if stored
+}
+
+interface FeeStructure {
+    monthly: number;
+    dueDay: number;
+    tuitionFee: number;
+    annualFee: number;
+    admissionFee: number;
+    registrationFee: number;
+    sportsFee: number;
+    miscFee: number;
+    transportFee: number;
+}
+
+// Per-month editable fee breakdown
+interface MonthFeeRow {
+    month: number;   // 1–12
+    year: number;
+    // School fee breakdown — each editable
+    tuitionFee: number;
+    annualFee: number;
+    admissionFee: number;
+    registrationFee: number;
+    sportsFee: number;
+    miscFee: number;
+    // Transport
+    transportFee: number;   // 0 if school-only
+    // Derived
+    schoolTotal: number;
+    grandTotal: number;
+    // Status from Firestore (pre-existing)
+    schoolAlreadyPaid: boolean;
+    transportAlreadyPaid: boolean;
+}
+
+type FeeType = "school" | "transport" | "both";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_FULL  = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS        = Array.from({ length: 2050 - 2024 + 1 }, (_, i) => 2024 + i);
+const CURRENT_YEAR = new Date().getFullYear();
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function genSchoolReceiptNo(year: number, month: number) {
+    const seq = Math.floor(Math.random() * 900000) + 100000;
+    return `ADV-${year}-${String(month).padStart(2, "0")}-${seq}`;
+}
+
+function genTransportReceiptNo(year: number, month: number) {
+    const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `TADV-${year}-${String(month).padStart(2, "0")}-${seq}`;
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function AdvanceFeePage() {
+    const { user } = useAuth();
+
+    // ── Step 1: Student search ─────────────────────────────────────────────
+    const [searchQuery, setSearchQuery]     = useState("");
+    const [searchResults, setSearchResults] = useState<StudentProfile[]>([]);
+    const [searching, setSearching]         = useState(false);
+    const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
+    const [feeStructure, setFeeStructure]   = useState<FeeStructure | null>(null);
+    const [loadingStructure, setLoadingStructure] = useState(false);
+
+    // ── Step 2: Month selection ────────────────────────────────────────────
+    const [selectedMonths, setSelectedMonths] = useState<{ month: number; year: number }[]>([]);
+    const [monthYear, setMonthYear] = useState(CURRENT_YEAR);  // shared year for month picker
+
+    // ── Step 3: Fee type + editable rows ──────────────────────────────────
+    const [feeType, setFeeType]    = useState<FeeType>("school");
+    const [monthRows, setMonthRows] = useState<MonthFeeRow[]>([]);
+    const [loadingRows, setLoadingRows] = useState(false);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null); // "month-year"
+
+    // ── Step 4: Payment ───────────────────────────────────────────────────
+    const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
+    const [paying, setPaying]           = useState(false);
+    const [paidResult, setPaidResult]   = useState<{ receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[] } | null>(null);
+
+    // ── Receipt modal ──────────────────────────────────────────────────────
+    const [showReceipt, setShowReceipt] = useState(false);
+
+    // ─── Search students ───────────────────────────────────────────────────
+    const handleSearch = useCallback(async () => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return;
+        setSearching(true);
+        setSearchResults([]);
+        try {
+            const snap = await getDocs(collectionGroup(db, "profiles"));
+            const results: StudentProfile[] = [];
+            snap.docs.forEach(d => {
+                const data = d.data() as any;
+                const rawClass = (data.className || data.currentClass || data.class || "").toString();
+                const classId  = rawClass.replace(/^class\s*/i, "").trim();
+                const fullName = (
+                    data.name || data.fullName ||
+                    `${data.firstName || ""} ${data.middleName || ""} ${data.lastName || ""}`.replace(/\s+/g, " ").trim() ||
+                    "Unknown"
+                );
+                const rollNo = data.rollNo || data.admissionNumber || "";
+                if (
+                    fullName.toLowerCase().includes(q) ||
+                    rollNo.toLowerCase().includes(q) ||
+                    classId.includes(q)
+                ) {
+                    results.push({
+                        id: d.id,
+                        studentName: fullName,
+                        rollNo,
+                        class: classId,
+                        section: data.section || "",
+                        parentEmail: data.parentEmail || data.fatherEmail || data.email || "",
+                        parentPhone: data.mobileNo || data.fatherMobile || data.phone || "",
+                        busId: data.busId || "",
+                        busNumber: data.busNumber || "",
+                        routeDetails: data.routeDetails || "",
+                        transportFee: data.transportFee || 0,
+                    });
+                }
+            });
+            results.sort((a, b) => a.studentName.localeCompare(b.studentName));
+            setSearchResults(results.slice(0, 30));
+        } catch {
+            toast.error("Failed to search students");
+        } finally {
+            setSearching(false);
+        }
+    }, [searchQuery]);
+
+    // ─── Select student → fetch fee structure ─────────────────────────────
+    const handleSelectStudent = async (student: StudentProfile) => {
+        setSelectedStudent(student);
+        setSearchResults([]);
+        setSelectedMonths([]);
+        setMonthRows([]);
+        setPaidResult(null);
+        setFeeStructure(null);
+
+        if (!student.class) { toast.error("Student has no class assigned"); return; }
+        setLoadingStructure(true);
+        try {
+            const structRef = doc(db, "fees", "structure", "classes", student.class);
+            const structSnap = await getDoc(structRef);
+            if (!structSnap.exists()) {
+                toast.error(`No fee structure found for Class ${student.class}`);
+            } else {
+                setFeeStructure(structSnap.data() as FeeStructure);
+            }
+        } catch {
+            toast.error("Failed to load fee structure");
+        } finally {
+            setLoadingStructure(false);
+        }
+    };
+
+    // ─── Toggle month selection ────────────────────────────────────────────
+    const toggleMonth = (month: number, year: number) => {
+        setSelectedMonths(prev => {
+            const exists = prev.find(m => m.month === month && m.year === year);
+            if (exists) return prev.filter(m => !(m.month === month && m.year === year));
+            return [...prev, { month, year }].sort((a, b) =>
+                a.year !== b.year ? a.year - b.year : a.month - b.month
+            );
+        });
+    };
+
+    // ─── Build editable rows when user proceeds to next step ──────────────
+    const handleBuildRows = async () => {
+        if (!selectedStudent || !feeStructure || selectedMonths.length === 0) return;
+        setLoadingRows(true);
+        try {
+            const rows: MonthFeeRow[] = await Promise.all(
+                selectedMonths.map(async ({ month, year }) => {
+                    // Check if already paid (school)
+                    let schoolAlreadyPaid = false;
+                    let transportAlreadyPaid = false;
+
+                    try {
+                        const recordId = `${selectedStudent.id}_${year}_${String(month).padStart(2, "0")}`;
+                        const schoolRef = doc(db, `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`, recordId);
+                        const schoolSnap = await getDoc(schoolRef);
+                        if (schoolSnap.exists() && schoolSnap.data()?.status === "paid") schoolAlreadyPaid = true;
+                    } catch { /* ignore */ }
+
+                    try {
+                        const trRef = doc(db, "transportFeeRecords", year.toString(), "months", month.toString(), "students", selectedStudent.id);
+                        const trSnap = await getDoc(trRef);
+                        if (trSnap.exists() && trSnap.data()?.status === "paid") transportAlreadyPaid = true;
+                    } catch { /* ignore */ }
+
+                    // Also try fetching student's transport fee from existing transport record
+                    let existingTransportFee = feeStructure.transportFee || 0;
+                    if (selectedStudent.busId) {
+                        try {
+                            // Try to find transport fee from any existing transportFeeRecord for this student
+                            const trRef = doc(db, "transportFeeRecords", year.toString(), "months", month.toString(), "students", selectedStudent.id);
+                            const trSnap = await getDoc(trRef);
+                            if (trSnap.exists() && trSnap.data()?.amount) {
+                                existingTransportFee = trSnap.data().amount;
+                            }
+                        } catch { /* use fallback */ }
+                    }
+
+                    const tFee = (feeType === "transport" || feeType === "both") && selectedStudent.busId
+                        ? existingTransportFee
+                        : 0;
+
+                    const row: MonthFeeRow = {
+                        month,
+                        year,
+                        tuitionFee:      feeStructure.tuitionFee      || 0,
+                        annualFee:       feeStructure.annualFee        || 0,
+                        admissionFee:    feeStructure.admissionFee     || 0,
+                        registrationFee: feeStructure.registrationFee  || 0,
+                        sportsFee:       feeStructure.sportsFee        || 0,
+                        miscFee:         feeStructure.miscFee          || 0,
+                        transportFee:    tFee,
+                        schoolTotal:     0,
+                        grandTotal:      0,
+                        schoolAlreadyPaid,
+                        transportAlreadyPaid,
+                    };
+
+                    row.schoolTotal = row.tuitionFee + row.annualFee + row.admissionFee +
+                        row.registrationFee + row.sportsFee + row.miscFee;
+                    row.grandTotal  = row.schoolTotal + row.transportFee;
+
+                    return row;
+                })
+            );
+            setMonthRows(rows);
+        } catch {
+            toast.error("Failed to load payment details");
+        } finally {
+            setLoadingRows(false);
+        }
+    };
+
+    // ─── Auto-recalculate totals when a row field changes ─────────────────
+    const updateRowField = (
+        idx: number,
+        field: keyof Pick<MonthFeeRow, "tuitionFee" | "annualFee" | "admissionFee" | "registrationFee" | "sportsFee" | "miscFee" | "transportFee">,
+        value: number
+    ) => {
+        setMonthRows(prev => {
+            const rows = [...prev];
+            const row = { ...rows[idx], [field]: value };
+            row.schoolTotal = row.tuitionFee + row.annualFee + row.admissionFee +
+                row.registrationFee + row.sportsFee + row.miscFee;
+            row.grandTotal  = row.schoolTotal + row.transportFee;
+            rows[idx] = row;
+            return rows;
+        });
+    };
+
+    // ─── Grand summary totals ──────────────────────────────────────────────
+    const grandSchoolTotal    = monthRows.filter(r => !r.schoolAlreadyPaid || feeType === "transport").reduce((s, r) => s + (feeType !== "transport" ? r.schoolTotal : 0), 0);
+    const grandTransportTotal = monthRows.filter(r => !r.transportAlreadyPaid).reduce((s, r) => s + r.transportFee, 0);
+    const grandTotal          = grandSchoolTotal + grandTransportTotal;
+
+    // ─── Confirm payment ──────────────────────────────────────────────────
+    const handleConfirmPayment = async () => {
+        if (!selectedStudent || monthRows.length === 0) return;
+        setPaying(true);
+        const paidOn = new Date();
+        const receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[] = [];
+
+        try {
+            for (const row of monthRows) {
+                const { month, year } = row;
+                let schoolReceiptNo: string | undefined;
+                let transportReceiptNo: string | undefined;
+
+                // ── School fee ──────────────────────────────────────────
+                if (feeType !== "transport" && !row.schoolAlreadyPaid && row.schoolTotal > 0) {
+                    schoolReceiptNo = genSchoolReceiptNo(year, month);
+                    const recordId = `${selectedStudent.id}_${year}_${String(month).padStart(2, "0")}`;
+                    const recordRef = doc(
+                        db,
+                        `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`,
+                        recordId
+                    );
+                    const dueDate = new Date(year, month - 1, feeStructure?.dueDay || 10);
+
+                    await setDoc(recordRef, {
+                        studentId:   selectedStudent.id,
+                        studentName: selectedStudent.studentName,
+                        rollNo:      selectedStudent.rollNo,
+                        class:       selectedStudent.class,
+                        section:     selectedStudent.section,
+                        parentEmail: selectedStudent.parentEmail,
+                        parentPhone: selectedStudent.parentPhone,
+                        amount:      row.schoolTotal,
+                        breakdown: {
+                            tuitionFee:      row.tuitionFee,
+                            annualFee:       row.annualFee,
+                            admissionFee:    row.admissionFee,
+                            registrationFee: row.registrationFee,
+                            sportsFee:       row.sportsFee,
+                            miscFee:         row.miscFee,
+                        },
+                        month,
+                        year,
+                        dueDate,
+                        status:      "paid",
+                        paidOn,
+                        receiptNo:   schoolReceiptNo,
+                        paymentMode,
+                        markedBy:    user?.uid || "",
+                        createdAt:   paidOn,
+                        isAdvancePayment: true,
+                    }, { merge: true });
+                }
+
+                // ── Transport fee ───────────────────────────────────────
+                if (feeType !== "school" && !row.transportAlreadyPaid && row.transportFee > 0 && selectedStudent.busId) {
+                    transportReceiptNo = genTransportReceiptNo(year, month);
+                    const trRef = doc(
+                        db,
+                        "transportFeeRecords", year.toString(), "months", month.toString(), "students", selectedStudent.id
+                    );
+                    const dueDate = new Date(year, month - 1, feeStructure?.dueDay || 10);
+
+                    await setDoc(trRef, {
+                        studentId:    selectedStudent.id,
+                        studentName:  selectedStudent.studentName,
+                        className:    selectedStudent.class,
+                        section:      selectedStudent.section,
+                        busId:        selectedStudent.busId || "BUS",
+                        busNumber:    selectedStudent.busNumber || "—",
+                        routeDetails: selectedStudent.routeDetails || "",
+                        amount:       row.transportFee,
+                        month,
+                        year,
+                        dueDate,
+                        status:      "paid",
+                        paidOn,
+                        receiptNo:   transportReceiptNo,
+                        paymentMode,
+                        parentEmail: selectedStudent.parentEmail,
+                        markedBy:    user?.uid || "",
+                        isAdvancePayment: true,
+                    }, { merge: true });
+                }
+
+                receipts.push({
+                    month,
+                    year,
+                    schoolReceiptNo,
+                    transportReceiptNo,
+                    schoolTotal:    feeType !== "transport" && !row.schoolAlreadyPaid ? row.schoolTotal : 0,
+                    transportTotal: feeType !== "school"  && !row.transportAlreadyPaid ? row.transportFee : 0,
+                });
+            }
+
+            setPaidResult({ receipts });
+            toast.success(`Advance payment recorded for ${monthRows.length} month${monthRows.length > 1 ? "s" : ""}!`);
+        } catch (err: any) {
+            console.error(err);
+            toast.error("Payment failed: " + (err?.message || "Unknown error"));
+        } finally {
+            setPaying(false);
+        }
+    };
+
+    // ─── Print combined receipt ───────────────────────────────────────────
+    const handlePrintSummaryReceipt = () => {
+        if (!paidResult || !selectedStudent) return;
+
+        const lineItems: { label: string; amount: number }[] = [];
+        paidResult.receipts.forEach(r => {
+            const monthLabel = `${MONTHS_FULL[r.month - 1]} ${r.year}`;
+            if (r.schoolTotal > 0)    lineItems.push({ label: `School Fee — ${monthLabel}`,    amount: r.schoolTotal });
+            if (r.transportTotal > 0) lineItems.push({ label: `Transport Fee — ${monthLabel}`, amount: r.transportTotal });
+        });
+
+        const allSchoolReceipts    = paidResult.receipts.map(r => r.schoolReceiptNo).filter(Boolean).join(", ");
+        const allTransportReceipts = paidResult.receipts.map(r => r.transportReceiptNo).filter(Boolean).join(", ");
+
+        const html = buildReceiptHTML({
+            title:        "Advance Fee Payment Receipt",
+            receiptNo:    allSchoolReceipts || allTransportReceipts || "ADV-MULTI",
+            studentName:  selectedStudent.studentName,
+            classSection: `Class ${selectedStudent.class}${selectedStudent.section ? ` - ${selectedStudent.section}` : ""}`,
+            rollNo:       selectedStudent.rollNo || undefined,
+            extraInfo: [
+                { label: "Payment Type",  value: feeType === "both" ? "School + Transport" : feeType === "transport" ? "Transport Only" : "School Only" },
+                { label: "Months Covered", value: paidResult.receipts.map(r => `${MONTHS_SHORT[r.month - 1]} ${r.year}`).join(", ") },
+                ...(allSchoolReceipts    ? [{ label: "School Receipt Nos",    value: allSchoolReceipts }] : []),
+                ...(allTransportReceipts ? [{ label: "Transport Receipt Nos", value: allTransportReceipts }] : []),
+            ],
+            paidOn:       new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+            feeMonth:     "Multiple Months (Advance)",
+            lineItems,
+            totalAmount:  lineItems.reduce((s, i) => s + i.amount, 0),
+            paymentMode,
+        });
+
+        printReceiptHTML(html, "Advance Fee Receipt");
+    };
+
+    // ─── Reset everything ─────────────────────────────────────────────────
+    const handleReset = () => {
+        setSelectedStudent(null);
+        setFeeStructure(null);
+        setSelectedMonths([]);
+        setMonthRows([]);
+        setPaidResult(null);
+        setSearchQuery("");
+        setSearchResults([]);
+    };
+
+    // ─── UI helpers ───────────────────────────────────────────────────────
+    const step = !selectedStudent ? 1 : paidResult ? 4 : monthRows.length > 0 ? 3 : 2;
+
+    return (
+        <div className="space-y-6">
+            {/* ── Header ── */}
+            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10"
+                    style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.25) 0%, transparent 60%)" }}
+                />
+                <div className="relative z-10 flex items-start justify-between">
+                    <div>
+                        <p className="text-white/50 text-sm font-medium">Finance Portal</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Advance Fee Payment</h1>
+                        <p className="text-white/40 text-sm mt-2">
+                            Collect multiple months' fees in one transaction — school, transport, or both.
+                        </p>
+                    </div>
+                    {selectedStudent && (
+                        <button onClick={handleReset}
+                            className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 text-white text-sm hover:bg-white/20 transition-colors">
+                            <RefreshCw className="w-4 h-4" /> New Payment
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Step Indicator ── */}
+            <div className="flex items-center gap-2">
+                {["Select Student", "Choose Months", "Review & Pay", "Done"].map((label, i) => (
+                    <div key={label} className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`flex items-center gap-2 flex-1 min-w-0 ${i < step - 1 ? "opacity-100" : i === step - 1 ? "opacity-100" : "opacity-40"}`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                                ${i < step - 1 ? "bg-emerald-500 text-white" : i === step - 1 ? "bg-navy text-white" : "bg-gray-200 text-gray-500"}`}>
+                                {i < step - 1 ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                            </div>
+                            <span className="text-xs font-semibold text-gray-600 truncate hidden sm:block">{label}</span>
+                        </div>
+                        {i < 3 && <div className={`h-px flex-1 mx-1 ${i < step - 1 ? "bg-emerald-300" : "bg-gray-200"}`} />}
+                    </div>
+                ))}
+            </div>
+
+            {/* ══════════════════════════════════════════════════════════
+                STEP 1 — Student Search
+            ══════════════════════════════════════════════════════════ */}
+            {!selectedStudent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+                    <div>
+                        <h2 className="font-bold text-navy text-lg">Search Student</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">Search by student name, admission number, or class</p>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <div className="flex-1 relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                onKeyDown={e => e.key === "Enter" && handleSearch()}
+                                placeholder="Search by name, roll no, or class…"
+                                className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy focus:ring-1 focus:ring-navy outline-none"
+                            />
+                        </div>
+                        <button
+                            onClick={handleSearch}
+                            disabled={searching || !searchQuery.trim()}
+                            className="px-5 py-3 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
+                            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                            Search
+                        </button>
+                    </div>
+
+                    {/* Results */}
+                    {searchResults.length > 0 && (
+                        <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50">
+                            {searchResults.map(student => (
+                                <button
+                                    key={student.id}
+                                    onClick={() => handleSelectStudent(student)}
+                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-blue-50/40 transition-colors text-left">
+                                    <div className="w-9 h-9 rounded-xl bg-navy/10 flex items-center justify-center shrink-0">
+                                        <User className="w-4 h-4 text-navy" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-semibold text-navy text-sm">{student.studentName}</div>
+                                        <div className="text-xs text-gray-400">
+                                            Class {student.class}{student.section ? ` - ${student.section}` : ""}
+                                            {student.rollNo && ` · Adm: ${student.rollNo}`}
+                                        </div>
+                                    </div>
+                                    {student.busId && (
+                                        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">
+                                            <Bus className="w-3 h-3" /> Bus
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {searching && (
+                        <div className="flex items-center justify-center py-6">
+                            <Loader2 className="w-6 h-6 animate-spin text-navy" />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                STEP 2 — Select Months
+            ══════════════════════════════════════════════════════════ */}
+            {selectedStudent && !paidResult && monthRows.length === 0 && (
+                <>
+                    {/* Student Card */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-navy/10 flex items-center justify-center shrink-0">
+                            <User className="w-6 h-6 text-navy" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="font-bold text-navy text-lg">{selectedStudent.studentName}</div>
+                            <div className="text-sm text-gray-500">
+                                Class {selectedStudent.class}{selectedStudent.section ? ` - ${selectedStudent.section}` : ""}
+                                {selectedStudent.rollNo && ` · Adm No: ${selectedStudent.rollNo}`}
+                            </div>
+                            {selectedStudent.busId && (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full mt-1.5 bg-indigo-50 text-indigo-700">
+                                    <Bus className="w-3 h-3" /> Bus Student · {selectedStudent.busNumber}
+                                </span>
+                            )}
+                        </div>
+                        {loadingStructure && <Loader2 className="w-5 h-5 animate-spin text-gray-400" />}
+                        {feeStructure && (
+                            <div className="text-right text-sm">
+                                <div className="text-xs text-gray-400">Monthly Fee</div>
+                                <div className="font-bold text-navy text-lg">₹{feeStructure.monthly?.toLocaleString()}</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {feeStructure && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                            <div>
+                                <h2 className="font-bold text-navy text-lg">Select Months</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">Select one or more months for advance payment</p>
+                            </div>
+
+                            {/* Fee Type */}
+                            <div>
+                                <p className="text-sm font-semibold text-gray-700 mb-3">Fee Type</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {([
+                                        { value: "school" as FeeType,    label: "School Only",         icon: School,        disabled: false },
+                                        { value: "transport" as FeeType, label: "Transport Only",       icon: Bus,           disabled: !selectedStudent.busId },
+                                        { value: "both" as FeeType,      label: "School + Transport",  icon: CreditCard,    disabled: !selectedStudent.busId },
+                                    ]).map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            disabled={opt.disabled}
+                                            onClick={() => setFeeType(opt.value)}
+                                            className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-sm font-semibold transition-all
+                                                ${opt.disabled ? "opacity-30 cursor-not-allowed border-gray-100 text-gray-400" :
+                                                    feeType === opt.value
+                                                        ? "border-navy bg-navy/5 text-navy"
+                                                        : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                            <opt.icon className="w-5 h-5" />
+                                            <span className="text-xs">{opt.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                {!selectedStudent.busId && (
+                                    <p className="text-xs text-amber-600 mt-2 flex items-center gap-1.5">
+                                        <AlertCircle className="w-3.5 h-3.5" />
+                                        This student has no bus assigned. Only school fee options are available.
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Year + Month Grid */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-sm font-semibold text-gray-700">Select Months</p>
+                                    <select value={monthYear} onChange={e => setMonthYear(Number(e.target.value))}
+                                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-navy outline-none">
+                                        {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                    {MONTHS_SHORT.map((m, i) => {
+                                        const month = i + 1;
+                                        const isSelected = selectedMonths.some(s => s.month === month && s.year === monthYear);
+                                        return (
+                                            <button
+                                                key={m}
+                                                onClick={() => toggleMonth(month, monthYear)}
+                                                className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all
+                                                    ${isSelected
+                                                        ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                                                        : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                                {m}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {selectedMonths.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {selectedMonths.map(({ month, year }) => (
+                                            <span key={`${month}-${year}`}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+                                                <Calendar className="w-3 h-3" />
+                                                {MONTHS_SHORT[month - 1]} {year}
+                                                <button onClick={() => toggleMonth(month, year)}
+                                                    className="ml-0.5 hover:text-rose-500 transition-colors">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={handleBuildRows}
+                                disabled={selectedMonths.length === 0 || loadingRows}
+                                className="w-full py-3 rounded-xl bg-navy text-white font-semibold text-sm hover:bg-navy/90 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                                {loadingRows ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronDown className="w-4 h-4" />}
+                                {loadingRows ? "Loading fee details…" : `Review ${selectedMonths.length} month${selectedMonths.length !== 1 ? "s" : ""} →`}
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                STEP 3 — Review & Editable Fee Rows
+            ══════════════════════════════════════════════════════════ */}
+            {selectedStudent && monthRows.length > 0 && !paidResult && (
+                <>
+                    {/* Student card compact */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-5 py-3.5 flex items-center gap-3">
+                        <User className="w-4 h-4 text-navy shrink-0" />
+                        <span className="font-semibold text-navy text-sm">{selectedStudent.studentName}</span>
+                        <span className="text-xs text-gray-400">Class {selectedStudent.class}{selectedStudent.section ? ` - ${selectedStudent.section}` : ""}</span>
+                        <span className="ml-auto text-xs px-2 py-1 rounded-full bg-navy/10 text-navy font-semibold">
+                            {feeType === "school" ? "School Only" : feeType === "transport" ? "Transport Only" : "School + Transport"}
+                        </span>
+                    </div>
+
+                    {/* Month rows */}
+                    <div className="space-y-3">
+                        {monthRows.map((row, idx) => {
+                            const rowKey = `${row.month}-${row.year}`;
+                            const isExpanded = expandedRow === rowKey;
+                            const schoolSkipped    = row.schoolAlreadyPaid && feeType !== "transport";
+                            const transportSkipped = row.transportAlreadyPaid && feeType !== "school";
+
+                            return (
+                                <div key={rowKey} className={`bg-white rounded-2xl shadow-sm border transition-all
+                                    ${row.schoolAlreadyPaid && row.transportAlreadyPaid ? "border-gray-100 opacity-60" : "border-gray-100"}`}>
+
+                                    {/* Row header */}
+                                    <button
+                                        onClick={() => setExpandedRow(isExpanded ? null : rowKey)}
+                                        className="w-full flex items-center justify-between px-5 py-4 text-left">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-navy/8 flex items-center justify-center shrink-0">
+                                                <Calendar className="w-5 h-5 text-navy" />
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-navy">{MONTHS_FULL[row.month - 1]} {row.year}</div>
+                                                <div className="text-xs text-gray-400 space-x-2">
+                                                    {feeType !== "transport" && (
+                                                        <span>
+                                                            {row.schoolAlreadyPaid
+                                                                ? "School: Already Paid"
+                                                                : `School: ₹${row.schoolTotal.toLocaleString()}`}
+                                                        </span>
+                                                    )}
+                                                    {feeType !== "school" && row.transportFee > 0 && (
+                                                        <span>
+                                                            {row.transportAlreadyPaid
+                                                                ? "Transport: Already Paid"
+                                                                : `Transport: ₹${row.transportFee.toLocaleString()}`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            {(schoolSkipped || transportSkipped) && (
+                                                <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
+                                                    Partially Paid
+                                                </span>
+                                            )}
+                                            <div className="text-right">
+                                                <div className="text-xs text-gray-400">Amount Due</div>
+                                                <div className="font-bold text-navy">
+                                                    ₹{(
+                                                        (!row.schoolAlreadyPaid && feeType !== "transport" ? row.schoolTotal : 0) +
+                                                        (!row.transportAlreadyPaid && feeType !== "school" ? row.transportFee : 0)
+                                                    ).toLocaleString()}
+                                                </div>
+                                            </div>
+                                            {isExpanded
+                                                ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                                                : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                        </div>
+                                    </button>
+
+                                    {/* Expanded breakdown — editable */}
+                                    {isExpanded && (
+                                        <div className="px-5 pb-5 border-t border-gray-50 pt-4">
+                                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                                Fee Breakdown — Edit amounts if needed
+                                            </div>
+
+                                            {/* School breakdown */}
+                                            {feeType !== "transport" && (
+                                                <div className="space-y-2 mb-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <School className="w-3.5 h-3.5 text-navy" />
+                                                        <span className="text-xs font-bold text-navy uppercase tracking-wide">School Fee</span>
+                                                        {row.schoolAlreadyPaid && (
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Already Paid</span>
+                                                        )}
+                                                    </div>
+                                                    {([
+                                                        { field: "tuitionFee" as const,      label: "Tuition Fee" },
+                                                        { field: "annualFee" as const,        label: "Annual Fee" },
+                                                        { field: "admissionFee" as const,     label: "Admission Fee" },
+                                                        { field: "registrationFee" as const,  label: "Registration Fee" },
+                                                        { field: "sportsFee" as const,        label: "Sports Fee" },
+                                                        { field: "miscFee" as const,          label: "Miscellaneous Fee" },
+                                                    ]).map(item => (
+                                                        <div key={item.field} className="flex items-center gap-3">
+                                                            <label className="text-xs text-gray-500 flex-1">{item.label}</label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={row[item.field]}
+                                                                    disabled={row.schoolAlreadyPaid}
+                                                                    onChange={e => updateRowField(idx, item.field, parseFloat(e.target.value) || 0)}
+                                                                    className="w-28 pl-6 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:border-navy outline-none text-right disabled:bg-gray-50 disabled:text-gray-400"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex justify-between text-sm font-bold text-navy border-t border-gray-100 pt-2 mt-1">
+                                                        <span>School Subtotal</span>
+                                                        <span>₹{row.schoolTotal.toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Transport breakdown */}
+                                            {feeType !== "school" && (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Bus className="w-3.5 h-3.5 text-indigo-600" />
+                                                        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Transport Fee</span>
+                                                        {row.transportAlreadyPaid && (
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Already Paid</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <label className="text-xs text-gray-500 flex-1">Bus / Transport Fee</label>
+                                                        <div className="relative">
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                                                            <input
+                                                                type="number"
+                                                                min={0}
+                                                                value={row.transportFee}
+                                                                disabled={row.transportAlreadyPaid}
+                                                                onChange={e => updateRowField(idx, "transportFee", parseFloat(e.target.value) || 0)}
+                                                                className="w-28 pl-6 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:border-navy outline-none text-right disabled:bg-gray-50 disabled:text-gray-400"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Summary + Payment Mode + Confirm */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
+                        {/* Summary */}
+                        <div>
+                            <h3 className="font-bold text-navy mb-3">Payment Summary</h3>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between text-gray-600">
+                                    <span>Months Selected</span>
+                                    <span className="font-semibold text-navy">{monthRows.length}</span>
+                                </div>
+                                {feeType !== "transport" && (
+                                    <div className="flex justify-between text-gray-600">
+                                        <span>School Fee Total</span>
+                                        <span className="font-semibold">₹{grandSchoolTotal.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                {feeType !== "school" && (
+                                    <div className="flex justify-between text-gray-600">
+                                        <span>Transport Fee Total</span>
+                                        <span className="font-semibold">₹{grandTransportTotal.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between font-bold text-navy border-t border-gray-100 pt-2 mt-1 text-base">
+                                    <span>Grand Total</span>
+                                    <span>₹{grandTotal.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Payment Mode */}
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Payment Mode</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                {(["CASH", "UPI"] as const).map(mode => (
+                                    <label key={mode}
+                                        className={`flex justify-center items-center gap-2 py-3 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all
+                                            ${paymentMode === mode ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-100 hover:border-gray-300 text-gray-600"}`}>
+                                        <input type="radio" name="pm" value={mode} checked={paymentMode === mode} onChange={() => setPaymentMode(mode)} className="hidden" />
+                                        {mode === "CASH" ? "💵 Cash" : "📱 UPI"}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Buttons */}
+                        <div className="flex gap-3">
+                            <button onClick={() => setMonthRows([])}
+                                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                                ← Back
+                            </button>
+                            <button
+                                onClick={handleConfirmPayment}
+                                disabled={paying || grandTotal === 0}
+                                className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                                {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                {paying ? "Processing…" : `Confirm Payment · ₹${grandTotal.toLocaleString()}`}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                STEP 4 — Payment Done
+            ══════════════════════════════════════════════════════════ */}
+            {paidResult && selectedStudent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-5 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-emerald-800 text-lg">Payment Recorded Successfully!</h2>
+                            <p className="text-emerald-600 text-sm">
+                                {paidResult.receipts.length} month{paidResult.receipts.length !== 1 ? "s" : ""} paid for {selectedStudent.studentName}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-6">
+                        {/* Receipts table */}
+                        <div className="overflow-x-auto mb-6">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-semibold">Month</th>
+                                        <th className="px-4 py-3 text-left font-semibold">School Receipt</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Transport Receipt</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {paidResult.receipts.map(r => (
+                                        <tr key={`${r.month}-${r.year}`} className="hover:bg-gray-50/40">
+                                            <td className="px-4 py-3 font-medium text-navy">
+                                                {MONTHS_FULL[r.month - 1]} {r.year}
+                                            </td>
+                                            <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                                                {r.schoolReceiptNo || <span className="text-gray-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3 font-mono text-xs text-indigo-500">
+                                                {r.transportReceiptNo || <span className="text-gray-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-navy">
+                                                ₹{(r.schoolTotal + r.transportTotal).toLocaleString()}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot className="bg-gray-50 border-t border-gray-200">
+                                    <tr>
+                                        <td colSpan={3} className="px-4 py-3 text-right font-bold text-navy uppercase text-xs tracking-wider">Grand Total Paid</td>
+                                        <td className="px-4 py-3 text-right font-extrabold text-navy text-base">
+                                            ₹{paidResult.receipts.reduce((s, r) => s + r.schoolTotal + r.transportTotal, 0).toLocaleString()}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 flex-wrap">
+                            <button onClick={handlePrintSummaryReceipt}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors">
+                                <Printer className="w-4 h-4" /> Print Summary Receipt
+                            </button>
+                            <button onClick={handleReset}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                                <RefreshCw className="w-4 h-4" /> New Payment
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-gray-400 mt-4 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            All paid months will now show as <strong>Paid</strong> in Manage Fees and the student portal automatically.
+                        </p>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
