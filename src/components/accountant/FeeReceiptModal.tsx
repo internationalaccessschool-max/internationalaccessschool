@@ -150,7 +150,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                             </div>
                             {record.rollNo && (
                                 <div>
-                                    <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Roll / Admission No</p>
+                                    <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Admission No</p>
                                     <p className="font-semibold text-gray-800">{record.rollNo}</p>
                                 </div>
                             )}
@@ -170,11 +170,9 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
                                         Paid Successfully
                                     </span>
-                                    {record.paymentMode && (
-                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                            Via {record.paymentMode}
-                                        </span>
-                                    )}
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                        Via {record.paymentMode || "CASH"}
+                                    </span>
                                 </div>
                             </div>
                             <div>
