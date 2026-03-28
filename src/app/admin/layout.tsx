@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -69,6 +69,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/fees", label: "Fee Overview", icon: BarChart3 },
                 { href: "/admin/finance", label: "Fee Dashboard", icon: Banknote },
                 { href: "/admin/finance/fees", label: "Manage Fees", icon: ClipboardList },
+                { href: "/admin/finance/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
                 { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
                 { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
             ],
