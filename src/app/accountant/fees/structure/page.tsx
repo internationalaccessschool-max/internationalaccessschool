@@ -6,8 +6,11 @@ import { db } from "@/lib/firebase";
 import { Settings2, Save, Loader2, CheckCircle2, Info } from "lucide-react";
 import toast from "react-hot-toast";
 
-// These IDs MUST match the className stored on student profiles (e.g. "7", "10")
+// These IDs MUST match the className stored on student profiles (e.g. "7", "10", "NUR")
 const CLASS_LIST = [
+    { id: "NUR", name: "NUR" },
+    { id: "LKG", name: "LKG" },
+    { id: "UKG", name: "UKG" },
     { id: "1", name: "Class 1" },
     { id: "2", name: "Class 2" },
     { id: "3", name: "Class 3" },
