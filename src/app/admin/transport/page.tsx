@@ -14,7 +14,7 @@ import {
     serverTimestamp, orderBy, collectionGroup, updateDoc, getDoc
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,15 +38,24 @@ interface Student {
     [key: string]: any;
 }
 
+interface TransportBusRoute {
+    id: string;
+    routeName: string;
+    monthlyFee: number;
+}
+
 interface TransportBus {
     id: string;
     busNumber: string;
-    routeDetails: string;
     driverName: string;
     driverContact: string;
     helperName?: string;
     totalSeats: number;
+    // Legacy single-route fields
+    routeDetails?: string;
     monthlyFee?: number;
+    // New multi-route array
+    routes?: TransportBusRoute[];
     createdAt?: any;
     updatedAt?: any;
 }
@@ -77,12 +86,16 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 const busSchema = z.object({
     busNumber: z.string().min(1, "Bus number is required"),
-    routeDetails: z.string().min(1, "Route details are required"),
     driverName: z.string().min(1, "Driver name is required"),
     driverContact: z.string().min(10, "Valid contact required"),
     helperName: z.string().optional(),
     totalSeats: z.coerce.number().min(1, "Seats must be at least 1"),
-    monthlyFee: z.coerce.number().min(0, "Fee must be 0 or more"),
+    // Dynamic routes array
+    routes: z.array(z.object({
+        id: z.string(),
+        routeName: z.string().min(1, "Route name required"),
+        monthlyFee: z.coerce.number().min(0, "Fee must be >= 0")
+    })).min(1, "At least one route is required")
 });
 type BusFormValues = z.infer<typeof busSchema>;
 
@@ -120,6 +133,11 @@ export default function TransportAdminPage() {
     const [savingAssignment, setSavingAssignment] = useState(false);
 
     const busForm = useForm<BusFormValues>({ resolver: zodResolver(busSchema) as any });
+    const { fields: routeFields, append: appendRoute, remove: removeRoute } = useFieldArray({
+        control: busForm.control,
+        name: "routes",
+    });
+
     const assignForm = useForm<AssignFormValues>({ resolver: zodResolver(assignSchema) });
     const watchTransportMode = assignForm.watch("transportMode");
 
@@ -197,10 +215,36 @@ export default function TransportAdminPage() {
                 const existing = await getDoc(docRef);
                 if (existing.exists()) { skipped++; continue; }
 
-                // Find assigned bus to get fee
-                const busId = (student.transport || "").trim();
+                // Handle Bus+Route format ("busId::routeId") or legacy ("busId")
+                const transportStr = (student.transport || "").trim();
+                let busId = transportStr;
+                let routeId = "";
+                let feeAmount = 0;
+                let routeName = "";
+                let bscBusNumber = "—";
+
+                if (transportStr.includes("::")) {
+                    [busId, routeId] = transportStr.split("::");
+                }
+
                 const assignedBus = buses.find(b => b.id === busId || busId === "BUS");
-                const feeAmount = assignedBus?.monthlyFee || 0;
+                if (assignedBus) {
+                    bscBusNumber = assignedBus.busNumber;
+                    // Find actual route or fall back to first route/legacy
+                    const routes = assignedBus.routes || [];
+                    const assignedRoute = routes.find(r => r.id === routeId);
+
+                    if (assignedRoute) {
+                        feeAmount = assignedRoute.monthlyFee;
+                        routeName = assignedRoute.routeName;
+                    } else if (routes.length > 0) {
+                        feeAmount = routes[0].monthlyFee;
+                        routeName = routes[0].routeName;
+                    } else {
+                        feeAmount = assignedBus.monthlyFee || 0;
+                        routeName = assignedBus.routeDetails || "";
+                    }
+                }
 
                 const name = getDisplayName(student);
                 const cls = student.currentClass || student.className || "";
@@ -212,8 +256,8 @@ export default function TransportAdminPage() {
                     className: cls,
                     section: student.section || "",
                     busId: busId || "BUS",
-                    busNumber: assignedBus?.busNumber || "—",
-                    routeDetails: assignedBus?.routeDetails || "",
+                    busNumber: bscBusNumber,
+                    routeDetails: routeName,
                     amount: feeAmount,
                     month: feeMonth,
                     year: feeYear,
@@ -277,9 +321,25 @@ export default function TransportAdminPage() {
     // ─── Bus Management ──────────────────────────────────────────────────────
     const openBusForm = (bus?: TransportBus) => {
         setEditingBus(bus || null);
+        let defaultRoutes = [{ id: `rt-${Date.now()}`, routeName: "", monthlyFee: 0 }];
+        if (bus) {
+            if (bus.routes && bus.routes.length > 0) {
+                defaultRoutes = bus.routes;
+            } else if (bus.routeDetails) {
+                defaultRoutes = [{ id: `rt-${Date.now()}`, routeName: bus.routeDetails, monthlyFee: bus.monthlyFee || 0 }];
+            }
+        }
+        
         busForm.reset(bus
-            ? { busNumber: bus.busNumber, routeDetails: bus.routeDetails, driverName: bus.driverName, driverContact: bus.driverContact, helperName: bus.helperName || "", totalSeats: bus.totalSeats, monthlyFee: bus.monthlyFee || 0 }
-            : { busNumber: "", routeDetails: "", driverName: "", driverContact: "", helperName: "", totalSeats: 40, monthlyFee: 0 }
+            ? { 
+                busNumber: bus.busNumber, 
+                driverName: bus.driverName, 
+                driverContact: bus.driverContact, 
+                helperName: bus.helperName || "", 
+                totalSeats: bus.totalSeats, 
+                routes: defaultRoutes
+              }
+            : { busNumber: "", driverName: "", driverContact: "", helperName: "", totalSeats: 40, routes: defaultRoutes }
         );
         setBusModalOpen(true);
     };
@@ -533,14 +593,29 @@ export default function TransportAdminPage() {
                                                     if (busView === "unassigned") {
                                                         list = list.filter(s => (s.transport || "").toUpperCase() === "BUS");
                                                     } else {
-                                                        list = list.filter(s => s.transport === busView);
+                                                        list = list.filter(s => (s.transport || "").startsWith(busView));
                                                     }
                                                 }
                                                 if (list.length === 0) return (
                                                     <tr><td colSpan={6} className="p-12 text-center text-gray-400">No bus students found.</td></tr>
                                                 );
                                                 return list.map((student, idx) => {
-                                                    const assignedBus = getBusById(student.transport || "");
+                                                    const parts = (student.transport || "").split("::");
+                                                    const busId = parts[0];
+                                                    const routeId = parts[1];
+                                                    const assignedBus = getBusById(busId);
+                                                    
+                                                    let displayRoute = "";
+                                                    if (assignedBus) {
+                                                        if (routeId && assignedBus.routes) {
+                                                            displayRoute = assignedBus.routes.find(r => r.id === routeId)?.routeName || "";
+                                                        } else if (assignedBus.routes && assignedBus.routes.length > 0) {
+                                                            displayRoute = assignedBus.routes[0].routeName;
+                                                        } else {
+                                                            displayRoute = assignedBus.routeDetails || "";
+                                                        }
+                                                    }
+
                                                     return (
                                                         <tr key={student.id} className="hover:bg-indigo-50/30 transition-colors">
                                                             <td className="p-4 text-gray-400 text-xs">{idx + 1}</td>
@@ -554,9 +629,12 @@ export default function TransportAdminPage() {
                                                             <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
                                                             <td className="p-4">
                                                                 {assignedBus ? (
-                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                                                        <Bus className="w-3.5 h-3.5" /> Bus {assignedBus.busNumber}
-                                                                    </span>
+                                                                    <div className="flex flex-col gap-1 items-start">
+                                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                                                            <Bus className="w-3.5 h-3.5" /> Bus {assignedBus.busNumber}
+                                                                        </span>
+                                                                        {displayRoute && <span className="text-[10px] text-gray-500 font-medium px-1">{displayRoute}</span>}
+                                                                    </div>
                                                                 ) : (
                                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-100">
                                                                         <ShieldAlert className="w-3 h-3" /> Unassigned
@@ -636,23 +714,35 @@ export default function TransportAdminPage() {
                                     Monthly Fee Per Bus Route
                                 </h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {buses.map(bus => (
-                                        <div key={bus.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50">
-                                            <div>
-                                                <p className="text-sm font-bold text-navy">Bus {bus.busNumber}</p>
-                                                <p className="text-xs text-gray-400 truncate max-w-[140px]">{bus.routeDetails}</p>
+                                    {buses.map(bus => {
+                                        const routes = bus.routes && bus.routes.length > 0
+                                            ? bus.routes
+                                            : bus.routeDetails
+                                                ? [{ id: "legacy-rt", routeName: bus.routeDetails, monthlyFee: bus.monthlyFee || 0 }]
+                                                : [{ id: "no-route", routeName: "No Route configured", monthlyFee: 0 }];
+
+                                        return (
+                                            <div key={bus.id} className="flex flex-col p-4 rounded-xl border border-gray-100 bg-gray-50/50">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <p className="text-sm font-bold text-navy flex items-center gap-1.5"><Bus className="w-3.5 h-3.5 text-gray-400"/> Bus {bus.busNumber}</p>
+                                                    <button
+                                                        onClick={() => openBusForm(bus)}
+                                                        className="text-[10px] text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md font-semibold transition-colors"
+                                                    >
+                                                        Edit Bus
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    {routes.map(r => (
+                                                        <div key={r.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
+                                                            <p className="text-xs font-semibold text-gray-600 truncate mr-2" title={r.routeName}>{r.routeName}</p>
+                                                            <p className="text-xs font-black text-indigo-700 shrink-0">₹{(r.monthlyFee || 0).toLocaleString()}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-base font-bold text-indigo-700">₹{(bus.monthlyFee || 0).toLocaleString()}</p>
-                                                <button
-                                                    onClick={() => openBusForm(bus)}
-                                                    className="text-xs text-indigo-400 hover:text-indigo-600 font-medium transition-colors"
-                                                >
-                                                    Edit fee
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     {buses.length === 0 && (
                                         <p className="text-sm text-gray-400 col-span-3">No buses added yet. Add buses first.</p>
                                     )}
@@ -826,11 +916,6 @@ export default function TransportAdminPage() {
                                         {busForm.formState.errors.totalSeats && <p className="text-red-500 text-xs mt-1">{busForm.formState.errors.totalSeats.message}</p>}
                                     </div>
                                 </div>
-                                <div>
-                                    <Label>Route Details *</Label>
-                                    <Input {...busForm.register("routeDetails")} placeholder="e.g. Downtown to School via Broad St" className="mt-1" />
-                                    {busForm.formState.errors.routeDetails && <p className="text-red-500 text-xs mt-1">{busForm.formState.errors.routeDetails.message}</p>}
-                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <Label>Driver Name *</Label>
@@ -841,15 +926,38 @@ export default function TransportAdminPage() {
                                         <Input {...busForm.register("driverContact")} placeholder="9876543210" className="mt-1" />
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <Label>Helper Name</Label>
-                                        <Input {...busForm.register("helperName")} placeholder="Optional" className="mt-1" />
+                                <div>
+                                    <Label>Helper Name</Label>
+                                    <Input {...busForm.register("helperName")} placeholder="Optional" className="mt-1" />
+                                </div>
+                                
+                                <div className="pt-2 mt-2 border-t border-gray-100">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <Label className="text-sm font-bold text-navy">Bus Routes & Fees *</Label>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => appendRoute({ id: `rt-${Date.now()}`, routeName: "", monthlyFee: 0 })} className="h-7 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-100">
+                                            <Plus className="w-3 h-3 mr-1" /> Add Route
+                                        </Button>
                                     </div>
-                                    <div>
-                                        <Label>Monthly Fee (₹) *</Label>
-                                        <Input {...busForm.register("monthlyFee")} type="number" min={0} placeholder="e.g. 1500" className="mt-1" />
-                                        <p className="text-xs text-gray-400 mt-1">Transport fee per student/month</p>
+                                    <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                                        {routeFields.map((field, index) => (
+                                            <div key={field.id} className="flex relative bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                <div className="flex-1 grid grid-cols-[1fr_100px] gap-3">
+                                                    <div>
+                                                        <Input {...busForm.register(`routes.${index}.routeName` as const)} placeholder="Route (e.g. Town Hall)" className="h-8 text-sm bg-white" />
+                                                        {busForm.formState.errors.routes?.[index]?.routeName && <p className="text-red-500 text-[10px] mt-1">{busForm.formState.errors.routes[index]?.routeName?.message}</p>}
+                                                    </div>
+                                                    <div>
+                                                        <Input {...busForm.register(`routes.${index}.monthlyFee` as const)} type="number" min={0} placeholder="Fee (₹)" className="h-8 text-sm bg-white" />
+                                                        {busForm.formState.errors.routes?.[index]?.monthlyFee && <p className="text-red-500 text-[10px] mt-1">{busForm.formState.errors.routes[index]?.monthlyFee?.message}</p>}
+                                                    </div>
+                                                </div>
+                                                {routeFields.length > 1 && (
+                                                    <button type="button" onClick={() => removeRoute(index)} className="ml-2 mt-0.5 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-start transition-colors">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                                 <div className="flex gap-3 pt-4 border-t mt-2">
@@ -906,15 +1014,22 @@ export default function TransportAdminPage() {
                                                     <SelectContent>
                                                         {buses.length === 0 ? (
                                                             <div className="p-2 text-sm text-center text-gray-500">No buses available.</div>
-                                                        ) : buses.map(b => (
-                                                            <SelectItem key={b.id} value={b.id}>
-                                                                <div className="flex flex-col text-left py-1">
-                                                                    <span className="font-bold text-navy">Bus {b.busNumber}</span>
-                                                                    <span className="text-[10px] text-gray-400">{b.routeDetails}</span>
-                                                                    {b.monthlyFee ? <span className="text-[10px] text-indigo-600 font-semibold">₹{b.monthlyFee}/month</span> : null}
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
+                                                        ) : buses.flatMap(b => {
+                                                            const routes = b.routes && b.routes.length > 0 
+                                                                ? b.routes 
+                                                                : b.routeDetails 
+                                                                    ? [{ id: "legacy-rt", routeName: b.routeDetails, monthlyFee: b.monthlyFee || 0 }] 
+                                                                    : [];
+                                                            return routes.map(r => (
+                                                                <SelectItem key={`${b.id}::${r.id}`} value={`${b.id}::${r.id}`}>
+                                                                    <div className="flex flex-col text-left py-1">
+                                                                        <span className="font-bold text-navy">Bus {b.busNumber} {routes.length > 1 ? `— ${r.routeName}` : ""}</span>
+                                                                        {routes.length === 1 && <span className="text-[10px] text-gray-400">{r.routeName}</span>}
+                                                                        {r.monthlyFee ? <span className="text-[10px] text-indigo-600 font-semibold">₹{r.monthlyFee}/month</span> : null}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ));
+                                                        })}
                                                     </SelectContent>
                                                 </Select>
                                             )}
