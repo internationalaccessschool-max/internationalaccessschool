@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { collectionGroup, getDocs, query, where, doc, getDoc } from "firebase/firestore";
+import { collection, collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Result, Subject } from "@/types";
+import { Result, Exam, Subject } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,23 +25,67 @@ export default function StudentResultsPage() {
 
         const fetchData = async () => {
             try {
-                // 1. Get student class for subject lookup
-                const { className } = await getStudentClassInfo(user.uid);
+                // 1. Get student's class & section
+                const { className, section } = await getStudentClassInfo(user.uid);
 
-                // 2. Fetch ALL results for this student DIRECTLY via collectionGroup.
-                //    This works even when the parent exam document has been deleted.
-                const resultsSnap = await getDocs(
-                    query(collectionGroup(db, "students"), where("studentId", "==", user.uid))
-                );
-
+                const seenExamIds = new Set<string>();
                 const studentResults: Result[] = [];
-                resultsSnap.forEach(d => {
-                    const data = d.data() as Result;
-                    // Guard: only include proper result docs
-                    if (data.studentId === user.uid && data.marks && data.totalObtained !== undefined) {
-                        studentResults.push({ ...data, id: d.id });
+
+                // ── Path A: Check every exam doc (works even for draft exams, no index needed) ──
+                const examsSnap = await getDocs(collection(db, "exams"));
+                const allExams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Exam);
+
+                for (const exam of allExams) {
+                    if (seenExamIds.has(exam.id!)) continue;
+                    let resultData: Result | null = null;
+
+                    // Try new nested path: results/{examId}/classes/{cls}/sections/{sec}/students/{uid}
+                    if (section && className) {
+                        const newRef = doc(
+                            db, "results", exam.id!, "classes", className,
+                            "sections", section, "students", user.uid
+                        );
+                        const newSnap = await getDoc(newRef);
+                        if (newSnap.exists()) {
+                            resultData = { id: newSnap.id, ...newSnap.data() } as Result;
+                        }
                     }
-                });
+
+                    // Fallback: old composite ID path results/{examId}_{studentId}
+                    if (!resultData) {
+                        const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
+                        const oldSnap = await getDoc(oldRef);
+                        if (oldSnap.exists()) {
+                            resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
+                        }
+                    }
+
+                    if (resultData) {
+                        // Merge snapshotted exam info if not already in result doc
+                        if (!resultData.examName) resultData.examName = exam.name;
+                        if (!resultData.examStartDate) resultData.examStartDate = exam.startDate;
+                        if (!resultData.examEndDate) resultData.examEndDate = exam.endDate;
+                        studentResults.push(resultData);
+                        seenExamIds.add(exam.id!);
+                    }
+                }
+
+                // ── Path B: Also query top-level results collection for old-format docs ──
+                // (these are regular top-level docs, no collectionGroup index needed)
+                try {
+                    const oldResultsSnap = await getDocs(
+                        query(collection(db, "results"), where("studentId", "==", user.uid))
+                    );
+                    oldResultsSnap.forEach(d => {
+                        const data = d.data() as Result;
+                        if (data.examId && !seenExamIds.has(data.examId)) {
+                            studentResults.push({ ...data, id: d.id });
+                            seenExamIds.add(data.examId);
+                        }
+                    });
+                } catch {
+                    // Ignore if index not set up for this path
+                }
 
                 // Sort newest first
                 studentResults.sort((a, b) => {
@@ -52,7 +96,7 @@ export default function StudentResultsPage() {
 
                 setResults(studentResults);
 
-                // 3. Build subject name map from class subjects
+                // 2. Build subject map for display
                 if (className) {
                     const classSubDoc = await getDoc(doc(db, "classSubjects", className));
                     if (classSubDoc.exists()) {
@@ -65,7 +109,6 @@ export default function StudentResultsPage() {
                 }
             } catch (err) {
                 console.error("Error fetching student results:", err);
-                alert("Failed to load results.");
             } finally {
                 setIsLoading(false);
             }
