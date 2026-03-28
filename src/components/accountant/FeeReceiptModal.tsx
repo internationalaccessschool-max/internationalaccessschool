@@ -5,10 +5,10 @@ import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
 
 interface FeeRecordBreakdown {
     tuitionFee?: number;
-    examFee?: number;
-    computerFee?: number;
+    annualFee?: number;
+    admissionFee?: number;
     transportFee?: number;
-    libraryFee?: number;
+    registrationFee?: number;
     sportsFee?: number;
     miscFee?: number;
 }
@@ -35,6 +35,7 @@ interface FeeRecord {
     isTransportOnly?: boolean;
     receiptType?: "school" | "transport";
     breakdown?: FeeRecordBreakdown;
+    paymentMode?: "CASH" | "UPI";
 }
 
 interface FeeReceiptModalProps {
@@ -52,9 +53,9 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
     // Build school fee breakdown for preview
     const schoolBreakdownItems = [
         { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
-        { label: "Examination Fee", amount: record.breakdown?.examFee || 0 },
-        { label: "Computer Fee", amount: record.breakdown?.computerFee || 0 },
-        { label: "Library Fee", amount: record.breakdown?.libraryFee || 0 },
+        { label: "Annual Fee", amount: record.breakdown?.annualFee || 0 },
+        { label: "Admission Fee", amount: record.breakdown?.admissionFee || 0 },
+        { label: "Registration Fee", amount: record.breakdown?.registrationFee || 0 },
         { label: "Sports Fee", amount: record.breakdown?.sportsFee || 0 },
         { label: "Miscellaneous Fee", amount: record.breakdown?.miscFee || 0 },
     ].filter(item => item.amount > 0);
@@ -86,6 +87,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
             feeMonth,
             lineItems,
             totalAmount: displayAmount,
+            paymentMode: record.paymentMode
         });
         printReceiptHTML(html, isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt");
     };
@@ -163,10 +165,17 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                                 <p className="font-bold text-navy text-base">{feeMonth}</p>
                             </div>
                             <div>
-                                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status</p>
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
-                                    Paid Successfully
-                                </span>
+                                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Payment Status / Mode</p>
+                                <div className="flex items-end flex-col gap-1">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-widest border border-emerald-200">
+                                        Paid Successfully
+                                    </span>
+                                    {record.paymentMode && (
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                            Via {record.paymentMode}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Fee Type</p>
