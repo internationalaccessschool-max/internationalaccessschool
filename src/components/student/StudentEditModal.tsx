@@ -16,7 +16,7 @@ interface StudentEditModalProps {
     role?: "admin" | "teacher";
 }
 
-const TABS = [
+const ALL_TABS = [
     { id: "personal", label: "Personal", icon: User },
     { id: "contact", label: "Contact", icon: Phone },
     { id: "family", label: "Family", icon: User },
@@ -167,7 +167,20 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
         setSaving(false);
     };
 
-    const isAdminLocked = (field: string) => role === "teacher" && ["admissionNumber", "className", "section", "session", "aadharNo", "pen", "aparId"].includes(field);
+    // For teacher role: lock ALL sensitive/academic fields — only allow contact/personal soft fields
+    const isAdminLocked = (field: string) => role === "teacher" && [
+        "admissionNumber", "className", "section", "session", "aadharNo", "pen", "aparId",
+        "rollNumber", "currentClass", "classAtAdmission", "dateOfAdmission", "serialNumber",
+        "status", "stream", "udise", "cbseEnrolmentNo", "branch", "block", "tcNumber",
+        "previousSchool", "previousSchoolAddress", "lastClass", "lastDate", "leftYear",
+        "bankName", "bankAccountNumber", "ifscCode", "accountHolderName", "panNumber",
+        "annualIncome", "freeScheme", "economicallyWeakSection", "minorityStatus"
+    ].includes(field);
+
+    // Teacher can only view — hide Documents tab and restrict save
+    const TABS = role === "teacher"
+        ? ALL_TABS.filter(t => t.id !== "documents")
+        : ALL_TABS;
 
     const F = (props: { label: string; field: string; type?: string; options?: string[] }) => (
         <FieldRenderer {...props} form={form} set={set} locked={isAdminLocked(props.field)} />
@@ -376,6 +389,14 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                     </button>
                 </div>
 
+                {/* Teacher read-only banner */}
+                {role === "teacher" && (
+                    <div className="flex items-center gap-2 px-7 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700 shrink-0">
+                        <Lock className="w-3.5 h-3.5 shrink-0" />
+                        <span><strong>View Only Mode</strong> — Contact your admin to edit academic or sensitive fields.</span>
+                    </div>
+                )}
+
                 {/* Tabs */}
                 <div className="flex overflow-x-auto border-b border-slate-100 bg-white shrink-0 scrollbar-hide px-3 pt-3 pb-0 gap-1">
                     {TABS.map(tab => (
@@ -397,16 +418,20 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
-                    <p className="text-xs text-gray-400">Changes are saved to Firestore immediately</p>
+                    <p className="text-xs text-gray-400">
+                        {role === "teacher" ? "View Only — Changes can only be made by Admin" : "Changes are saved to Firestore immediately"}
+                    </p>
                     <div className="flex gap-3">
                         <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-100 transition-colors">
-                            Cancel
+                            {role === "teacher" ? "Close" : "Cancel"}
                         </button>
-                        <button onClick={handleSave} disabled={saving}
-                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${saved ? "bg-emerald-500 text-white" : "bg-navy text-white hover:bg-navy/90"} disabled:opacity-60`}>
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {saving ? "Saving..." : saved ? "Saved ✓" : "Save Changes"}
-                        </button>
+                        {role !== "teacher" && (
+                            <button onClick={handleSave} disabled={saving}
+                                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${saved ? "bg-emerald-500 text-white" : "bg-navy text-white hover:bg-navy/90"} disabled:opacity-60`}>
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {saving ? "Saving..." : saved ? "Saved ✓" : "Save Changes"}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

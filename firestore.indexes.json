@@ -33,20 +33,6 @@
             ]
         },
         {
-            "collectionGroup": "admitCards",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
-                { "fieldPath": "studentId", "order": "ASCENDING" }
-            ]
-        },
-        {
-            "collectionGroup": "students",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
-                { "fieldPath": "studentId", "order": "ASCENDING" }
-            ]
-        },
-        {
             "collectionGroup": "notices",
             "queryScope": "COLLECTION",
             "fields": [
@@ -118,13 +104,6 @@
             "fields": [
                 { "fieldPath": "status", "order": "ASCENDING" },
                 { "fieldPath": "createdAt", "order": "DESCENDING" }
-            ]
-        },
-        {
-            "collectionGroup": "results",
-            "queryScope": "COLLECTION",
-            "fields": [
-                { "fieldPath": "studentId", "order": "ASCENDING" }
             ]
         },
         {

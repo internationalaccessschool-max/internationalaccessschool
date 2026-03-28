@@ -32,6 +32,8 @@ const ALL_NAV = [
     { href: "/supervisor/homework", label: "Homework", icon: ClipboardList, section: "Content" },
     { href: "/supervisor/notices", label: "Notices", icon: Megaphone, section: "Content" },
     { href: "/supervisor/gallery", label: "Gallery", icon: ImageIcon, section: "Content" },
+    { href: "/supervisor/fees", label: "Fee Overview", icon: Library, section: "Finance" },
+    { href: "/supervisor/transport", label: "Transport", icon: Settings, section: "Finance" },
     { href: "/supervisor/exams", label: "Exams", icon: Award, section: "Examinations" },
     { href: "/supervisor/class-subjects", label: "Class Subjects", icon: Layers, section: "Examinations" },
     { href: "/supervisor/results/entry", label: "Marks Entry", icon: ClipboardList, section: "Examinations" },
@@ -103,7 +105,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
     }
 
     // Build sidebar — only allowed pages, grouped by section
-    const sections = ["Overview", "Management", "Content", "Examinations"];
+    const sections = ["Overview", "Management", "Finance", "Content", "Examinations"];
     const filteredNav = ALL_NAV.filter(item => allowedPages.includes(item.href));
     const groupedNav = sections
         .map(section => ({
