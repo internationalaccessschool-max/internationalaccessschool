@@ -224,15 +224,20 @@ export default function AdvancedAdmitCardManagerPage() {
                         </code>
                     </p>
                 </div>
-                <Button
-                    onClick={handleSaveAndGenerate}
-                    disabled={isGenerating || applicable.length === 0}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                    {isGenerating
-                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
-                        : <><FileCheck className="mr-2 h-4 w-4" /> Save & Generate Cards</>}
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => router.push(`/admin/exams/${exam.id}/admit-cards/view`)}>
+                        View Generated Cards
+                    </Button>
+                    <Button
+                        onClick={handleSaveAndGenerate}
+                        disabled={isGenerating || applicable.length === 0}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                        {isGenerating
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
+                            : <><FileCheck className="mr-2 h-4 w-4" /> Save & Generate Cards</>}
+                    </Button>
+                </div>
             </div>
 
             {generateMsg && (
