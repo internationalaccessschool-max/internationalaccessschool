@@ -59,10 +59,10 @@ export default function GenerateFeesPage() {
 
                     const breakdown = {
                         tuitionFee: feeData.tuitionFee || 0,
-                        examFee: feeData.examFee || 0,
-                        computerFee: feeData.computerFee || 0,
+                        annualFee: feeData.annualFee || 0,
+                        admissionFee: feeData.admissionFee || 0,
                         transportFee: feeData.transportFee || 0,
-                        libraryFee: feeData.libraryFee || 0,
+                        registrationFee: feeData.registrationFee || 0,
                         sportsFee: feeData.sportsFee || 0,
                         miscFee: feeData.miscFee || 0,
                     };
