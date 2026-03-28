@@ -25,7 +25,9 @@ export default function AdminViewAdmitCardsPage() {
     // Filters
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedClass, setSelectedClass] = useState("all");
+    const [selectedSection, setSelectedSection] = useState("all");
     const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+    const [availableSections, setAvailableSections] = useState<string[]>([]);
 
     useEffect(() => {
         if (!examId) return;
@@ -65,12 +67,19 @@ export default function AdminViewAdmitCardsPage() {
                     if (a.className !== b.className) {
                         return (a.className || "").localeCompare(b.className || "");
                     }
+                    if (a.section !== b.section) {
+                        return (a.section || "").localeCompare(b.section || "");
+                    }
                     return (a.studentName || "").localeCompare(b.studentName || "");
                 });
 
                 // Extract unique classes for filter
                 const classesSet = new Set(allCards.map(c => c.className).filter(Boolean));
                 setAvailableClasses(Array.from(classesSet));
+
+                // Extract unique sections initially
+                const sectionsSet = new Set(allCards.map(c => c.section).filter(Boolean));
+                setAvailableSections(Array.from(sectionsSet));
 
                 setAdmitCards(allCards);
                 setFilteredCards(allCards);
@@ -92,6 +101,14 @@ export default function AdminViewAdmitCardsPage() {
             result = result.filter(c => c.className === selectedClass);
         }
         
+        // Update valid sections for the current class selection
+        const sectionsSet = new Set(result.map(c => c.section).filter(Boolean));
+        setAvailableSections(Array.from(sectionsSet));
+
+        if (selectedSection !== "all") {
+            result = result.filter(c => c.section === selectedSection);
+        }
+        
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             result = result.filter(c => 
@@ -101,7 +118,7 @@ export default function AdminViewAdmitCardsPage() {
         }
         
         setFilteredCards(result);
-    }, [admitCards, searchQuery, selectedClass]);
+    }, [admitCards, searchQuery, selectedClass, selectedSection]);
 
     const handlePrint = (card: AdmitCard) => {
         const html = `<!DOCTYPE html><html><head>
@@ -247,14 +264,31 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
                     />
                 </div>
                 {availableClasses.length > 0 && (
-                    <Select value={selectedClass} onValueChange={setSelectedClass}>
-                        <SelectTrigger className="w-full sm:w-[180px] bg-background">
+                    <Select value={selectedClass} onValueChange={(val) => {
+                        setSelectedClass(val);
+                        setSelectedSection("all"); // Reset section when class changes
+                    }}>
+                        <SelectTrigger className="w-full sm:w-[150px] bg-background">
                             <SelectValue placeholder="Filter by class" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Classes</SelectItem>
                             {availableClasses.map(cls => (
                                 <SelectItem key={cls} value={cls}>Class {cls}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+                
+                {availableSections.length > 0 && (
+                    <Select value={selectedSection} onValueChange={setSelectedSection}>
+                        <SelectTrigger className="w-full sm:w-[150px] bg-background">
+                            <SelectValue placeholder="Filter by section" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Sections</SelectItem>
+                            {availableSections.map(sec => (
+                                <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
