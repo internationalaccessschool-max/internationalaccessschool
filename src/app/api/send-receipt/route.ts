@@ -16,10 +16,41 @@ export async function POST(req: Request) {
 
         // Automatically resolve the student's notification email if studentId is provided
         if (!recipientEmail && studentId) {
-            const studentDoc = await adminDb.collection('profiles').doc(studentId).get();
-            if (studentDoc.exists) {
-                const data = studentDoc.data();
-                recipientEmail = data?.notificationEmail || data?.parentEmail || data?.email;
+            try {
+                // Try studentLookup first (fast, flat collection)
+                const lookupDoc = await adminDb.collection('studentLookup').doc(studentId).get();
+                if (lookupDoc.exists) {
+                    const lookupData = lookupDoc.data();
+                    // studentLookup has class/section — use it to fetch full profile
+                    const cls = lookupData?.className;
+                    const sec = lookupData?.section;
+                    if (cls && sec) {
+                        const profileRef = adminDb
+                            .collection('users').doc('classes')
+                            .collection(cls).doc('sections')
+                            .collection(sec).doc('students')
+                            .collection('profiles').doc(studentId);
+                        const profileSnap = await profileRef.get();
+                        if (profileSnap.exists) {
+                            const data = profileSnap.data();
+                            recipientEmail = data?.notificationEmail || data?.parentEmail || data?.email;
+                        }
+                    }
+                }
+
+                // Fallback: collectionGroup scan (slower but always works)
+                if (!recipientEmail) {
+                    const snap = await adminDb.collectionGroup('profiles')
+                        .where('uid', '==', studentId)
+                        .limit(1)
+                        .get();
+                    if (!snap.empty) {
+                        const data = snap.docs[0].data();
+                        recipientEmail = data?.notificationEmail || data?.parentEmail || data?.email;
+                    }
+                }
+            } catch (lookupErr) {
+                console.warn('Email lookup failed:', lookupErr);
             }
         }
 
