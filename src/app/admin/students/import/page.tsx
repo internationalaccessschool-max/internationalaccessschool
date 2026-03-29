@@ -106,6 +106,7 @@ const studentRowSchema = z.object({
     leftYear: z.string().optional(),
     branch: z.string().optional(),
     serialNumber: z.string().optional(),
+    email: z.string().optional(),
     notificationEmail: z.string().optional(),
 }).passthrough();
 
@@ -134,7 +135,7 @@ const COLUMN_MAP: Record<string, string> = {
     "STUDENT NAME": "name",
     "CONTACT": "__CONTACT_AUTO__",  // handled specially
     "CONTACT 2": "contact3",
-    "EMAIL": "notificationEmail",
+    "EMAIL": "email",
     "NOTIFICATION EMAIL": "notificationEmail",
     "AADHAR": "aadharNo",
     "AADHAR NO": "aadharNo",
@@ -215,7 +216,7 @@ const COLUMN_MAP: Record<string, string> = {
 // ─── Template ───────────────────────────────────────────────────────────────
 const TEMPLATE_HEADERS = [
     "S.N", "STAT", "SESS", "ENR", "D. O. A", "NAME",
-    "CONTACT", "CONTACT 2", "EMAIL", "AADHAR", "APAAR ID", "P.E.N",
+    "CONTACT", "CONTACT 2", "EMAIL", "NOTIFICATION EMAIL", "AADHAR", "APAAR ID", "P.E.N",
     "FREE", "CAT", "REL", "GEN", "CL ADM", "CURRENT CLASS", "SEC",
     "HOUS", "UDISE", "E-S", "CBSE", "D.O.B",
     "TRP", "Address", "PIN",
@@ -229,7 +230,7 @@ const TEMPLATE_HEADERS = [
 
 const SAMPLE_ROWS = [[
     "1", "ACTIVE", "2025", "7001", "14/01/2007", "ERAM NAAZ",
-    "9955288454", "225628", "parent@example.com", "123456789012", "APAR001", "PEN001",
+    "9955288454", "225628", "login_7001@ias.edu", "parent@example.com", "123456789012", "APAR001", "PEN001",
     "N", "GEN", "M", "F", "LKG", "5", "A",
     "BLUE", "", "N", "", "01/04/2001",
     "N", "SIR SYED CHOWK, SIWAN", "841226",
@@ -263,7 +264,8 @@ function downloadTemplate() {
         ["CL ADM", "No", "Class at time of admission"],
         ["CONTACT", "No", "Primary mobile number"],
         ["CONTACT 2", "No", "Secondary mobile number"],
-        ["EMAIL", "No", "Notification email for fee receipts/notices"],
+        ["EMAIL", "No", "Login Email Address (auto-generated if empty)"],
+        ["NOTIFICATION EMAIL", "No", "Email for receipts & notices"],
         ["Address", "No", "Student's address"],
         ["M.S", "No", "Minority status (YES/NO or OK)"],
         ["E-S", "No", "Economically Weak Section (YES/NO)"],
