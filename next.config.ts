@@ -44,6 +44,15 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  async redirects() {
+    return [
+      {
+        source: "/accountant/transport-fees",
+        destination: "/accountant/transport",
+        permanent: true,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
