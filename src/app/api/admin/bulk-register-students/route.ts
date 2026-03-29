@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
                     aparId: student.aparId || "",
 
                     // Contact
+                    notificationEmail: student.notificationEmail || "",
                     mobileNo: student.mobileNo || "",
                     contact2: student.contact2 || "",
                     contact3: student.contact3 || "",
