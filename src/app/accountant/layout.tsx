@@ -38,7 +38,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
                 { href: "/accountant/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
                 { href: "/accountant/fees/structure", label: "Fee Structure", icon: Settings2 },
                 { href: "/accountant/fees/generate", label: "Generate Monthly Fees", icon: PlusCircle },
-                { href: "/accountant/transport-fees", label: "Transport Fees", icon: Bus },
+                { href: "/accountant/transport", label: "Transport Management", icon: Bus },
             ],
         },
     ];
