@@ -207,6 +207,8 @@ export default function AdminStudentsPage() {
             "NAME": getDisplayName(s),
             "CONTACT": s.mobileNo || "",
             "CONTACT 2": s.contact2 || "",
+            "EMAIL": s.email || "",
+            "NOTIFICATION EMAIL": s.notificationEmail || "",
             "AADHAR": s.aadharNo || "",
             "APAAR ID": s.aparId || "",
             "P.E.N": s.pen || "",
