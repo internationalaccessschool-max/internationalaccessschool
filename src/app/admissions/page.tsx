@@ -24,6 +24,7 @@ const admissionSchema = z.object({
     enrollmentClass: z.string().min(1, "Class is required"),
     session: z.string().min(1, "Session is required"),
     mobileNo: z.string().min(10, "Valid Mobile Number is required"),
+    notificationEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
 
     // Mother's Details
     motherName: z.string().min(2, "Mother's Name is required"),
@@ -208,6 +209,7 @@ export default function AdmissionsPage() {
                                     </FormSelect>
 
                                     <FormInput label="Mobile No *" register={register("mobileNo")} error={errors.mobileNo} placeholder="Primary Contact Number" />
+                                    <FormInput label="Notification Email (Optional)" register={register("notificationEmail")} error={errors.notificationEmail} placeholder="For receipts & notices" type="email" />
                                 </div>
                             </section>
 
