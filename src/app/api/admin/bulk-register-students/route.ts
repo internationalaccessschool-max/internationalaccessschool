@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
                 // ── Auth credentials ──
                 const admNo = String(student.admissionNumber || "").trim();
-                const email = `${admNo}@ias.edu`;
+                const email = student.email ? String(student.email).trim() : `${admNo}@ias.edu`;
 
                 // Password = DOB (DD-MM-YYYY, at least 8 chars) or fallback
                 const rawDob = (student.dob || "").toString().trim();
