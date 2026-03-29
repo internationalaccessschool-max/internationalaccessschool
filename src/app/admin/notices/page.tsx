@@ -41,15 +41,22 @@ export default function NoticesPage() {
         try {
             if (editingId) {
                 await updateDoc(doc(db, "notices", editingId), {
-                    ...formData,
+                    content: formData.content,
+                    isActive: formData.isActive,
+                    type: formData.type,
+                    priority: formData.priority,
                     updatedAt: serverTimestamp()
                 });
             } else {
                 await addDoc(collection(db, "notices"), {
-                    ...formData,
+                    content: formData.content,
+                    isActive: formData.isActive,
+                    type: formData.type,
+                    priority: formData.priority,
                     createdAt: serverTimestamp()
                 });
             }
+
             closeForm();
         } catch (error) {
             console.error("Error saving notice:", error);
