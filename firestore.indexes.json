@@ -83,6 +83,44 @@
             ]
         },
         {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "month", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "year", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "month", "order": "ASCENDING" },
+                { "fieldPath": "date", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "attendance",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "cls", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "year", "order": "ASCENDING" },
+                { "fieldPath": "date", "order": "DESCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "admission_requests",
             "queryScope": "COLLECTION",
             "fields": [
