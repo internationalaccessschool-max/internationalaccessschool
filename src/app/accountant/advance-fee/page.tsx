@@ -476,6 +476,45 @@ export default function AdvanceFeePage() {
 
             setPaidResult({ receipts });
             toast.success(`Advance payment recorded for ${monthRows.length} month${monthRows.length > 1 ? "s" : ""}!`);
+
+            // --- SEND COMBINED EMAIL RECEIPT ---
+            const lineItems: { label: string; amount: number }[] = [];
+            receipts.forEach(r => {
+                const monthLabel = `${MONTHS_FULL[r.month - 1]} ${r.year}`;
+                if (r.schoolTotal > 0)    lineItems.push({ label: `School Fee — ${monthLabel}`,    amount: r.schoolTotal });
+                if (r.transportTotal > 0) lineItems.push({ label: `Transport Fee — ${monthLabel}`, amount: r.transportTotal });
+            });
+
+            const allSchoolReceipts    = receipts.map(r => r.schoolReceiptNo).filter(Boolean).join(", ");
+            const allTransportReceipts = receipts.map(r => r.transportReceiptNo).filter(Boolean).join(", ");
+
+            fetch("/api/send-receipt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    studentId: selectedStudent.id,
+                    receiptData: {
+                        title:        "Advance Fee Payment Receipt",
+                        receiptNo:    allSchoolReceipts || allTransportReceipts || "ADV-MULTI",
+                        studentName:  selectedStudent.studentName,
+                        classSection: `Class ${selectedStudent.class}${selectedStudent.section ? ` - ${selectedStudent.section}` : ""}`,
+                        rollNo:       selectedStudent.rollNo || undefined,
+                        extraInfo: [
+                            { label: "Payment Type",  value: feeType === "both" ? "School + Transport" : feeType === "transport" ? "Transport Only" : "School Only" },
+                            { label: "Months Covered", value: receipts.map(r => `${MONTHS_SHORT[r.month - 1]} ${r.year}`).join(", ") },
+                            ...(allSchoolReceipts    ? [{ label: "School Receipt Nos",    value: allSchoolReceipts }] : []),
+                            ...(allTransportReceipts ? [{ label: "Transport Receipt Nos", value: allTransportReceipts }] : []),
+                        ],
+                        paidOn:       new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                        feeMonth:     "Multiple Months (Advance)",
+                        lineItems,
+                        totalAmount:  lineItems.reduce((s, i) => s + i.amount, 0),
+                        paymentMode,
+                    }
+                })
+            }).catch(console.error);
+            // -----------------------------------
+
         } catch (err: any) {
             console.error(err);
             toast.error("Payment failed: " + (err?.message || "Unknown error"));
