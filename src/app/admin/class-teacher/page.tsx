@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, doc, getDocs, onSnapshot, query, orderBy, setDoc, serverTimestamp } from "firebase/firestore";
+import { collectionGroup, collection, doc, getDocs, onSnapshot, query, orderBy, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, Save, CheckCircle2, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, CheckCircle2, Users, ChevronDown, ChevronRight } from "lucide-react";
 
-const CLASSES = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
-    "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"];
-const SECTIONS = ["A", "B", "C", "D", "E"];
+// Sort helper: NUR → LKG → UKG → 0 → 1 … 12
+function classOrder(cls: string): number {
+    const map: Record<string, number> = { NUR: -3, LKG: -2, UKG: -1 };
+    const key = cls.toUpperCase();
+    if (map[key] !== undefined) return map[key];
+    const n = parseInt(cls, 10);
+    return isNaN(n) ? 999 : n;
+}
+
+function sortClasses(classes: string[]): string[] {
+    return [...classes].sort((a, b) => classOrder(a) - classOrder(b));
+}
 
 interface Teacher {
     id: string;
@@ -17,7 +26,7 @@ interface Teacher {
     subjects?: string[];
 }
 
-// Stored in Firestore as: class_teachers/{className}/sections/{section} = { teacherId, teacherName }
+// Stored in Firestore as: class_teachers/{className}-{section} = { teacherId, teacherName, cls, section }
 interface ClassTeacherMap {
     [cls: string]: {
         [section: string]: { teacherId: string; teacherName: string } | null;
@@ -27,11 +36,13 @@ interface ClassTeacherMap {
 export default function ClassTeacherPage() {
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [classTeachers, setClassTeachers] = useState<ClassTeacherMap>({});
+    // classSectionMap: { "NUR": ["A","B"], "1": ["A"], … }
+    const [classSectionMap, setClassSectionMap] = useState<Record<string, string[]>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
     const [saved, setSaved] = useState<string | null>(null);
-    const [conflictError, setConflictError] = useState<string | null>(null); // error message
-    const [expanded, setExpanded] = useState<string[]>(["Class 1"]);
+    const [conflictError, setConflictError] = useState<string | null>(null);
+    const [expanded, setExpanded] = useState<string[]>([]);
 
     // Fetch teachers list
     useEffect(() => {
@@ -41,24 +52,49 @@ export default function ClassTeacherPage() {
         });
     }, []);
 
-    // Fetch existing class teacher assignments
+    // Fetch classes + sections from student profiles in DB
     useEffect(() => {
-        const fetch = async () => {
+        const fetchStructure = async () => {
             setLoading(true);
-            const map: ClassTeacherMap = {};
             try {
-                const snap = await getDocs(collection(db, "class_teachers"));
-                snap.docs.forEach(d => {
-                    // Each doc id = "Class 6-A", data = { teacherId, teacherName, cls, section }
-                    const { cls, section, teacherId, teacherName } = d.data();
-                    if (!map[cls]) map[cls] = {};
-                    map[cls][section] = { teacherId, teacherName };
+                // 1. Build class→sections map from actual student profiles
+                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
+                const map: Record<string, Set<string>> = {};
+                profilesSnap.docs.forEach(d => {
+                    const data = d.data();
+                    const cls = (data.currentClass ?? data.className ?? "").toString().trim();
+                    const sec = (data.section ?? "").toString().trim();
+                    if (!cls || !sec) return;
+                    if (!map[cls]) map[cls] = new Set();
+                    map[cls].add(sec);
                 });
-            } catch (e) { console.error(e); }
-            setClassTeachers(map);
-            setLoading(false);
+
+                const sorted: Record<string, string[]> = {};
+                sortClasses(Object.keys(map)).forEach(cls => {
+                    sorted[cls] = [...map[cls]].sort();
+                });
+                setClassSectionMap(sorted);
+
+                // Auto-expand first class
+                const firstCls = Object.keys(sorted)[0];
+                if (firstCls) setExpanded([firstCls]);
+
+                // 2. Load existing class_teacher assignments
+                const ctMap: ClassTeacherMap = {};
+                const ctSnap = await getDocs(collection(db, "class_teachers"));
+                ctSnap.docs.forEach(d => {
+                    const { cls, section, teacherId, teacherName } = d.data();
+                    if (!ctMap[cls]) ctMap[cls] = {};
+                    ctMap[cls][section] = teacherId ? { teacherId, teacherName } : null;
+                });
+                setClassTeachers(ctMap);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
         };
-        fetch();
+        fetchStructure();
     }, []);
 
     const getAssigned = (cls: string, section: string) =>
@@ -67,12 +103,11 @@ export default function ClassTeacherPage() {
     const handleAssign = async (cls: string, section: string, teacherId: string) => {
         setConflictError(null);
 
-        // ── Rule: a teacher can only be class teacher of ONE section in the entire school ──
+        // Rule: a teacher can only be class teacher of ONE section in the entire school
         if (teacherId) {
             for (const [otherCls, sections] of Object.entries(classTeachers)) {
                 for (const [otherSection, sectionData] of Object.entries(sections)) {
                     if (sectionData?.teacherId === teacherId) {
-                        // Allow if it's the same slot being re-assigned (no change)
                         if (otherCls === cls && otherSection === section) continue;
                         const teacher = teachers.find(t => t.id === teacherId);
                         const tName = teacher ? `${teacher.firstName} ${teacher.lastName}` : "This teacher";
@@ -121,6 +156,8 @@ export default function ClassTeacherPage() {
     const assignedCount = Object.values(classTeachers).reduce((total, sections) =>
         total + Object.values(sections).filter(v => v?.teacherId).length, 0);
 
+    const allClasses = Object.keys(classSectionMap);
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -155,19 +192,22 @@ export default function ClassTeacherPage() {
                     <ul className="text-xs text-blue-500 mt-1 space-y-0.5 list-disc list-inside">
                         <li>Each section has <strong>one</strong> class teacher</li>
                         <li>A teacher can be class teacher of <strong>only one section</strong> in the school</li>
-                        <li>Class teachers manage attendance for their section</li>
+                        <li>Class teachers manage attendance &amp; exam marks for their section</li>
                     </ul>
                 </div>
             </div>
 
             {loading ? (
                 <div className="flex justify-center py-20"><Loader2 className="w-7 h-7 animate-spin text-navy" /></div>
+            ) : allClasses.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 text-sm">No classes found in the database.</div>
             ) : (
                 <div className="space-y-3">
-                    {CLASSES.map(cls => {
+                    {allClasses.map(cls => {
+                        const sections = classSectionMap[cls] || [];
                         const isExpanded = expanded.includes(cls);
                         const clsData = classTeachers[cls] || {};
-                        const assignedInClass = SECTIONS.filter(s => clsData[s]?.teacherId).length;
+                        const assignedInClass = sections.filter(s => clsData[s]?.teacherId).length;
 
                         return (
                             <div key={cls} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -179,10 +219,14 @@ export default function ClassTeacherPage() {
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 rounded-xl bg-navy/10 flex items-center justify-center text-navy font-bold text-sm">
-                                            {cls.replace("Class ", "")}
+                                            {cls}
                                         </div>
                                         <div>
-                                            <p className="font-bold text-navy">{cls}</p>
+                                            <p className="font-bold text-navy">
+                                                {["NUR","LKG","UKG"].includes(cls.toUpperCase())
+                                                    ? cls.toUpperCase()
+                                                    : `Class ${cls}`}
+                                            </p>
                                             <p className="text-xs text-gray-400">
                                                 {assignedInClass > 0
                                                     ? `${assignedInClass} section${assignedInClass > 1 ? "s" : ""} assigned`
@@ -193,7 +237,7 @@ export default function ClassTeacherPage() {
                                     <div className="flex items-center gap-2">
                                         {assignedInClass > 0 && (
                                             <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-semibold">
-                                                {assignedInClass}/5 sections
+                                                {assignedInClass}/{sections.length} sections
                                             </span>
                                         )}
                                         {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
@@ -203,7 +247,7 @@ export default function ClassTeacherPage() {
                                 {/* Section rows */}
                                 {isExpanded && (
                                     <div className="border-t border-gray-50 divide-y divide-gray-50">
-                                        {SECTIONS.map(section => {
+                                        {sections.map(section => {
                                             const key = `${cls}-${section}`;
                                             const assigned = getAssigned(cls, section);
                                             const isSaving = saving === key;
@@ -224,12 +268,11 @@ export default function ClassTeacherPage() {
                                                         >
                                                             <option value="">— No class teacher —</option>
                                                             {teachers.map(t => {
-                                                                // Disable if teacher is assigned anywhere else (any class, any section)
                                                                 let conflictLabel: string | null = null;
                                                                 for (const [otherCls, secs] of Object.entries(classTeachers)) {
                                                                     for (const [otherSec, secData] of Object.entries(secs)) {
                                                                         if (secData?.teacherId === t.id) {
-                                                                            if (otherCls === cls && otherSec === section) break; // same slot
+                                                                            if (otherCls === cls && otherSec === section) break;
                                                                             conflictLabel = `${otherCls}–${otherSec}`;
                                                                             break;
                                                                         }
