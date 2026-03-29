@@ -2,17 +2,31 @@
 
 import { useState, useCallback, useEffect } from "react";
 import {
-    collection, collectionGroup, getDocs, doc, getDoc, setDoc
+    collection, collectionGroup, getDocs, doc, getDoc, setDoc, query, orderBy
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
     Search, Loader2, X, CheckCircle2, CreditCard,
     School, Bus, User, ChevronDown, ChevronUp, AlertCircle,
-    Printer, RefreshCw, Calendar
+    Printer, RefreshCw, Calendar, Filter
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
+
+// ─── Bus Types (for transport fee lookup) ─────────────────────────────────────
+interface BusRoute {
+    id: string;
+    routeName: string;
+    monthlyFee: number;
+}
+interface TransportBus {
+    id: string;
+    busNumber: string;
+    routes?: BusRoute[];
+    routeDetails?: string;
+    monthlyFee?: number;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,21 +105,34 @@ export default function AdvanceFeePage() {
 
     // ── Step 1: Student search ─────────────────────────────────────────────
     const [searchQuery, setSearchQuery]     = useState("");
+    const [filterClass, setFilterClass]     = useState("");
+    const [filterSection, setFilterSection] = useState("");
     const [allStudents, setAllStudents]     = useState<StudentProfile[]>([]);
+    const [allBuses, setAllBuses]           = useState<TransportBus[]>([]);
     const [studentsLoading, setStudentsLoading] = useState(true);
     const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
     const [feeStructure, setFeeStructure]   = useState<FeeStructure | null>(null);
     const [loadingStructure, setLoadingStructure] = useState(false);
 
-    // ── Fetch all students on mount ───────────────────────────────────────
+    // ── Fetch all students and buses on mount ─────────────────────────────
     useEffect(() => {
         const fetchAllProfiles = async () => {
             setStudentsLoading(true);
             try {
+                // Fetch buses for transport fee lookup
+                const busSnap = await getDocs(query(collection(db, "transport_buses"), orderBy("busNumber")));
+                const buses = busSnap.docs.map(d => ({ id: d.id, ...d.data() } as TransportBus));
+                setAllBuses(buses);
+
                 const snap = await getDocs(collectionGroup(db, "profiles"));
                 const results: StudentProfile[] = [];
                 snap.docs.forEach(d => {
                     const data = d.data() as any;
+
+                    // ── Filter: only active students ──────────────────────
+                    const studentStatus = (data.status || "").toUpperCase();
+                    if (studentStatus === "LEFT" || studentStatus === "TC" || studentStatus === "INACTIVE") return;
+
                     const rawClass = (data.className || data.currentClass || data.class || "").toString();
                     const classId  = rawClass.replace(/^class\s*/i, "").trim();
                     const fullName = (
@@ -114,6 +141,28 @@ export default function AdvanceFeePage() {
                         "Unknown"
                     );
                     const rollNo = data.rollNo || data.admissionNumber || "";
+
+                    // ── Resolve transport info from 'transport' field ───────
+                    // transport field: "busId::routeId" or "busId" or "BUS" or "NONE"
+                    const transportStr = (data.transport || "").trim();
+                    let resolvedBusId = "";
+                    let resolvedRouteId = "";
+                    const isBusStudent = transportStr === "BUS" || transportStr.toUpperCase().startsWith("BUS");
+                    if (isBusStudent && transportStr.includes("::")) {
+                        [resolvedBusId, resolvedRouteId] = transportStr.split("::");
+                    } else if (isBusStudent) {
+                        resolvedBusId = transportStr;
+                    }
+
+                    // Resolve bus number and route details for display
+                    const assignedBus = buses.find(b => b.id === resolvedBusId) || null;
+                    const busNumber = assignedBus?.busNumber || (data.busNumber || "");
+                    let routeDetails = data.routeDetails || "";
+                    if (assignedBus && resolvedRouteId && assignedBus.routes) {
+                        const rt = assignedBus.routes.find(r => r.id === resolvedRouteId);
+                        if (rt) routeDetails = rt.routeName;
+                    }
+
                     results.push({
                         id: d.id,
                         studentName: fullName,
@@ -122,11 +171,15 @@ export default function AdvanceFeePage() {
                         section: data.section || "",
                         parentEmail: data.parentEmail || data.fatherEmail || data.email || "",
                         parentPhone: data.mobileNo || data.fatherMobile || data.phone || "",
-                        busId: data.busId || "",
-                        busNumber: data.busNumber || "",
-                        routeDetails: data.routeDetails || "",
-                        transportFee: data.transportFee || 0,
-                    });
+                        busId: resolvedBusId || (isBusStudent ? "BUS" : ""),
+                        busNumber,
+                        routeDetails,
+                        // Store the full transport string and routeId for fee lookup later
+                        transportFee: 0, // will be resolved on-demand
+                        // Extra fields for fee lookup
+                        ...(resolvedRouteId ? { _resolvedRouteId: resolvedRouteId } : {}),
+                        ...(resolvedBusId   ? { _resolvedBusId: resolvedBusId }     : {}),
+                    } as any);
                 });
                 results.sort((a, b) => a.studentName.localeCompare(b.studentName));
                 setAllStudents(results);
@@ -139,7 +192,20 @@ export default function AdvanceFeePage() {
         fetchAllProfiles();
     }, []);
 
+    // ── Derived class/section lists for filter dropdowns ──────────────────
+    const allClasses = Array.from(new Set(allStudents.map(s => s.class).filter(Boolean)))
+        .sort((a, b) => {
+            const na = parseInt(a), nb = parseInt(b);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+    const allSections = Array.from(new Set(
+        allStudents.filter(s => !filterClass || s.class === filterClass).map(s => s.section).filter(Boolean)
+    )).sort();
+
     const filteredStudents = allStudents.filter(s => {
+        if (filterClass && s.class !== filterClass) return false;
+        if (filterSection && s.section !== filterSection) return false;
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return s.studentName.toLowerCase().includes(q) || 
@@ -226,17 +292,34 @@ export default function AdvanceFeePage() {
                         if (trSnap.exists() && trSnap.data()?.status === "paid") transportAlreadyPaid = true;
                     } catch { /* ignore */ }
 
-                    // Also try fetching student's transport fee from existing transport record
-                    let existingTransportFee = feeStructure.transportFee || 0;
+                    // Resolve transport fee from bus route or existing transport record
+                    let existingTransportFee = 0;
                     if (selectedStudent.busId) {
                         try {
-                            // Try to find transport fee from any existing transportFeeRecord for this student
+                            // 1) Try existing transport fee record for this month (most accurate)
                             const trRef = doc(db, "transportFeeRecords", year.toString(), "months", month.toString(), "students", selectedStudent.id);
                             const trSnap = await getDoc(trRef);
                             if (trSnap.exists() && trSnap.data()?.amount) {
                                 existingTransportFee = trSnap.data().amount;
+                            } else {
+                                // 2) Resolve from bus route in transport_buses collection
+                                const resolvedBusId   = (selectedStudent as any)._resolvedBusId || selectedStudent.busId;
+                                const resolvedRouteId = (selectedStudent as any)._resolvedRouteId || "";
+                                const assignedBus = allBuses.find(b => b.id === resolvedBusId);
+                                if (assignedBus) {
+                                    if (resolvedRouteId && assignedBus.routes) {
+                                        const rt = assignedBus.routes.find(r => r.id === resolvedRouteId);
+                                        existingTransportFee = rt?.monthlyFee || 0;
+                                    } else if (assignedBus.routes && assignedBus.routes.length > 0) {
+                                        existingTransportFee = assignedBus.routes[0].monthlyFee || 0;
+                                    } else {
+                                        existingTransportFee = assignedBus.monthlyFee || 0;
+                                    }
+                                }
+                                // 3) Fallback to fee structure transport fee
+                                if (!existingTransportFee) existingTransportFee = feeStructure.transportFee || 0;
                             }
-                        } catch { /* use fallback */ }
+                        } catch { existingTransportFee = feeStructure.transportFee || 0; }
                     }
 
                     const tFee = (feeType === "transport" || feeType === "both") && selectedStudent.busId
@@ -497,11 +580,12 @@ export default function AdvanceFeePage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
                     <div>
                         <h2 className="font-bold text-navy text-lg">Search Student</h2>
-                        <p className="text-xs text-gray-400 mt-0.5">Search by name, roll no, bus, or class</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Search by name, roll no, bus, or filter by class &amp; section</p>
                     </div>
 
-                    <div className="flex gap-3">
-                        <div className="flex-1 relative">
+                    {/* Search + Filters row */}
+                    <div className="flex flex-wrap gap-3">
+                        <div className="flex-1 min-w-[200px] relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
                                 value={searchQuery}
@@ -510,7 +594,52 @@ export default function AdvanceFeePage() {
                                 className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy focus:ring-1 focus:ring-navy outline-none"
                             />
                         </div>
+                        {/* Class filter */}
+                        <div className="relative">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <select
+                                value={filterClass}
+                                onChange={e => { setFilterClass(e.target.value); setFilterSection(""); }}
+                                className="pl-9 pr-8 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy outline-none appearance-none bg-white min-w-[130px]"
+                            >
+                                <option value="">All Classes</option>
+                                {allClasses.map(c => (
+                                    <option key={c} value={c}>Class {c}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Section filter */}
+                        <div className="relative">
+                            <select
+                                value={filterSection}
+                                onChange={e => setFilterSection(e.target.value)}
+                                disabled={!filterClass}
+                                className="px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy outline-none appearance-none bg-white min-w-[120px] disabled:opacity-50"
+                            >
+                                <option value="">All Sections</option>
+                                {allSections.map(s => (
+                                    <option key={s} value={s}>Section {s}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Clear filters */}
+                        {(filterClass || filterSection || searchQuery) && (
+                            <button
+                                onClick={() => { setFilterClass(""); setFilterSection(""); setSearchQuery(""); }}
+                                className="flex items-center gap-1.5 px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                            >
+                                <X className="w-4 h-4" /> Clear
+                            </button>
+                        )}
                     </div>
+                    {/* Filter summary */}
+                    {(filterClass || filterSection) && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="font-semibold">{filteredStudents.length}</span> student{filteredStudents.length !== 1 ? "s" : ""} found
+                            {filterClass && <span className="px-2 py-0.5 rounded-full bg-navy/10 text-navy font-semibold">Class {filterClass}</span>}
+                            {filterSection && <span className="px-2 py-0.5 rounded-full bg-navy/10 text-navy font-semibold">Section {filterSection}</span>}
+                        </div>
+                    )}
 
                     {/* Results */}
                     {studentsLoading ? (
