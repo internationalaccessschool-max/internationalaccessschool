@@ -215,6 +215,37 @@ export default function ManageFeesPage() {
                     r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
+
+                // Send Receipt via Email
+                const schoolBreakdownItems = [
+                    { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
+                    { label: "Annual Fee", amount: record.breakdown?.annualFee || 0 },
+                    { label: "Admission Fee", amount: record.breakdown?.admissionFee || 0 },
+                    { label: "Registration Fee", amount: record.breakdown?.registrationFee || 0 },
+                    { label: "Sports Fee", amount: record.breakdown?.sportsFee || 0 },
+                    { label: "Miscellaneous Fee", amount: record.breakdown?.miscFee || 0 },
+                ].filter(item => item.amount > 0);
+                if (schoolBreakdownItems.length === 0) schoolBreakdownItems.push({ label: "School Fee", amount: record.amount });
+
+                fetch("/api/send-receipt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        studentId: studentUid,
+                        receiptData: {
+                            title: "School Fee Receipt",
+                            receiptNo,
+                            studentName: record.studentName,
+                            classSection: `Class ${record.class}${record.section ? ` - ${record.section}` : ""}`,
+                            rollNo: record.rollNo || undefined,
+                            paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                            feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
+                            lineItems: schoolBreakdownItems,
+                            totalAmount: record.amount,
+                            paymentMode
+                        }
+                    })
+                }).catch(console.error);
             }
 
             if (markPaidType === "transport" || markPaidType === "both") {
@@ -243,6 +274,26 @@ export default function ManageFeesPage() {
                     r.id === record.id ? { ...r, transportStatus: "paid", transportReceiptNo } : r
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
+
+                fetch("/api/send-receipt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        studentId: studentUid,
+                        receiptData: {
+                            title: "Transport Fee Receipt",
+                            receiptNo: transportReceiptNo,
+                            studentName: record.studentName,
+                            classSection: `Class ${record.class}${record.section ? ` - ${record.section}` : ""}`,
+                            rollNo: record.rollNo || undefined,
+                            paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                            feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
+                            lineItems: [{ label: "Transport / Bus Fee", amount: record.transportFeeAmount || 0 }],
+                            totalAmount: record.transportFeeAmount || 0,
+                            paymentMode
+                        }
+                    })
+                }).catch(console.error);
             }
 
             setMarkPaidRecord(null);
