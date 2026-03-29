@@ -62,6 +62,8 @@ export default function ClassTeacherPage() {
                 const map: Record<string, Set<string>> = {};
                 profilesSnap.docs.forEach(d => {
                     const data = d.data();
+                    // Only include active students
+                    if ((data.status ?? "ACTIVE").toString().toUpperCase() === "LEFT") return;
                     const cls = (data.currentClass ?? data.className ?? "").toString().trim();
                     const sec = (data.section ?? "").toString().trim();
                     if (!cls || !sec) return;
