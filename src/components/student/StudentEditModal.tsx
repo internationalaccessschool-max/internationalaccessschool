@@ -216,7 +216,8 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                         <F label="Contact 3" field="contact3" type="tel" />
                         <F label="Father's Mobile" field="fatherMobile" type="tel" />
                         <F label="Mother's Mobile" field="motherMobile" type="tel" />
-                        <F label="Email" field="email" type="email" />
+                        <F label="Auth Login Email" field="email" type="email" />
+                        <F label="Notification Email" field="notificationEmail" type="email" />
                         <div className="sm:col-span-2"><F label="Address" field="address" /></div>
                         <div className="sm:col-span-2"><F label="Present Address" field="presentAddress" /></div>
                         <div className="sm:col-span-2"><F label="Permanent Address" field="permanentAddress" /></div>
