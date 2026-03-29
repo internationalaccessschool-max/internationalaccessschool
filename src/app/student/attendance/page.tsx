@@ -1,15 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, CalendarCheck, Clock, Check, X, AlertCircle, TrendingUp } from "lucide-react";
+import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from "lucide-react";
 
 interface AttendanceRecord {
     date: string;
     status: "present" | "absent" | "late";
     day: string;
+    month: string; // "YYYY-MM"
+    year: string;  // "YYYY"
+}
+
+// Generate month options for the filter dropdown
+function generateMonthOptions(records: AttendanceRecord[]): { label: string; value: string }[] {
+    const monthSet = new Set<string>();
+    records.forEach(r => {
+        const m = r.month || r.date?.slice(0, 7);
+        if (m) monthSet.add(m);
+    });
+    return Array.from(monthSet)
+        .sort((a, b) => b.localeCompare(a)) // newest first
+        .map(m => {
+            const [y, mo] = m.split("-");
+            const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+            return { label, value: m };
+        });
 }
 
 export default function StudentAttendancePage() {
@@ -18,7 +36,7 @@ export default function StudentAttendancePage() {
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [studentClass, setStudentClass] = useState("");
     const [studentSection, setStudentSection] = useState("");
-    const [filterMonth, setFilterMonth] = useState("All");
+    const [filterMonth, setFilterMonth] = useState<string>("all");
 
     useEffect(() => {
         if (!user) return;
@@ -56,11 +74,17 @@ export default function StudentAttendancePage() {
                     const myStatus = statusMap[user.uid];
 
                     if (myStatus) {
-                        const dateObj = new Date(data.date + "T00:00:00");
+                        const dateStr: string = data.date || "";
+                        const monthStr = data.month || dateStr.slice(0, 7);
+                        const yearStr = data.year || dateStr.slice(0, 4);
+                        const dateObj = new Date(dateStr + "T00:00:00");
+
                         studentRecords.push({
-                            date: data.date,
+                            date: dateStr,
                             status: myStatus as "present" | "absent" | "late",
                             day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
+                            month: monthStr,
+                            year: yearStr,
                         });
                     }
                 });
@@ -68,6 +92,14 @@ export default function StudentAttendancePage() {
                 // Sort by date descending
                 studentRecords.sort((a, b) => b.date.localeCompare(a.date));
                 setRecords(studentRecords);
+
+                // Default filter to current month if data exists for it
+                const curMonth = (() => {
+                    const now = new Date();
+                    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                })();
+                const hasCurMonth = studentRecords.some(r => (r.month || r.date?.slice(0, 7)) === curMonth);
+                setFilterMonth(hasCurMonth ? curMonth : "all");
             } catch (err) {
                 console.error("Error fetching attendance:", err);
             } finally {
@@ -78,25 +110,28 @@ export default function StudentAttendancePage() {
         fetchAttendance();
     }, [user]);
 
-    // Stats
-    const totalDays = records.length;
-    const presentDays = records.filter(r => r.status === "present").length;
-    const lateDays = records.filter(r => r.status === "late").length;
-    const absentDays = records.filter(r => r.status === "absent").length;
+    const monthOptions = useMemo(() => generateMonthOptions(records), [records]);
+
+    const filteredRecords = filterMonth === "all"
+        ? records
+        : records.filter(r => (r.month || r.date?.slice(0, 7)) === filterMonth);
+
+    // Stats from filtered records
+    const totalDays = filteredRecords.length;
+    const presentDays = filteredRecords.filter(r => r.status === "present").length;
+    const lateDays = filteredRecords.filter(r => r.status === "late").length;
+    const absentDays = filteredRecords.filter(r => r.status === "absent").length;
     const percentage = totalDays > 0 ? Math.round(((presentDays + lateDays) / totalDays) * 100) : 0;
 
-    // Month filter
-    const months = ["All", ...Array.from(new Set(records.map(r => {
-        const d = new Date(r.date + "T00:00:00");
-        return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-    })))];
+    // Overall stats (all time)
+    const allTotal = records.length;
+    const allPresent = records.filter(r => r.status === "present").length;
+    const allLate = records.filter(r => r.status === "late").length;
+    const allPct = allTotal > 0 ? Math.round(((allPresent + allLate) / allTotal) * 100) : 0;
 
-    const filteredRecords = filterMonth === "All"
-        ? records
-        : records.filter(r => {
-            const d = new Date(r.date + "T00:00:00");
-            return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }) === filterMonth;
-        });
+    const selectedMonthLabel = filterMonth === "all"
+        ? "All Time"
+        : monthOptions.find(m => m.value === filterMonth)?.label || filterMonth;
 
     if (loading) {
         return (
@@ -116,12 +151,40 @@ export default function StudentAttendancePage() {
                 <div className="absolute inset-0 opacity-10"
                     style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.4) 0%, transparent 60%)" }}
                 />
-                <div className="relative z-10">
-                    <p className="text-white/50 text-sm font-medium">Student Portal</p>
-                    <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">📋 My Attendance</h1>
-                    <p className="text-white/40 text-sm mt-1">
-                        {studentClass} — Section {studentSection}
-                    </p>
+                <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <p className="text-white/50 text-sm font-medium">Student Portal</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">📋 My Attendance</h1>
+                        <p className="text-white/40 text-sm mt-1">
+                            {studentClass} — Section {studentSection}
+                        </p>
+                    </div>
+                    {/* Overall badge */}
+                    <div className={`self-start sm:self-auto px-4 py-3 rounded-2xl text-center min-w-[90px] ${allPct >= 75 ? "bg-emerald-500/20 border border-emerald-400/30" : allPct >= 50 ? "bg-amber-500/20 border border-amber-400/30" : "bg-red-500/20 border border-red-400/30"}`}>
+                        <div className={`text-2xl font-bold ${allPct >= 75 ? "text-emerald-300" : allPct >= 50 ? "text-amber-300" : "text-red-300"}`}>{allPct}%</div>
+                        <div className="text-white/50 text-xs mt-0.5">Overall</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Month Filter */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                    <CalendarCheck className="w-4 h-4 text-navy" />
+                    <span className="text-sm font-semibold text-navy">{selectedMonthLabel}</span>
+                </div>
+                <div className="relative">
+                    <select
+                        value={filterMonth}
+                        onChange={e => setFilterMonth(e.target.value)}
+                        className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[180px]"
+                    >
+                        <option value="all">All Time</option>
+                        {monthOptions.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
             </div>
 
@@ -129,16 +192,13 @@ export default function StudentAttendancePage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {/* Percentage */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-                    <div className={`w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 ${percentage >= 75 ? "bg-emerald-100" : percentage >= 50 ? "bg-amber-100" : "bg-red-100"
-                        }`}>
-                        <TrendingUp className={`w-6 h-6 ${percentage >= 75 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"
-                            }`} />
+                    <div className={`w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 ${percentage >= 75 ? "bg-emerald-100" : percentage >= 50 ? "bg-amber-100" : "bg-red-100"}`}>
+                        <TrendingUp className={`w-6 h-6 ${percentage >= 75 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"}`} />
                     </div>
-                    <div className={`text-3xl font-bold ${percentage >= 75 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"
-                        }`}>
-                        {percentage}%
+                    <div className={`text-3xl font-bold ${percentage >= 75 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                        {totalDays > 0 ? `${percentage}%` : "—"}
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">Overall</div>
+                    <div className="text-xs text-gray-400 mt-1">Attendance</div>
                 </div>
 
                 {/* Present */}
@@ -174,7 +234,7 @@ export default function StudentAttendancePage() {
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-bold text-navy">Attendance Breakdown</span>
-                        <span className="text-xs text-gray-400">{totalDays} total days</span>
+                        <span className="text-xs text-gray-400">{totalDays} total days · {selectedMonthLabel}</span>
                     </div>
                     <div className="w-full h-4 rounded-full bg-gray-100 overflow-hidden flex">
                         {presentDays > 0 && (
@@ -189,34 +249,32 @@ export default function StudentAttendancePage() {
                     </div>
                     <div className="flex gap-4 mt-2">
                         <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Present
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Present ({presentDays})
                         </span>
                         <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-amber-400" /> Late
+                            <span className="w-2 h-2 rounded-full bg-amber-400" /> Late ({lateDays})
                         </span>
                         <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-red-400" /> Absent
+                            <span className="w-2 h-2 rounded-full bg-red-400" /> Absent ({absentDays})
                         </span>
                     </div>
                 </div>
             )}
 
-            {/* Month Filter + Date-wise List */}
+            {/* Date-wise List */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                <div className="p-5 border-b border-gray-100">
                     <h2 className="font-bold text-navy">Date-wise Attendance</h2>
-                    <select
-                        value={filterMonth}
-                        onChange={e => setFilterMonth(e.target.value)}
-                        className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 outline-none focus:ring-2 focus:ring-navy/20"
-                    >
-                        {months.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                    {filterMonth !== "all" && (
+                        <p className="text-xs text-gray-400 mt-1">{selectedMonthLabel}</p>
+                    )}
                 </div>
 
                 {filteredRecords.length === 0 ? (
                     <div className="p-10 text-center text-gray-400 text-sm">
-                        No attendance records found.
+                        {records.length === 0
+                            ? "No attendance records found."
+                            : `No records for ${selectedMonthLabel}.`}
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
@@ -241,10 +299,10 @@ export default function StudentAttendancePage() {
                                         </div>
                                     </div>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${record.status === "present"
-                                            ? "bg-emerald-100 text-emerald-700"
-                                            : record.status === "late"
-                                                ? "bg-amber-100 text-amber-700"
-                                                : "bg-red-100 text-red-700"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : record.status === "late"
+                                            ? "bg-amber-100 text-amber-700"
+                                            : "bg-red-100 text-red-700"
                                         }`}>
                                         {record.status === "present" ? "✓ Present" : record.status === "late" ? "⏰ Late" : "✗ Absent"}
                                     </span>
