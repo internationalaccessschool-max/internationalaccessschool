@@ -25,6 +25,7 @@ export interface StudentProfile extends UserProfile {
     guardianPhone: string;
     address: string;
     dob: string;
+    notificationEmail?: string;
 }
 
 export interface TeacherProfile extends UserProfile {
