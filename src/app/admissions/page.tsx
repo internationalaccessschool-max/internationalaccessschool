@@ -80,7 +80,7 @@ export default function AdmissionsPage() {
         resolver: zodResolver(admissionSchema) as any,
         defaultValues: {
             physicallyDisabled: "No",
-            session: "2025-2026",
+            session: new Date().getFullYear().toString(),
             noOfBrothers: 0,
             noOfSisters: 0,
         }
@@ -204,7 +204,7 @@ export default function AdmissionsPage() {
                                     <FormSelect label="Session *" register={register("session")} error={errors.session}>
                                         {Array.from({ length: 2050 - new Date().getFullYear() + 1 }, (_, i) => {
                                             const y = new Date().getFullYear() + i;
-                                            return <option key={y} value={`${y}-${y + 1}`}>{y}-{y + 1}</option>;
+                                            return <option key={y} value={y.toString()}>{y}</option>;
                                         })}
                                     </FormSelect>
 
