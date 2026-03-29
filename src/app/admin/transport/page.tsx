@@ -191,11 +191,14 @@ export default function TransportAdminPage() {
     const handleGenerateTransportFees = async () => {
         const busStudents = students.filter(s => {
             const t = (s.transport || "").trim().toUpperCase();
-            return t === "BUS" || t.startsWith("BUS-");
+            const status = (s.status || "").trim().toUpperCase();
+            const isBus = t === "BUS" || t.startsWith("BUS-") || t.includes("::");
+            const isActive = status === "ACTIVE";
+            return isBus && isActive;
         });
 
         if (busStudents.length === 0) {
-            showToast("No bus students found. Assign buses to students first.", "error");
+            showToast("No active bus students found. Assign buses to students first.", "error");
             return;
         }
 
