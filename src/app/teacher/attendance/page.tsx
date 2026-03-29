@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, doc, getDoc, getDocs, setDoc, query, where, orderBy, serverTimestamp, collectionGroup } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, X, Clock, Loader2, AlertCircle, CalendarCheck, Users } from "lucide-react";
+import { Check, X, Clock, Loader2, AlertCircle } from "lucide-react";
 
 type AttendanceStatus = "present" | "absent" | "late";
 
@@ -36,17 +36,15 @@ export default function TeacherAttendancePage() {
     });
     const [existingDocId, setExistingDocId] = useState<string | null>(null);
 
-    // Step 1: Find the teacher's assigned class from teacher doc (new assignment format)
+    // Step 1: Find the teacher's assigned class from teacher doc
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
 
             try {
-                // Try fetching teacher doc by UID
                 let teacherDocRef = doc(db, "teachers", user.uid);
                 let teacherSnap = await getDoc(teacherDocRef);
 
-                // If not found, try by email
                 if (!teacherSnap.exists() && user.email) {
                     const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
                     const emailSnaps = await getDocs(emailQ);
@@ -60,7 +58,6 @@ export default function TeacherAttendancePage() {
                     const a = data.assignment;
                     let matches: { cls: string, section: string }[] = [];
 
-                    // Parse new classSections format: { "Class 12": ["A", "B"] }
                     if (a?.classSections) {
                         Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
                             if (Array.isArray(secs)) {
@@ -70,7 +67,6 @@ export default function TeacherAttendancePage() {
                             }
                         });
                     } else if (a?.classes?.length) {
-                        // Fallback to old flat array format: classes: ["Class 12"], sections: ["A"]
                         (a.classes as string[]).forEach((c: string) => {
                             (a.sections || []).forEach((s: string) => {
                                 matches.push({ cls: c, section: s });
@@ -78,7 +74,6 @@ export default function TeacherAttendancePage() {
                         });
                     }
 
-                    // Fallback to old class_teachers collection
                     if (matches.length === 0) {
                         const ctSnap = await getDocs(collection(db, "class_teachers"));
                         ctSnap.docs.forEach(d => {
@@ -119,14 +114,12 @@ export default function TeacherAttendancePage() {
             try {
                 const normClass = assignedClass.replace(/^class\s*/i, "").trim();
 
-                // ✅ Optimised: read directly from the exact nested path — no whole-db scan
                 const directSnap = await getDocs(
                     collection(db, "users", "classes", assignedClass, "sections", assignedSection, "students", "profiles")
                 );
 
                 let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // Fallback 1: try normalised class name (e.g. "12" instead of "Class 12")
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
                         collection(db, "users", "classes", normClass, "sections", assignedSection, "students", "profiles")
@@ -134,7 +127,6 @@ export default function TeacherAttendancePage() {
                     allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 }
 
-                // Fallback 2: users collection (~cheaper than full collectionGroup scan)
                 if (allProfiles.length === 0) {
                     const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
                     allProfiles = usersSnap.docs
@@ -183,14 +175,12 @@ export default function TeacherAttendancePage() {
                     const records = data.records || {};
                     setExistingDocId(docId);
 
-                    // Update student statuses from saved data
                     setStudents(prev => prev.map(s => ({
                         ...s,
                         status: (records[s.id] as AttendanceStatus) || "present",
                     })));
                 } else {
                     setExistingDocId(null);
-                    // Reset all to present
                     setStudents(prev => prev.map(s => ({ ...s, status: "present" as AttendanceStatus })));
                 }
             } catch (err) {
@@ -221,11 +211,17 @@ export default function TeacherAttendancePage() {
             const records: Record<string, string> = {};
             students.forEach(s => { records[s.id] = s.status; });
 
+            // Parse year and month from date string (YYYY-MM-DD)
+            const [year, month] = selectedDate.split("-");
+            const yearMonth = `${year}-${month}`; // e.g. "2026-03"
+
             const currentUser = auth.currentUser;
             await setDoc(doc(db, "attendance", docId), {
                 cls: assignedClass,
                 section: assignedSection,
                 date: selectedDate,
+                year,            // "2026"
+                month: yearMonth, // "2026-03"
                 records,
                 markedBy: currentUser?.uid || "unknown",
                 markedByName: currentUser?.displayName || "Teacher",
@@ -249,12 +245,11 @@ export default function TeacherAttendancePage() {
     const absentCount = students.filter(s => s.status === "absent").length;
 
     const todayStr = new Date().toISOString().split("T")[0];
-    const isPastDate = selectedDate < todayStr; // true when viewing a previous day
+    const isPastDate = selectedDate < todayStr;
     const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
         weekday: "long", day: "numeric", month: "long", year: "numeric"
     });
 
-    // ── Not a class teacher ──
     if (notClassTeacher) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -270,7 +265,6 @@ export default function TeacherAttendancePage() {
         );
     }
 
-    // ── Loading ──
     if (loading) {
         return (
             <div className="flex justify-center items-center min-h-[60vh]">
@@ -320,7 +314,7 @@ export default function TeacherAttendancePage() {
                             <span className="text-white/40 text-sm">• {students.length} students</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-1">
                         <input
                             type="date"
                             value={selectedDate}
@@ -328,6 +322,9 @@ export default function TeacherAttendancePage() {
                             onChange={e => setSelectedDate(e.target.value)}
                             className="px-4 py-2 rounded-xl text-sm border-0 bg-white/10 text-white backdrop-blur-sm focus:ring-2 focus:ring-gold/30 outline-none"
                         />
+                        <span className="text-white/40 text-xs">
+                            {selectedDate.split("-")[0]} / {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { month: "long" })}
+                        </span>
                     </div>
                 </div>
             </div>
