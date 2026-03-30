@@ -76,6 +76,9 @@ export default function ManageFeesPage() {
     const [markPaidType, setMarkPaidType] = useState<MarkPaidType>("school");
     const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
     const [markPaidLoading, setMarkPaidLoading] = useState(false);
+    // Discount
+    const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
+    const [discountValue, setDiscountValue] = useState<number>(0);
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -210,6 +213,16 @@ export default function ManageFeesPage() {
         const hasTransport = (record.transportFeeAmount || 0) > 0;
         setMarkPaidType(hasTransport ? "both" : "school");
         setMarkPaidRecord(record);
+        setPaymentMode("CASH");
+        setDiscountType("none");
+        setDiscountValue(0);
+    };
+
+    // Compute discount amount from current markPaidRecord
+    const computeDiscount = (baseTotal: number) => {
+        if (discountType === "fixed") return Math.min(discountValue, baseTotal);
+        if (discountType === "percent") return Math.min((discountValue / 100) * baseTotal, baseTotal);
+        return 0;
     };
 
     const handleConfirmMarkPaid = async () => {
@@ -222,14 +235,22 @@ export default function ManageFeesPage() {
             if (markPaidType === "school" || markPaidType === "both") {
                 const seq = Math.floor(Math.random() * 90000) + 10000;
                 const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-                const schoolTotalPaid = record.totalAmount || record.amount; // what they actually paid
+                const schoolBaseTotal = record.totalAmount || record.amount;
+                const schoolDiscount = computeDiscount(schoolBaseTotal);
+                const schoolTotalPaid = schoolBaseTotal - schoolDiscount;
+                const discountFields = discountType !== "none" && schoolDiscount > 0 ? {
+                    discountType,
+                    discountAmount: schoolDiscount,
+                    discountPercent: discountType === "percent" ? discountValue : parseFloat(((schoolDiscount / schoolBaseTotal) * 100).toFixed(2)),
+                } : {};
                 await updateDoc(doc(db, record.path), {
                     status: "paid",
                     paidOn: new Date(),
                     receiptNo,
                     paymentMode,
                     markedBy: user?.uid || "",
-                    totalAmountPaid: schoolTotalPaid, // record the actual total collected
+                    totalAmountPaid: schoolTotalPaid,
+                    ...discountFields,
                 });
                 setRecords(prev => prev.map(r =>
                     r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
@@ -250,6 +271,14 @@ export default function ManageFeesPage() {
                 // Add Previous Dues line if carried forward
                 if ((record.previousDues || 0) > 0) {
                     schoolBreakdownItems.push({ label: "Previous Dues (Arrears)", amount: record.previousDues! });
+                }
+
+                // Add discount line item (negative)
+                const schoolBaseTotal2 = record.totalAmount || record.amount;
+                const schoolDiscountAmt = computeDiscount(schoolBaseTotal2);
+                if (schoolDiscountAmt > 0) {
+                    const pct = discountType === "percent" ? ` (${discountValue}%)` : ``;
+                    schoolBreakdownItems.push({ label: `Discount Applied${pct}`, amount: -schoolDiscountAmt });
                 }
 
                 fetch("/api/send-receipt", {
@@ -276,7 +305,14 @@ export default function ManageFeesPage() {
             if (markPaidType === "transport" || markPaidType === "both") {
                 const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
                 const transportReceiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
-                const transpTotalPaid = record.transportTotalAmount || record.transportFeeAmount || 0;
+                const transpBaseTotal = record.transportTotalAmount || record.transportFeeAmount || 0;
+                const transpDiscount = computeDiscount(transpBaseTotal);
+                const transpTotalPaid = transpBaseTotal - transpDiscount;
+                const transpDiscountFields = discountType !== "none" && transpDiscount > 0 ? {
+                    discountType,
+                    discountAmount: transpDiscount,
+                    discountPercent: discountType === "percent" ? discountValue : parseFloat(((transpDiscount / transpBaseTotal) * 100).toFixed(2)),
+                } : {};
                 await setDoc(doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid), {
                     studentId: studentUid,
                     studentName: record.studentName,
@@ -287,7 +323,7 @@ export default function ManageFeesPage() {
                     routeDetails: "",
                     amount: record.transportFeeAmount || 0,
                     previousDues: record.transportPreviousDues || 0,
-                    totalAmount: transpTotalPaid,
+                    totalAmount: transpBaseTotal,
                     totalAmountPaid: transpTotalPaid,
                     month: record.month,
                     year: record.year,
@@ -298,6 +334,7 @@ export default function ManageFeesPage() {
                     paymentMode,
                     parentEmail: record.parentEmail || "",
                     markedBy: user?.uid || "",
+                    ...transpDiscountFields,
                 }, { merge: true });
                 setRecords(prev => prev.map(r =>
                     r.id === record.id ? { ...r, transportStatus: "paid", transportReceiptNo } : r
@@ -310,6 +347,12 @@ export default function ManageFeesPage() {
                 ];
                 if ((record.transportPreviousDues || 0) > 0) {
                     transportLineItems.push({ label: "Previous Transport Dues (Arrears)", amount: record.transportPreviousDues! });
+                }
+                // Discount line for transport
+                const transpDiscountAmt2 = computeDiscount(transpBaseTotal);
+                if (transpDiscountAmt2 > 0) {
+                    const pct = discountType === "percent" ? ` (${discountValue}%)` : ``;
+                    transportLineItems.push({ label: `Discount Applied${pct}`, amount: -transpDiscountAmt2 });
                 }
 
                 fetch("/api/send-receipt", {
@@ -851,6 +894,70 @@ export default function ManageFeesPage() {
                                     </label>
                                 </div>
                             </div>
+
+                            {/* ── Discount Section ── */}
+                            {(() => {
+                                const baseTotal = (() => {
+                                    const s = markPaidRecord!.totalAmount || markPaidRecord!.amount;
+                                    const t = markPaidRecord!.transportTotalAmount || markPaidRecord!.transportFeeAmount || 0;
+                                    if (markPaidType === "school") return s;
+                                    if (markPaidType === "transport") return t;
+                                    return s + t;
+                                })();
+                                const discAmt = discountType === "fixed"
+                                    ? Math.min(discountValue, baseTotal)
+                                    : discountType === "percent"
+                                        ? Math.min((discountValue / 100) * baseTotal, baseTotal)
+                                        : 0;
+                                const netPayable = baseTotal - discAmt;
+                                return (
+                                    <div className="pt-3 mt-3 border-t border-gray-100">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Discount <span className="font-normal text-gray-400">(Optional)</span></p>
+                                        {/* Type toggle */}
+                                        <div className="flex gap-2 mb-2">
+                                            {(["none", "fixed", "percent"] as const).map(t => (
+                                                <button key={t} type="button"
+                                                    onClick={() => { setDiscountType(t); setDiscountValue(0); }}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
+                                                        discountType === t
+                                                            ? "border-violet-500 bg-violet-50 text-violet-700"
+                                                            : "border-gray-100 text-gray-500 hover:border-gray-300"
+                                                    }`}>
+                                                    {t === "none" ? "No Discount" : t === "fixed" ? "₹ Fixed" : "% Percent"}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {discountType !== "none" && (
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-sm font-bold text-gray-500">{discountType === "fixed" ? "₹" : "%"}</span>
+                                                <input
+                                                    type="number" min={0}
+                                                    max={discountType === "percent" ? 100 : baseTotal}
+                                                    value={discountValue || ""}
+                                                    onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+                                                    placeholder={discountType === "fixed" ? "Enter amount" : "Enter %"}
+                                                    className="flex-1 px-3 py-2 border-2 border-violet-200 rounded-xl text-sm outline-none focus:border-violet-500 bg-violet-50/50"
+                                                />
+                                            </div>
+                                        )}
+                                        {/* Live total breakdown */}
+                                        <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5 text-sm">
+                                            <div className="flex justify-between text-gray-500">
+                                                <span>Subtotal</span><span>₹{baseTotal.toLocaleString()}</span>
+                                            </div>
+                                            {discAmt > 0 && (
+                                                <div className="flex justify-between text-violet-600 font-medium">
+                                                    <span>Discount {discountType === "percent" ? `(${discountValue}%)` : "(Fixed)"}</span>
+                                                    <span>−₹{discAmt.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-1.5 mt-1">
+                                                <span>Net Payable</span><span>₹{netPayable.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Actions */}
