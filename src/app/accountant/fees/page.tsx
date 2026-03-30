@@ -3,7 +3,7 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, setDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -257,6 +257,41 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
+                // ── RECONCILE STALE DUES ─────────────────────────────────────
+                // If this record was "carried_forward" (i.e. its dues are embedded
+                // in a later month's previousDues), update that next month's record
+                // to avoid double-charging.
+                try {
+                    const paidAmount = record.totalAmount || record.amount; // what was embedded in next month
+                    let nextMonth = record.month + 1;
+                    let nextYear = record.year;
+                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+
+                    const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
+                    const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
+                    const nextSnap = await getDoc(nextRef);
+
+                    if (nextSnap.exists()) {
+                        const nextData = nextSnap.data() as any;
+                        if ((nextData.previousDues || 0) > 0 && nextData.status !== "paid") {
+                            // Deduct this month's amount from next month's dues
+                            const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidAmount);
+                            const newTotal = (nextData.amount || 0) + newPrevDues;
+                            await updateDoc(nextRef, {
+                                previousDues: newPrevDues,
+                                totalAmount: newTotal,
+                            });
+                            // Update local state too if that record is visible
+                            setRecords(prev => prev.map(r =>
+                                r.id === nextRecordId
+                                    ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
+                                    : r
+                            ));
+                        }
+                    }
+                } catch { /* reconciliation is best-effort, don't block payment */ }
+                // ── END RECONCILE ────────────────────────────────────────────
+
                 // Send Receipt via Email
                 const schoolBreakdownItems: { label: string; amount: number }[] = [
                     { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
@@ -341,7 +376,32 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
 
-                // Build transport line items with arrears
+                // ── RECONCILE STALE TRANSPORT DUES ─────────────────────────
+                try {
+                    const transpPaidAmount = transpBaseTotal; // what was embedded in next month's previousDues
+                    let nextMonth = (record.month || 1) + 1;
+                    let nextYear = record.year;
+                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+
+                    const nextTransRef = doc(
+                        db, "transportFeeRecords",
+                        nextYear.toString(), "months", nextMonth.toString(), "students", studentUid
+                    );
+                    const nextTransSnap = await getDoc(nextTransRef);
+                    if (nextTransSnap.exists()) {
+                        const ntd = nextTransSnap.data() as any;
+                        if ((ntd.previousDues || 0) > 0 && ntd.status !== "paid") {
+                            const newPrevDues = Math.max(0, (ntd.previousDues || 0) - transpPaidAmount);
+                            await updateDoc(nextTransRef, {
+                                previousDues: newPrevDues,
+                                totalAmount: (ntd.amount || 0) + newPrevDues,
+                            });
+                        }
+                    }
+                } catch { /* best-effort — don't block payment success */ }
+                // ── END RECONCILE TRANSPORT ──────────────────────────────────
+
+
                 const transportLineItems: { label: string; amount: number }[] = [
                     { label: "Transport / Bus Fee (Current Month)", amount: record.transportFeeAmount || 0 },
                 ];
