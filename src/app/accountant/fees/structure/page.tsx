@@ -29,7 +29,7 @@ interface FeeStructure {
     monthly: number;
     tuitionFee: number;
     annualFee: number;
-    admissionFee: number;
+    admissionFee: number; // one-time, stored for admission-time fee generation only
     registrationFee: number;
     sportsFee: number;
     miscFee: number;
@@ -69,7 +69,7 @@ export default function FeeStructurePage() {
                 monthly: structure[classId]?.monthly || 0,
                 tuitionFee: structure[classId]?.tuitionFee || 0,
                 annualFee: structure[classId]?.annualFee || 0,
-                admissionFee: structure[classId]?.admissionFee || 0,
+                admissionFee: structure[classId]?.admissionFee || 0, // one-time fee — used at admission only
                 registrationFee: structure[classId]?.registrationFee || 0,
                 sportsFee: structure[classId]?.sportsFee || 0,
                 miscFee: structure[classId]?.miscFee || 0,
@@ -88,12 +88,11 @@ export default function FeeStructurePage() {
         setStructure(prev => {
             const classStructure = { ...prev[classId], [field]: value };
 
-            // Auto calculate monthly total if a fee component changes
-            if (field !== "dueDay" && field !== "monthly") {
+            // Auto calculate monthly total — admissionFee excluded (one-time charge at admission)
+            if (field !== "dueDay" && field !== "monthly" && field !== "admissionFee") {
                 classStructure.monthly =
                     (classStructure.tuitionFee || 0) +
                     (classStructure.annualFee || 0) +
-                    (classStructure.admissionFee || 0) +
                     (classStructure.registrationFee || 0) +
                     (classStructure.sportsFee || 0) +
                     (classStructure.miscFee || 0);
@@ -139,9 +138,12 @@ export default function FeeStructurePage() {
                 <div>
                     <p className="text-sm font-medium text-blue-800">How it works</p>
                     <p className="text-xs text-blue-600 mt-0.5">
-                        Set the monthly fee for each class. The <strong>due day</strong> means fees are due on that day every month (e.g., 10 = 10th of each month).
+                        Set the monthly fee for each class. The <strong>due day</strong> means fees are due on that day every month.
                         After saving, go to <strong>Generate Monthly Fees</strong> to create fee records for all students.
                         Students with <strong>monthly fee = 0</strong> will be skipped during generation.
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1.5 font-medium">
+                        ⚠️ <strong>Admission Fee</strong> is a one-time charge — set it here but it will only be collected at the time of student admission, not in monthly fee generation.
                     </p>
                 </div>
             </div>
@@ -154,37 +156,50 @@ export default function FeeStructurePage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <div className="min-w-[1000px] divide-y divide-gray-50">
+                    <div className="min-w-[980px] divide-y divide-gray-50">
                         {/* Column Headers */}
-                        <div className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
+                        <div className="grid grid-cols-[100px_repeat(5,1fr)_80px_100px_80px_100px] gap-2 px-6 py-3 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 items-center text-center">
                             <div className="text-left">Class</div>
                             <div>Tuition</div>
                             <div>Annual</div>
-                            <div>Admission</div>
                             <div>Registration</div>
                             <div>Sports</div>
                             <div>Misc</div>
-                            <div className="text-navy">Total (₹)</div>
+                            <div className="text-amber-600">Adm. Fee<br/><span className="text-[8px] normal-case font-normal">(one-time)</span></div>
+                            <div className="text-navy">Monthly (₹)</div>
                             <div>Due Day</div>
                             <div className="text-right">Action</div>
                         </div>
 
                         {CLASS_LIST.map(cls => (
-                            <div key={cls.id} className="grid grid-cols-[100px_repeat(6,1fr)_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
+                            <div key={cls.id} className="grid grid-cols-[100px_repeat(5,1fr)_80px_100px_80px_100px] gap-2 items-center px-6 py-3 hover:bg-gray-50/50 transition-colors">
                                 <div className="font-semibold text-navy text-sm">{cls.name}</div>
 
-                                {['tuitionFee', 'annualFee', 'admissionFee', 'registrationFee', 'sportsFee', 'miscFee'].map(feeKey => (
+                                {/* Monthly fee components (not admission) */}
+                                {(['tuitionFee', 'annualFee', 'registrationFee', 'sportsFee', 'miscFee'] as const).map(feeKey => (
                                     <div key={feeKey}>
                                         <input
                                             type="number"
                                             min={0}
-                                            value={structure[cls.id]?.[feeKey as keyof FeeStructure] || ""}
-                                            onChange={e => updateField(cls.id, feeKey as keyof FeeStructure, Number(e.target.value))}
+                                            value={structure[cls.id]?.[feeKey] || ""}
+                                            onChange={e => updateField(cls.id, feeKey, Number(e.target.value))}
                                             placeholder="0"
                                             className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm focus:border-gold focus:ring-1 focus:ring-gold outline-none transition-all text-center"
                                         />
                                     </div>
                                 ))}
+
+                                {/* Admission Fee — one-time, amber tinted */}
+                                <div>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={structure[cls.id]?.admissionFee || ""}
+                                        onChange={e => updateField(cls.id, "admissionFee", Number(e.target.value))}
+                                        placeholder="0"
+                                        className="w-full px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-sm focus:border-amber-400 focus:ring-1 focus:ring-amber-300 outline-none transition-all text-center text-amber-800"
+                                    />
+                                </div>
 
                                 <div className="text-center font-bold text-navy bg-gold/10 py-1.5 rounded border border-gold/20 text-sm">
                                     ₹{structure[cls.id]?.monthly || 0}
