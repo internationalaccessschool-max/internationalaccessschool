@@ -222,104 +222,109 @@ export default function TransportAccountantPage() {
         let created = 0, skipped = 0, withArrears = 0;
         const session = getSessionYear(feeMonth, feeYear);
 
+        // ── PROCESS IN PARALLEL BATCHES (same as school fee) ──────────────────
+        const BATCH_SIZE = 10;
         try {
-            for (const student of busStudents) {
-                const studentId = student.id;
-                const docRef = doc(db, "transportFeeRecords", feeYear.toString(), "months", feeMonth.toString(), "students", studentId);
-                const existing = await getDoc(docRef);
-                if (existing.exists()) { skipped++; continue; }
+            for (let i = 0; i < busStudents.length; i += BATCH_SIZE) {
+                const batch = busStudents.slice(i, i + BATCH_SIZE);
+                const results = await Promise.allSettled(batch.map(async (student) => {
+                    const studentId = student.id;
+                    const docRef = doc(db, "transportFeeRecords", feeYear.toString(), "months", feeMonth.toString(), "students", studentId);
+                    const existing = await getDoc(docRef);
+                    if (existing.exists()) { skipped++; return; }
 
-                // Handle Bus+Route format ("busId::routeId") or legacy ("busId")
-                const transportStr = (student.transport || "").trim();
-                let busId = transportStr;
-                let routeId = "";
-                let feeAmount = 0;
-                let routeName = "";
-                let bscBusNumber = "—";
+                    // Handle Bus+Route format ("busId::routeId") or legacy ("busId")
+                    const transportStr = (student.transport || "").trim();
+                    let busId = transportStr;
+                    let routeId = "";
+                    let feeAmount = 0;
+                    let routeName = "";
+                    let bscBusNumber = "—";
 
-                if (transportStr.includes("::")) {
-                    [busId, routeId] = transportStr.split("::");
-                }
-
-                const assignedBus = buses.find(b => b.id === busId || busId === "BUS");
-                if (assignedBus) {
-                    bscBusNumber = assignedBus.busNumber;
-                    const routes = assignedBus.routes || [];
-                    const assignedRoute = routes.find(r => r.id === routeId);
-
-                    if (assignedRoute) {
-                        feeAmount = assignedRoute.monthlyFee;
-                        routeName = assignedRoute.routeName;
-                    } else if (routes.length > 0) {
-                        feeAmount = routes[0].monthlyFee;
-                        routeName = routes[0].routeName;
-                    } else {
-                        feeAmount = assignedBus.monthlyFee || 0;
-                        routeName = assignedBus.routeDetails || "";
+                    if (transportStr.includes("::")) {
+                        [busId, routeId] = transportStr.split("::");
                     }
-                }
 
-                // ── ARREARS LOGIC for Transport ───────────────────────────────
-                let previousDues = 0;
-                const carryForwardBatch = writeBatch(db);
-                let hasBatchOps = false;
+                    const assignedBus = buses.find(b => b.id === busId || busId === "BUS");
+                    if (assignedBus) {
+                        bscBusNumber = assignedBus.busNumber;
+                        const routes = assignedBus.routes || [];
+                        const assignedRoute = routes.find(r => r.id === routeId);
 
-                for (let offset = 1; offset <= 12; offset++) {
-                    let prevMonth = feeMonth - offset;
-                    let prevYear = feeYear;
-                    if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
-
-                    const prevRef = doc(
-                        db, "transportFeeRecords",
-                        prevYear.toString(), "months", prevMonth.toString(), "students", studentId
-                    );
-                    const prevSnap = await getDoc(prevRef);
-
-                    if (!prevSnap.exists()) break; // no record — stop scanning back
-
-                    const prevData = prevSnap.data() as any;
-                    if (prevData.status === "paid" || prevData.status === "carried_forward") break;
-
-                    if (prevData.status === "pending" || prevData.status === "overdue") {
-                        const prevTotal = prevData.totalAmount || prevData.amount || 0;
-                        previousDues += prevTotal;
-                        carryForwardBatch.update(prevRef, { status: "carried_forward" });
-                        hasBatchOps = true;
+                        if (assignedRoute) {
+                            feeAmount = assignedRoute.monthlyFee;
+                            routeName = assignedRoute.routeName;
+                        } else if (routes.length > 0) {
+                            feeAmount = routes[0].monthlyFee;
+                            routeName = routes[0].routeName;
+                        } else {
+                            feeAmount = assignedBus.monthlyFee || 0;
+                            routeName = assignedBus.routeDetails || "";
+                        }
                     }
-                }
 
-                if (hasBatchOps) {
-                    await carryForwardBatch.commit();
-                    withArrears++;
-                }
-                // ── END ARREARS LOGIC ─────────────────────────────────────────
+                    // ── ARREARS LOGIC for Transport ───────────────────────────
+                    let previousDues = 0;
+                    const carryForwardBatch = writeBatch(db);
+                    let hasBatchOps = false;
 
-                const name = getDisplayName(student);
-                const cls = student.currentClass || student.className || "";
-                const dueDate = new Date(feeYear, feeMonth - 1, 10);
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevMonth = feeMonth - offset;
+                        let prevYear = feeYear;
+                        if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
 
-                await setDoc(docRef, {
-                    studentId,
-                    studentName: name,
-                    className: cls,
-                    section: student.section || "",
-                    busId: busId || "BUS",
-                    busNumber: bscBusNumber,
-                    routeDetails: routeName,
-                    amount: feeAmount,           // current month's transport fee
-                    previousDues,               // unpaid previous months
-                    totalAmount: feeAmount + previousDues, // total payable
-                    session,                    // e.g. "2026"
-                    month: feeMonth,
-                    year: feeYear,
-                    dueDate,
-                    status: "pending",
-                    paidOn: null,
-                    receiptNo: null,
-                    parentEmail: student.parentEmail || student.email || "",
-                    createdAt: serverTimestamp(),
-                });
-                created++;
+                        const prevRef = doc(
+                            db, "transportFeeRecords",
+                            prevYear.toString(), "months", prevMonth.toString(), "students", studentId
+                        );
+                        const prevSnap = await getDoc(prevRef);
+                        if (!prevSnap.exists()) break;
+
+                        const prevData = prevSnap.data() as any;
+                        if (prevData.status === "paid" || prevData.status === "carried_forward") break;
+
+                        if (prevData.status === "pending" || prevData.status === "overdue") {
+                            const prevTotal = prevData.totalAmount || prevData.amount || 0;
+                            previousDues += prevTotal;
+                            carryForwardBatch.update(prevRef, { status: "carried_forward" });
+                            hasBatchOps = true;
+                        }
+                    }
+
+                    if (hasBatchOps) {
+                        await carryForwardBatch.commit();
+                        withArrears++;
+                    }
+                    // ── END ARREARS LOGIC ─────────────────────────────────────
+
+                    const name = getDisplayName(student);
+                    const cls = student.currentClass || student.className || "";
+                    const dueDate = new Date(feeYear, feeMonth - 1, 10);
+
+                    await setDoc(docRef, {
+                        studentId,
+                        studentName: name,
+                        className: cls,
+                        section: student.section || "",
+                        busId: busId || "BUS",
+                        busNumber: bscBusNumber,
+                        routeDetails: routeName,
+                        amount: feeAmount,
+                        previousDues,
+                        totalAmount: feeAmount + previousDues,
+                        session,
+                        month: feeMonth,
+                        year: feeYear,
+                        dueDate,
+                        status: "pending",
+                        paidOn: null,
+                        receiptNo: null,
+                        parentEmail: student.parentEmail || student.email || "",
+                        createdAt: serverTimestamp(),
+                    });
+                    created++;
+                }));
+                results.forEach(r => { if (r.status === "rejected") { skipped++; console.error(r.reason); } });
             }
             showToast(`Generated ${created} records. ${skipped} skipped. ${withArrears} with previous dues.`);
             fetchFeeRecords();
