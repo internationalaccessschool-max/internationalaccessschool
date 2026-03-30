@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collection, getDocs, doc, setDoc, getDoc, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, getDoc, collectionGroup, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PlusCircle, Loader2, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import toast from "react-hot-toast";
@@ -11,6 +11,17 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December"
 ];
 
+/** Determine academic session year from month.
+ *  School year: April–March. 
+ *  April 2026 onwards → session "2026"
+ *  Jan–March 2026 → session "2025" (still in 2025-26 year)
+ */
+function getSession(month: number, year: number): string {
+    // month is 1-indexed
+    if (month >= 4) return String(year);       // April to December → current year
+    return String(year - 1);                   // Jan to March → previous year (session start)
+}
+
 export default function GenerateFeesPage() {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-indexed
@@ -18,7 +29,7 @@ export default function GenerateFeesPage() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [generating, setGenerating] = useState(false);
-    const [result, setResult] = useState<{ created: number; skipped: number; total: number } | null>(null);
+    const [result, setResult] = useState<{ created: number; skipped: number; total: number; withArrears: number } | null>(null);
 
     const handleGenerate = async () => {
         setGenerating(true);
@@ -34,13 +45,24 @@ export default function GenerateFeesPage() {
             const studentsSnap = await getDocs(collectionGroup(db, "profiles"));
             const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
 
+            // Filter only active students
+            const activeStudents = students.filter(s => {
+                const status = (s.status || "").toUpperCase();
+                return status !== "LEFT" && status !== "TC" && status !== "INACTIVE";
+            });
+
+            const targetMonth = selectedMonth + 1; // convert to 1-indexed
+            const targetYear = selectedYear;
+            const session = getSession(targetMonth, targetYear);
+
             let created = 0;
             let skipped = 0;
+            let withArrears = 0;
 
             // 3. Process in batches of 10 for concurrent writes
             const BATCH_SIZE = 10;
-            for (let i = 0; i < students.length; i += BATCH_SIZE) {
-                const batch = students.slice(i, i + BATCH_SIZE);
+            for (let i = 0; i < activeStudents.length; i += BATCH_SIZE) {
+                const batch = activeStudents.slice(i, i + BATCH_SIZE);
                 const results = await Promise.allSettled(batch.map(async (student) => {
                     // Normalize className: "Class 7" → "7", "7" stays "7"
                     const rawClass = student.className?.toString() ||
@@ -60,7 +82,7 @@ export default function GenerateFeesPage() {
                     const breakdown = {
                         tuitionFee: feeData.tuitionFee || 0,
                         annualFee: feeData.annualFee || 0,
-                        admissionFee: feeData.admissionFee || 0,
+                        admissionFee: 0, // one-time fee — charged at admission only, NOT in monthly generation
                         transportFee: feeData.transportFee || 0,
                         registrationFee: feeData.registrationFee || 0,
                         sportsFee: feeData.sportsFee || 0,
@@ -70,11 +92,11 @@ export default function GenerateFeesPage() {
                     if (amount === 0) { skipped++; return; }
 
                     // Build due date
-                    const dueDate = new Date(selectedYear, selectedMonth, dueDay);
+                    const dueDate = new Date(targetYear, targetMonth - 1, dueDay);
 
-                    // Check if record already exists
-                    const recordId = `${student.id}_${selectedYear}_${String(selectedMonth + 1).padStart(2, "0")}`;
-                    const recordRef = doc(db, `feeRecords/${selectedYear}/months/${selectedMonth + 1}/classes/${classId}/records`, recordId);
+                    // Check if record already exists for this month
+                    const recordId = `${student.id}_${targetYear}_${String(targetMonth).padStart(2, "0")}`;
+                    const recordRef = doc(db, `feeRecords/${targetYear}/months/${targetMonth}/classes/${classId}/records`, recordId);
                     const existingRecord = await getDoc(recordRef);
 
                     if (existingRecord.exists()) {
@@ -82,27 +104,77 @@ export default function GenerateFeesPage() {
                         return;
                     }
 
-                    // Build student name — profiles store firstName + lastName, not a combined "name" field
+                    // ── ARREARS LOGIC ────────────────────────────────────────────
+                    // Scan previous months (up to 12 months back) for unpaid school fee records
+                    let previousDues = 0;
+                    const carriedOverIds: string[] = [];
+                    const carryForwardBatch = writeBatch(db);
+                    let hasBatchOps = false;
+
+                    // We only need to check recent months — go back up to 12 months
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevMonth = targetMonth - offset;
+                        let prevYear = targetYear;
+                        if (prevMonth <= 0) {
+                            prevMonth += 12;
+                            prevYear -= 1;
+                        }
+
+                        const prevRecordId = `${student.id}_${prevYear}_${String(prevMonth).padStart(2, "0")}`;
+                        const prevRef = doc(db, `feeRecords/${prevYear}/months/${prevMonth}/classes/${classId}/records`, prevRecordId);
+                        const prevSnap = await getDoc(prevRef);
+
+                        if (!prevSnap.exists()) break; // no record found, stop going further back
+
+                        const prevData = prevSnap.data() as any;
+
+                        if (prevData.status === "paid" || prevData.status === "carried_forward") {
+                            break; // paid or already merged — stop scanning
+                        }
+
+                        if (prevData.status === "pending" || prevData.status === "overdue") {
+                            // Use totalAmount if it exists (already had arrears), else amount
+                            const prevTotal = prevData.totalAmount || prevData.amount || 0;
+                            previousDues += prevTotal;
+                            carriedOverIds.push(prevRecordId);
+
+                            // Mark old record as carried_forward
+                            carryForwardBatch.update(prevRef, { status: "carried_forward" });
+                            hasBatchOps = true;
+                        }
+                    }
+
+                    // Commit carry-forward status updates
+                    if (hasBatchOps) {
+                        await carryForwardBatch.commit();
+                        withArrears++;
+                    }
+                    // ── END ARREARS LOGIC ─────────────────────────────────────────
+
+                    // Build student name
                     const studentFullName =
                         student.name ||
                         student.fullName ||
                         `${student.firstName || ""} ${student.middleName || ""} ${student.lastName || ""}`.replace(/\s+/g, " ").trim() ||
                         "Unknown";
 
-                    // Create fee record
+                    // Create fee record with arrears fields
                     await setDoc(recordRef, {
                         studentId: student.id,
                         studentName: studentFullName,
                         rollNo: student.rollNo || student.admissionNumber || "",
                         class: classId,
                         section: student.section || "",
-                        // parentEmail: try all known fields where parent contact might be stored
                         parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
                         parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
-                        amount,
+                        amount,            // current month fee
+                        previousDues,      // sum of unpaid previous months
+                        totalAmount: amount + previousDues, // what the parent must pay
+                        arrearsDetails: carriedOverIds, // for reference
                         breakdown,
-                        month: selectedMonth + 1,
-                        year: selectedYear,
+                        session,           // e.g. "2026"
+                        month: targetMonth,
+                        year: targetYear,
                         dueDate,
                         status: "pending",
                         paidOn: null,
@@ -113,11 +185,13 @@ export default function GenerateFeesPage() {
 
                     created++;
                 }));
+                // Count actual failures (optional — results already tracked above)
+                results.forEach(r => { if (r.status === "rejected") skipped++; });
             }
 
-            setResult({ created, skipped, total: students.length });
+            setResult({ created, skipped, total: activeStudents.length, withArrears });
             if (created > 0) {
-                toast.success(`Generated ${created} fee records!`);
+                toast.success(`Generated ${created} fee records! (${withArrears} with previous dues)`);
             } else {
                 toast("No new records created. They may already exist.", { icon: "ℹ️" });
             }
@@ -146,7 +220,7 @@ export default function GenerateFeesPage() {
                     <div>
                         <p className="text-white/50 text-sm font-medium">Finance Portal</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white">Generate Monthly Fees</h1>
-                        <p className="text-white/40 text-sm mt-1">Create fee records for all students for a selected month.</p>
+                        <p className="text-white/40 text-sm mt-1">Create fee records for all students. Previous unpaid dues are automatically carried forward.</p>
                     </div>
                 </div>
             </div>
@@ -155,8 +229,8 @@ export default function GenerateFeesPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h2 className="font-semibold text-navy mb-1">Select Month & Year</h2>
                 <p className="text-xs text-gray-400 mb-6">
-                    Fee records will be created for all students based on their class fee structure.
-                    Existing records for the same month will be skipped.
+                    Fee records will be created for all active students. Students with unpaid previous months
+                    will have their dues carried forward automatically into this month's bill.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -184,6 +258,17 @@ export default function GenerateFeesPage() {
                                 <option key={y} value={y}>{y}</option>
                             ))}
                         </select>
+                    </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 mb-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-medium text-blue-800">Arrears Carry-Forward is Active</p>
+                        <p className="text-xs text-blue-600 mt-0.5">
+                            If a student has unpaid/overdue fees from previous months, those dues will be automatically
+                            included in this month's bill as "Previous Dues". Old pending records will be marked as carried forward.
+                        </p>
                     </div>
                 </div>
 
@@ -230,7 +315,7 @@ export default function GenerateFeesPage() {
                         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                         Generation Complete
                     </h3>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-center">
                             <div className="text-2xl font-bold text-emerald-600">{result.created}</div>
                             <div className="text-xs text-emerald-600 mt-1">Records Created</div>
@@ -242,6 +327,10 @@ export default function GenerateFeesPage() {
                         <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-center">
                             <div className="text-2xl font-bold text-blue-600">{result.total}</div>
                             <div className="text-xs text-blue-600 mt-1">Total Students</div>
+                        </div>
+                        <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 text-center">
+                            <div className="text-2xl font-bold text-rose-600">{result.withArrears}</div>
+                            <div className="text-xs text-rose-600 mt-1">With Previous Dues</div>
                         </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-4 flex items-center gap-1.5">
