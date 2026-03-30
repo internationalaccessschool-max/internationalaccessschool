@@ -257,12 +257,51 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
-                // ── RECONCILE STALE DUES ─────────────────────────────────────
-                // If this record was "carried_forward" (i.e. its dues are embedded
-                // in a later month's previousDues), update that next month's record
-                // to avoid double-charging.
+                // ── CLEAR CARRIED-FORWARD ARREAR RECORDS ────────────────────
+                // When April is paid (which includes March dues), also mark
+                // March's "carried_forward" record as "paid" automatically.
                 try {
-                    const paidAmount = record.totalAmount || record.amount; // what was embedded in next month
+                    const arrearsIds: string[] = (record as any).arrearsDetails || [];
+                    if (arrearsIds.length > 0 && (record.previousDues || 0) > 0) {
+                        for (const arrearId of arrearsIds) {
+                            // arrearId format: "studentId_year_MM"
+                            const parts = arrearId.split("_");
+                            if (parts.length >= 3) {
+                                // Reconstruct path: feeRecords/{year}/months/{month}/classes/{class}/records/{id}
+                                // We scan backwards from current month to find it
+                                let prevMonth = record.month - 1;
+                                let prevYear = record.year;
+                                if (prevMonth <= 0) { prevMonth = 12; prevYear -= 1; }
+
+                                const prevRef = doc(
+                                    db,
+                                    `feeRecords/${prevYear}/months/${prevMonth}/classes/${record.class}/records`,
+                                    arrearId
+                                );
+                                const prevSnap = await getDoc(prevRef);
+                                if (prevSnap.exists() && prevSnap.data()?.status === "carried_forward") {
+                                    await updateDoc(prevRef, {
+                                        status: "paid",
+                                        paidOn: new Date(),
+                                        clearedViaReceiptNo: receiptNo,
+                                        clearedViaMonth: record.month,
+                                        clearedViaYear: record.year,
+                                    });
+                                    setRecords(prev => prev.map(r =>
+                                        r.id === arrearId ? { ...r, status: "paid" } : r
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                } catch { /* best-effort — previous dues clearing */ }
+                // ── END CLEAR CARRIED-FORWARD ────────────────────────────────
+
+                // ── RECONCILE STALE DUES (if March was paid BEFORE April) ────
+                // If someone paid March separately first, April's record may
+                // still have stale previousDues — deduct from next month.
+                try {
+                    const paidAmount = record.totalAmount || record.amount;
                     let nextMonth = record.month + 1;
                     let nextYear = record.year;
                     if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
@@ -274,23 +313,17 @@ export default function ManageFeesPage() {
                     if (nextSnap.exists()) {
                         const nextData = nextSnap.data() as any;
                         if ((nextData.previousDues || 0) > 0 && nextData.status !== "paid") {
-                            // Deduct this month's amount from next month's dues
                             const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidAmount);
                             const newTotal = (nextData.amount || 0) + newPrevDues;
-                            await updateDoc(nextRef, {
-                                previousDues: newPrevDues,
-                                totalAmount: newTotal,
-                            });
-                            // Update local state too if that record is visible
+                            await updateDoc(nextRef, { previousDues: newPrevDues, totalAmount: newTotal });
                             setRecords(prev => prev.map(r =>
-                                r.id === nextRecordId
-                                    ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
-                                    : r
+                                r.id === nextRecordId ? { ...r, previousDues: newPrevDues, totalAmount: newTotal } : r
                             ));
                         }
                     }
-                } catch { /* reconciliation is best-effort, don't block payment */ }
+                } catch { /* best-effort */ }
                 // ── END RECONCILE ────────────────────────────────────────────
+
 
                 // Send Receipt via Email
                 const schoolBreakdownItems: { label: string; amount: number }[] = [
@@ -376,9 +409,36 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
 
-                // ── RECONCILE STALE TRANSPORT DUES ─────────────────────────
+                // ── CLEAR CARRIED-FORWARD TRANSPORT ARREARS ─────────────────
+                // When April transport (with March dues) is paid, also mark
+                // March's "carried_forward" transport record as "paid".
                 try {
-                    const transpPaidAmount = transpBaseTotal; // what was embedded in next month's previousDues
+                    if ((record.transportPreviousDues || 0) > 0) {
+                        let prevMonth = (record.month || 1) - 1;
+                        let prevYear = record.year;
+                        if (prevMonth <= 0) { prevMonth = 12; prevYear -= 1; }
+
+                        const prevTransRef = doc(
+                            db, "transportFeeRecords",
+                            prevYear.toString(), "months", prevMonth.toString(), "students", studentUid
+                        );
+                        const prevTransSnap = await getDoc(prevTransRef);
+                        if (prevTransSnap.exists() && prevTransSnap.data()?.status === "carried_forward") {
+                            await updateDoc(prevTransRef, {
+                                status: "paid",
+                                paidOn: new Date(),
+                                clearedViaReceiptNo: transportReceiptNo,
+                                clearedViaMonth: record.month,
+                                clearedViaYear: record.year,
+                            });
+                        }
+                    }
+                } catch { /* best-effort */ }
+                // ── END CLEAR TRANSPORT CARRIED-FORWARD ──────────────────────
+
+                // ── RECONCILE STALE TRANSPORT DUES (if paid separately first) 
+                try {
+                    const transpPaidAmount = transpBaseTotal;
                     let nextMonth = (record.month || 1) + 1;
                     let nextYear = record.year;
                     if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
@@ -398,8 +458,9 @@ export default function ManageFeesPage() {
                             });
                         }
                     }
-                } catch { /* best-effort — don't block payment success */ }
+                } catch { /* best-effort */ }
                 // ── END RECONCILE TRANSPORT ──────────────────────────────────
+
 
 
                 const transportLineItems: { label: string; amount: number }[] = [
