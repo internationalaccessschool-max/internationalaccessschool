@@ -227,7 +227,10 @@ export default function AdvanceFeePage() {
     // ── Step 4: Payment ───────────────────────────────────────────────────
     const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
     const [paying, setPaying]           = useState(false);
-    const [paidResult, setPaidResult]   = useState<{ receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[] } | null>(null);
+    const [paidResult, setPaidResult]   = useState<{ receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[]; discountAmount: number } | null>(null);
+    // Discount
+    const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
+    const [discountValue, setDiscountValue] = useState<number>(0);
 
     // ── Receipt modal ──────────────────────────────────────────────────────
     const [showReceipt, setShowReceipt] = useState(false);
@@ -379,6 +382,14 @@ export default function AdvanceFeePage() {
     const grandTransportTotal = monthRows.filter(r => !r.transportAlreadyPaid).reduce((s, r) => s + r.transportFee, 0);
     const grandTotal          = grandSchoolTotal + grandTransportTotal;
 
+    // Computed discount amount on grandTotal
+    const computedDiscountAmt = discountType === "fixed"
+        ? Math.min(discountValue, grandTotal)
+        : discountType === "percent"
+            ? Math.min((discountValue / 100) * grandTotal, grandTotal)
+            : 0;
+    const netPayableTotal = grandTotal - computedDiscountAmt;
+
     // ─── Confirm payment ──────────────────────────────────────────────────
     const handleConfirmPayment = async () => {
         if (!selectedStudent || monthRows.length === 0) return;
@@ -474,7 +485,7 @@ export default function AdvanceFeePage() {
                 });
             }
 
-            setPaidResult({ receipts });
+            setPaidResult({ receipts, discountAmount: computedDiscountAmt });
             toast.success(`Advance payment recorded for ${monthRows.length} month${monthRows.length > 1 ? "s" : ""}!`);
 
             // --- SEND COMBINED EMAIL RECEIPT ---
@@ -484,6 +495,11 @@ export default function AdvanceFeePage() {
                 if (r.schoolTotal > 0)    lineItems.push({ label: `School Fee — ${monthLabel}`,    amount: r.schoolTotal });
                 if (r.transportTotal > 0) lineItems.push({ label: `Transport Fee — ${monthLabel}`, amount: r.transportTotal });
             });
+            // Add discount line at the end
+            if (computedDiscountAmt > 0) {
+                const pct = discountType === "percent" ? ` (${discountValue}%)` : ``;
+                lineItems.push({ label: `Discount Applied${pct}`, amount: -computedDiscountAmt });
+            }
 
             const allSchoolReceipts    = receipts.map(r => r.schoolReceiptNo).filter(Boolean).join(", ");
             const allTransportReceipts = receipts.map(r => r.transportReceiptNo).filter(Boolean).join(", ");
@@ -1048,6 +1064,51 @@ export default function AdvanceFeePage() {
                             </div>
                         </div>
 
+                        {/* ── Discount Section ── */}
+                        <div className="pt-3 mt-1 border-t border-gray-100">
+                            <p className="text-sm font-semibold text-gray-700 mb-2">Discount <span className="font-normal text-gray-400">(Optional)</span></p>
+                            <div className="flex gap-2 mb-2">
+                                {(["none", "fixed", "percent"] as const).map(t => (
+                                    <button key={t} type="button"
+                                        onClick={() => { setDiscountType(t); setDiscountValue(0); }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
+                                            discountType === t
+                                                ? "border-violet-500 bg-violet-50 text-violet-700"
+                                                : "border-gray-100 text-gray-500 hover:border-gray-300"
+                                        }`}>
+                                        {t === "none" ? "No Discount" : t === "fixed" ? "₹ Fixed" : "% Percent"}
+                                    </button>
+                                ))}
+                            </div>
+                            {discountType !== "none" && (
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-sm font-bold text-gray-500">{discountType === "fixed" ? "₹" : "%"}</span>
+                                    <input
+                                        type="number" min={0}
+                                        max={discountType === "percent" ? 100 : grandTotal}
+                                        value={discountValue || ""}
+                                        onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+                                        placeholder={discountType === "fixed" ? "Enter amount" : "Enter %"}
+                                        className="flex-1 px-3 py-2 border-2 border-violet-200 rounded-xl text-sm outline-none focus:border-violet-500 bg-violet-50/50"
+                                    />
+                                </div>
+                            )}
+                            <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5 text-sm">
+                                <div className="flex justify-between text-gray-500">
+                                    <span>Subtotal</span><span>₹{grandTotal.toLocaleString()}</span>
+                                </div>
+                                {computedDiscountAmt > 0 && (
+                                    <div className="flex justify-between text-violet-600 font-medium">
+                                        <span>Discount {discountType === "percent" ? `(${discountValue}%)` : "(Fixed)"}</span>
+                                        <span>−₹{computedDiscountAmt.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-1.5 mt-1">
+                                    <span>Net Payable</span><span>₹{netPayableTotal.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Buttons */}
                         <div className="flex gap-3">
                             <button onClick={() => setMonthRows([])}
@@ -1059,7 +1120,7 @@ export default function AdvanceFeePage() {
                                 disabled={paying || grandTotal === 0}
                                 className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                                 {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                {paying ? "Processing…" : `Confirm Payment · ₹${grandTotal.toLocaleString()}`}
+                                {paying ? "Processing…" : `Confirm Payment · ₹${netPayableTotal.toLocaleString()}`}
                             </button>
                         </div>
                     </div>
@@ -1114,10 +1175,18 @@ export default function AdvanceFeePage() {
                                     ))}
                                 </tbody>
                                 <tfoot className="bg-gray-50 border-t border-gray-200">
+                                    {paidResult.discountAmount > 0 && (
+                                        <tr>
+                                            <td colSpan={3} className="px-4 py-2 text-right text-violet-600 text-xs font-semibold">
+                                                Discount Applied {discountType === "percent" ? `(${discountValue}%)` : "(Fixed)"}
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-violet-600 font-semibold text-sm">−₹{paidResult.discountAmount.toLocaleString()}</td>
+                                        </tr>
+                                    )}
                                     <tr>
                                         <td colSpan={3} className="px-4 py-3 text-right font-bold text-navy uppercase text-xs tracking-wider">Grand Total Paid</td>
                                         <td className="px-4 py-3 text-right font-extrabold text-navy text-base">
-                                            ₹{paidResult.receipts.reduce((s, r) => s + r.schoolTotal + r.transportTotal, 0).toLocaleString()}
+                                            ₹{(paidResult.receipts.reduce((s, r) => s + r.schoolTotal + r.transportTotal, 0) - (paidResult.discountAmount || 0)).toLocaleString()}
                                         </td>
                                     </tr>
                                 </tfoot>
