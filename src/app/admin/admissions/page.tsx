@@ -14,8 +14,8 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
     doc, setDoc, serverTimestamp, collection,
-    collectionGroup, getCountFromServer, // ADDED getCountFromServer
-    query, getDocs, orderBy, updateDoc, where,
+    collectionGroup, getCountFromServer,
+    query, getDocs, orderBy, updateDoc, where, getDoc,
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
 import { z } from "zod";
@@ -324,6 +324,67 @@ export default function AdminAdmissionsPage() {
                 assignedClass: normClass,
                 assignedSection: sectionStr,
             });
+
+            // ── Auto-generate Admission Month Fee (paid) ──────────────────────
+            const feeStructureDoc = await getDoc(doc(db, "fees", "structure", "classes", normClass));
+            if (feeStructureDoc.exists()) {
+                const fs = feeStructureDoc.data();
+                const admissionFee = fs.admissionFee || 0;
+                const tuitionFee = fs.tuitionFee || 0;
+                const annualFee = fs.annualFee || 0;
+                const registrationFee = fs.registrationFee || 0;
+                const sportsFee = fs.sportsFee || 0;
+                const miscFee = fs.miscFee || 0;
+                const monthlyFee = fs.monthly || 0;
+                const dueDay = fs.dueDay || 10;
+
+                const now = new Date();
+                const admMonth = now.getMonth() + 1; // 1-based
+                const admYear = now.getFullYear();
+                // Session: April = start of new session year
+                const admSession = admMonth >= 4 ? admYear.toString() : (admYear - 1).toString();
+                const totalFee = monthlyFee + admissionFee; // current month + one-time admission charge
+
+                const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
+                const admReceiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
+                const dueDate = new Date(admYear, admMonth - 1, dueDay);
+
+                await setDoc(
+                    doc(db, `feeRecords/${admYear}/months/${admMonth}/classes/${normClass}/records`, uid),
+                    {
+                        studentId: uid,
+                        studentName: fullName,
+                        class: normClass,
+                        section: sectionStr,
+                        admissionNumber: data.admissionNo,
+                        rollNo: "",
+                        parentEmail: `${data.admissionNo}@ias.edu`,
+                        month: admMonth,
+                        year: admYear,
+                        session: admSession,
+                        dueDate,
+                        amount: monthlyFee,         // regular monthly amount
+                        admissionFee,               // one-time admission charge
+                        totalAmount: totalFee,       // monthly + admission
+                        previousDues: 0,
+                        breakdown: {
+                            tuitionFee,
+                            annualFee,
+                            admissionFee,
+                            registrationFee,
+                            sportsFee,
+                            miscFee,
+                        },
+                        status: "paid",
+                        paidOn: now,
+                        receiptNo: admReceiptNo,
+                        paymentMode: "CASH",
+                        markedBy: "system-admission",
+                        admissionMonth: true, // flag so report can distinguish
+                        createdAt: serverTimestamp(),
+                    }
+                );
+            }
 
             setAllRequests(prev => prev.map(r =>
                 r.id === selectedRequest.id
