@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import {
     collection, query, getDocs, doc, setDoc, deleteDoc,
-    serverTimestamp, orderBy, collectionGroup, updateDoc, getDoc
+    serverTimestamp, orderBy, collectionGroup, updateDoc, getDoc, writeBatch
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
@@ -191,6 +191,11 @@ export default function TransportAccountantPage() {
         if (activeTab === "fees") fetchFeeRecords();
     }, [activeTab, fetchFeeRecords]);
 
+    // Helper: get session year (April start of year → current year; Jan-March → previous year)
+    const getSessionYear = (month: number, year: number): string => {
+        return month >= 4 ? String(year) : String(year - 1);
+    };
+
     const handleGenerateTransportFees = async () => {
         const busStudents = students.filter(s => {
             const t = (s.transport || "").trim().toUpperCase();
@@ -208,12 +213,15 @@ export default function TransportAccountantPage() {
         const confirm = window.confirm(
             `Generate transport fee records for ${MONTHS[feeMonth - 1]} ${feeYear}?\n\n` +
             `• ${busStudents.length} bus students will get records\n` +
-            `• Existing records for the same month will be skipped`
+            `• Existing records for the same month will be skipped\n` +
+            `• Unpaid previous dues will be carried forward automatically`
         );
         if (!confirm) return;
 
         setGeneratingFees(true);
-        let created = 0, skipped = 0;
+        let created = 0, skipped = 0, withArrears = 0;
+        const session = getSessionYear(feeMonth, feeYear);
+
         try {
             for (const student of busStudents) {
                 const studentId = student.id;
@@ -236,7 +244,6 @@ export default function TransportAccountantPage() {
                 const assignedBus = buses.find(b => b.id === busId || busId === "BUS");
                 if (assignedBus) {
                     bscBusNumber = assignedBus.busNumber;
-                    // Find actual route or fall back to first route/legacy
                     const routes = assignedBus.routes || [];
                     const assignedRoute = routes.find(r => r.id === routeId);
 
@@ -252,6 +259,41 @@ export default function TransportAccountantPage() {
                     }
                 }
 
+                // ── ARREARS LOGIC for Transport ───────────────────────────────
+                let previousDues = 0;
+                const carryForwardBatch = writeBatch(db);
+                let hasBatchOps = false;
+
+                for (let offset = 1; offset <= 12; offset++) {
+                    let prevMonth = feeMonth - offset;
+                    let prevYear = feeYear;
+                    if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+
+                    const prevRef = doc(
+                        db, "transportFeeRecords",
+                        prevYear.toString(), "months", prevMonth.toString(), "students", studentId
+                    );
+                    const prevSnap = await getDoc(prevRef);
+
+                    if (!prevSnap.exists()) break; // no record — stop scanning back
+
+                    const prevData = prevSnap.data() as any;
+                    if (prevData.status === "paid" || prevData.status === "carried_forward") break;
+
+                    if (prevData.status === "pending" || prevData.status === "overdue") {
+                        const prevTotal = prevData.totalAmount || prevData.amount || 0;
+                        previousDues += prevTotal;
+                        carryForwardBatch.update(prevRef, { status: "carried_forward" });
+                        hasBatchOps = true;
+                    }
+                }
+
+                if (hasBatchOps) {
+                    await carryForwardBatch.commit();
+                    withArrears++;
+                }
+                // ── END ARREARS LOGIC ─────────────────────────────────────────
+
                 const name = getDisplayName(student);
                 const cls = student.currentClass || student.className || "";
                 const dueDate = new Date(feeYear, feeMonth - 1, 10);
@@ -264,7 +306,10 @@ export default function TransportAccountantPage() {
                     busId: busId || "BUS",
                     busNumber: bscBusNumber,
                     routeDetails: routeName,
-                    amount: feeAmount,
+                    amount: feeAmount,           // current month's transport fee
+                    previousDues,               // unpaid previous months
+                    totalAmount: feeAmount + previousDues, // total payable
+                    session,                    // e.g. "2026"
                     month: feeMonth,
                     year: feeYear,
                     dueDate,
@@ -276,7 +321,7 @@ export default function TransportAccountantPage() {
                 });
                 created++;
             }
-            showToast(`Generated ${created} records. ${skipped} existing skipped.`);
+            showToast(`Generated ${created} records. ${skipped} skipped. ${withArrears} with previous dues.`);
             fetchFeeRecords();
         } catch (err) {
             console.error(err);
