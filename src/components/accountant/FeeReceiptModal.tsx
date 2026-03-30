@@ -22,15 +22,19 @@ interface FeeRecord {
     parentEmail: string;
     parentPhone?: string;
     amount: number;
+    previousDues?: number;   // unpaid previous months carried forward
+    totalAmount?: number;    // amount + previousDues
     month: number;
     year: number;
     dueDate: { toDate: () => Date } | null;
-    status: "pending" | "paid" | "overdue";
+    status: "pending" | "paid" | "overdue" | "carried_forward";
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
     // Transport fields
-    transportStatus?: "pending" | "paid" | "overdue";
+    transportStatus?: "pending" | "paid" | "overdue" | "carried_forward";
     transportFeeAmount?: number;
+    transportPreviousDues?: number;
+    transportTotalAmount?: number;
     transportReceiptNo?: string | null;
     isTransportOnly?: boolean;
     receiptType?: "school" | "transport";
@@ -51,7 +55,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
     const isTransportReceipt = record.receiptType === "transport";
 
     // Build school fee breakdown for preview
-    const schoolBreakdownItems = [
+    const schoolBreakdownItems: { label: string; amount: number }[] = [
         { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
         { label: "Annual Fee", amount: record.breakdown?.annualFee || 0 },
         { label: "Admission Fee", amount: record.breakdown?.admissionFee || 0 },
@@ -61,21 +65,39 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
     ].filter(item => item.amount > 0);
 
     if (!isTransportReceipt && schoolBreakdownItems.length === 0) {
-        schoolBreakdownItems.push({ label: "School Fee", amount: record.amount });
+        schoolBreakdownItems.push({ label: "School Fee (Current Month)", amount: record.amount });
     }
 
-    const transportAmount = record.transportFeeAmount || 0;
+    // Append Previous Dues (Arrears) line if present
+    const previousDues = isTransportReceipt
+        ? (record.transportPreviousDues || 0)
+        : (record.previousDues || 0);
+    if (previousDues > 0 && !isTransportReceipt) {
+        schoolBreakdownItems.push({ label: "Previous Dues (Arrears)", amount: previousDues });
+    }
+
+    const transportAmount = isTransportReceipt
+        ? (record.transportTotalAmount || record.transportFeeAmount || 0)
+        : (record.transportFeeAmount || 0);
     const displayReceiptNo = isTransportReceipt ? (record.transportReceiptNo || "N/A") : (record.receiptNo || "N/A");
-    const displayAmount = isTransportReceipt ? transportAmount : record.amount;
+    const displayAmount = isTransportReceipt ? transportAmount : (record.totalAmount || record.amount);
     const displayPaidOn = record.paidOn?.toDate
         ? record.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
         : "N/A";
     const feeMonth = `${MONTHS[(record.month || 1) - 1]} ${record.year}`;
 
     const handlePrint = () => {
-        const lineItems = isTransportReceipt
-            ? [{ label: "Transport / Bus Fee", amount: transportAmount }]
+        let lineItems = isTransportReceipt
+            ? [{ label: "Transport / Bus Fee (Current Month)", amount: record.transportFeeAmount || 0 }]
             : schoolBreakdownItems;
+
+        // Transport arrears line on print too
+        if (isTransportReceipt && (record.transportPreviousDues || 0) > 0) {
+            lineItems = [
+                ...lineItems,
+                { label: "Previous Transport Dues (Arrears)", amount: record.transportPreviousDues! },
+            ];
+        }
 
         const html = buildReceiptHTML({
             title: isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt",
@@ -194,11 +216,20 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
                                 {isTransportReceipt ? (
-                                    <tr>
-                                        <td className="px-6 py-4 text-gray-500">1.</td>
-                                        <td className="px-6 py-4 font-medium text-gray-800">Transport / Bus Fee</td>
-                                        <td className="px-6 py-4 text-right font-medium text-gray-600">{fmtAmt(transportAmount)}</td>
-                                    </tr>
+                                    <>
+                                        <tr>
+                                            <td className="px-6 py-4 text-gray-500">1.</td>
+                                            <td className="px-6 py-4 font-medium text-gray-800">Transport / Bus Fee (Current Month)</td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-600">{fmtAmt(record.transportFeeAmount || 0)}</td>
+                                        </tr>
+                                        {(record.transportPreviousDues || 0) > 0 && (
+                                            <tr>
+                                                <td className="px-6 py-4 text-gray-500">2.</td>
+                                                <td className="px-6 py-4 font-medium text-rose-600">Previous Transport Dues (Arrears)</td>
+                                                <td className="px-6 py-4 text-right font-medium text-rose-600">{fmtAmt(record.transportPreviousDues!)}</td>
+                                            </tr>
+                                        )}
+                                    </>
                                 ) : schoolBreakdownItems.map((item, i) => (
                                     <tr key={i}>
                                         <td className="px-6 py-4 text-gray-500">{i + 1}.</td>
