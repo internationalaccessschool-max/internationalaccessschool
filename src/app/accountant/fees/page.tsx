@@ -79,6 +79,8 @@ export default function ManageFeesPage() {
     // Discount
     const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
     const [discountValue, setDiscountValue] = useState<number>(0);
+    // Notification email override
+    const [notifEmail, setNotifEmail] = useState<string>("");
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -216,6 +218,10 @@ export default function ManageFeesPage() {
         setPaymentMode("CASH");
         setDiscountType("none");
         setDiscountValue(0);
+        // Pre-fill notification email if stored on record (parentEmail that's not an auth email)
+        const stored = record.parentEmail || "";
+        const isAuthEmail = stored.includes("@ias.edu") || stored.includes("@school.");
+        setNotifEmail(isAuthEmail ? "" : stored);
     };
 
     // Compute discount amount from current markPaidRecord
@@ -354,6 +360,7 @@ export default function ManageFeesPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         studentId: studentUid,
+                        ...(notifEmail ? { to: notifEmail } : {}),
                         receiptData: {
                             title: "School Fee Receipt",
                             receiptNo,
@@ -481,6 +488,7 @@ export default function ManageFeesPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         studentId: studentUid,
+                        ...(notifEmail ? { to: notifEmail } : {}),
                         receiptData: {
                             title: "Transport Fee Receipt",
                             receiptNo: transportReceiptNo,
@@ -1081,8 +1089,37 @@ export default function ManageFeesPage() {
                             })()}
                         </div>
 
+                        {/* ── Notification Email Section ── */}
+                        <div className="px-6 pb-2">
+                            <div className="pt-3 border-t border-gray-100">
+                                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                                    <Mail className="w-4 h-4 text-gray-400" /> Receipt Email
+                                </p>
+                                {notifEmail ? (
+                                    <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                        <span className="text-sm text-emerald-700 font-medium flex-1 truncate">{notifEmail}</span>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                                            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                                            <span className="text-xs text-amber-600">No notification email — receipt will not be emailed</span>
+                                        </div>
+                                        <input
+                                            type="email"
+                                            value={notifEmail}
+                                            onChange={e => setNotifEmail(e.target.value)}
+                                            placeholder="Add parent/guardian email (optional)"
+                                            className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 bg-white placeholder-gray-300 mt-1.5"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Actions */}
-                        <div className="px-6 pb-6 flex gap-3">
+                        <div className="px-6 pb-6 flex gap-3 mt-3">
                             <button onClick={() => setMarkPaidRecord(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                                 Cancel
                             </button>
@@ -1095,6 +1132,7 @@ export default function ManageFeesPage() {
                                 Confirm Payment
                             </button>
                         </div>
+
                     </div>
                 </div>
             )}
