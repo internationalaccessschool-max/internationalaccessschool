@@ -14,14 +14,13 @@ export async function POST(req: Request) {
 
         let recipientEmail = to;
 
-        // Automatically resolve the student's notification email if studentId is provided
+        // If explicit email was passed from frontend, use it directly (skip lookup)
         if (!recipientEmail && studentId) {
             try {
                 // Try studentLookup first (fast, flat collection)
                 const lookupDoc = await adminDb.collection('studentLookup').doc(studentId).get();
                 if (lookupDoc.exists) {
                     const lookupData = lookupDoc.data();
-                    // studentLookup has class/section — use it to fetch full profile
                     const cls = lookupData?.className;
                     const sec = lookupData?.section;
                     if (cls && sec) {
@@ -33,12 +32,17 @@ export async function POST(req: Request) {
                         const profileSnap = await profileRef.get();
                         if (profileSnap.exists) {
                             const data = profileSnap.data();
-                            recipientEmail = data?.notificationEmail || data?.parentEmail || data?.email;
+                            // Only use notificationEmail or parentEmail — NEVER data.email (that's the auth/login email)
+                            recipientEmail = data?.notificationEmail || data?.parentEmail || undefined;
+                            // Extra safety: skip auth-style emails like 12345@ias.edu
+                            if (recipientEmail && (recipientEmail.includes('@ias.edu') || recipientEmail.includes('@school.'))) {
+                                recipientEmail = undefined;
+                            }
                         }
                     }
                 }
 
-                // Fallback: collectionGroup scan (slower but always works)
+                // Fallback: collectionGroup scan
                 if (!recipientEmail) {
                     const snap = await adminDb.collectionGroup('profiles')
                         .where('uid', '==', studentId)
@@ -46,13 +50,17 @@ export async function POST(req: Request) {
                         .get();
                     if (!snap.empty) {
                         const data = snap.docs[0].data();
-                        recipientEmail = data?.notificationEmail || data?.parentEmail || data?.email;
+                        recipientEmail = data?.notificationEmail || data?.parentEmail || undefined;
+                        if (recipientEmail && (recipientEmail.includes('@ias.edu') || recipientEmail.includes('@school.'))) {
+                            recipientEmail = undefined;
+                        }
                     }
                 }
             } catch (lookupErr) {
                 console.warn('Email lookup failed:', lookupErr);
             }
         }
+
 
         if (!recipientEmail) {
             console.warn(`No recipient email found for student ${studentId}. Skipping email send.`);
