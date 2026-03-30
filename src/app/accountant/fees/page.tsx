@@ -25,13 +25,18 @@ interface FeeRecord {
     parentEmail: string;
     parentPhone?: string;
     amount: number;
+    previousDues?: number;    // sum of unpaid previous months carried forward
+    totalAmount?: number;     // amount + previousDues (what parent must pay)
     month: number;
     year: number;
+    session?: string;         // e.g. "2026"
     dueDate: { toDate: () => Date } | null;
-    status: "pending" | "paid" | "overdue";
+    status: "pending" | "paid" | "overdue" | "carried_forward";
     // Transport — only populated when a real transport record exists for this student+month+year
-    transportStatus?: "pending" | "paid" | "overdue";
+    transportStatus?: "pending" | "paid" | "overdue" | "carried_forward";
     transportFeeAmount?: number;   // from transportFeeRecords, NOT from breakdown
+    transportPreviousDues?: number; // transport arrears from previous months
+    transportTotalAmount?: number;  // transportFeeAmount + transportPreviousDues
     paidOn: { toDate: () => Date } | null;
     receiptNo: string | null;
     transportReceiptNo?: string | null;
@@ -52,10 +57,11 @@ type MarkPaidType = "school" | "transport" | "both";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: any }> = {
     paid: { label: "Paid", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: CheckCircle2 },
     pending: { label: "Pending", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", icon: Clock },
     overdue: { label: "Overdue", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", icon: AlertCircle },
+    carried_forward: { label: "Carried Fwd", bg: "bg-gray-50", text: "text-gray-500", border: "border-gray-200", icon: AlertCircle },
 };
 
 export default function ManageFeesPage() {
@@ -92,8 +98,11 @@ export default function ManageFeesPage() {
             );
             const snapshots = await Promise.all(promises);
             const schoolRecords = snapshots.flatMap(snap =>
-                snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+                snap.docs
+                    .map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+                    .filter(r => r.status !== "carried_forward") // hide records merged into newer months
             );
+
 
             // ── 2. Fetch transport fee records for the SAME month+year ────────────
             const transportSnap = await getDocs(
@@ -105,6 +114,8 @@ export default function ManageFeesPage() {
                 status: string;
                 receiptNo: string | null;
                 amount: number;
+                previousDues: number;
+                totalAmount: number;
                 studentName: string;
                 className: string;
                 section: string;
@@ -113,10 +124,13 @@ export default function ManageFeesPage() {
             }> = {};
             for (const d of transportSnap.docs) {
                 const td = d.data();
+                if (td.status === "carried_forward") continue; // skip old merged records
                 transportMap[d.id] = {
                     status: td.status || "pending",
                     receiptNo: td.receiptNo || null,
                     amount: td.amount || 0,
+                    previousDues: td.previousDues || 0,
+                    totalAmount: td.totalAmount || td.amount || 0,
                     studentName: td.studentName || "",
                     className: td.className || "",
                     section: td.section || "",
@@ -137,6 +151,8 @@ export default function ManageFeesPage() {
                         ...r,
                         transportStatus: t.status as any,
                         transportFeeAmount: t.amount,
+                        transportPreviousDues: t.previousDues,
+                        transportTotalAmount: t.totalAmount,
                         transportReceiptNo: t.receiptNo,
                     };
                 }
@@ -162,6 +178,8 @@ export default function ManageFeesPage() {
                         status: "paid",      // placeholder — school fee doesn't exist
                         transportStatus: t.status as any,
                         transportFeeAmount: t.amount,
+                        transportPreviousDues: t.previousDues,
+                        transportTotalAmount: t.totalAmount,
                         transportReceiptNo: t.receiptNo,
                         paidOn: null,
                         receiptNo: null,
@@ -204,12 +222,14 @@ export default function ManageFeesPage() {
             if (markPaidType === "school" || markPaidType === "both") {
                 const seq = Math.floor(Math.random() * 90000) + 10000;
                 const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                const schoolTotalPaid = record.totalAmount || record.amount; // what they actually paid
                 await updateDoc(doc(db, record.path), {
                     status: "paid",
                     paidOn: new Date(),
                     receiptNo,
                     paymentMode,
                     markedBy: user?.uid || "",
+                    totalAmountPaid: schoolTotalPaid, // record the actual total collected
                 });
                 setRecords(prev => prev.map(r =>
                     r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
@@ -217,7 +237,7 @@ export default function ManageFeesPage() {
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
                 // Send Receipt via Email
-                const schoolBreakdownItems = [
+                const schoolBreakdownItems: { label: string; amount: number }[] = [
                     { label: "Tuition Fee", amount: record.breakdown?.tuitionFee || 0 },
                     { label: "Annual Fee", amount: record.breakdown?.annualFee || 0 },
                     { label: "Admission Fee", amount: record.breakdown?.admissionFee || 0 },
@@ -225,7 +245,12 @@ export default function ManageFeesPage() {
                     { label: "Sports Fee", amount: record.breakdown?.sportsFee || 0 },
                     { label: "Miscellaneous Fee", amount: record.breakdown?.miscFee || 0 },
                 ].filter(item => item.amount > 0);
-                if (schoolBreakdownItems.length === 0) schoolBreakdownItems.push({ label: "School Fee", amount: record.amount });
+                if (schoolBreakdownItems.length === 0) schoolBreakdownItems.push({ label: "School Fee (Current Month)", amount: record.amount });
+
+                // Add Previous Dues line if carried forward
+                if ((record.previousDues || 0) > 0) {
+                    schoolBreakdownItems.push({ label: "Previous Dues (Arrears)", amount: record.previousDues! });
+                }
 
                 fetch("/api/send-receipt", {
                     method: "POST",
@@ -241,7 +266,7 @@ export default function ManageFeesPage() {
                             paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
                             feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
                             lineItems: schoolBreakdownItems,
-                            totalAmount: record.amount,
+                            totalAmount: schoolTotalPaid,
                             paymentMode
                         }
                     })
@@ -251,6 +276,7 @@ export default function ManageFeesPage() {
             if (markPaidType === "transport" || markPaidType === "both") {
                 const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
                 const transportReceiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                const transpTotalPaid = record.transportTotalAmount || record.transportFeeAmount || 0;
                 await setDoc(doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid), {
                     studentId: studentUid,
                     studentName: record.studentName,
@@ -260,6 +286,9 @@ export default function ManageFeesPage() {
                     busNumber: "—",
                     routeDetails: "",
                     amount: record.transportFeeAmount || 0,
+                    previousDues: record.transportPreviousDues || 0,
+                    totalAmount: transpTotalPaid,
+                    totalAmountPaid: transpTotalPaid,
                     month: record.month,
                     year: record.year,
                     dueDate: record.dueDate,
@@ -275,6 +304,14 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
 
+                // Build transport line items with arrears
+                const transportLineItems: { label: string; amount: number }[] = [
+                    { label: "Transport / Bus Fee (Current Month)", amount: record.transportFeeAmount || 0 },
+                ];
+                if ((record.transportPreviousDues || 0) > 0) {
+                    transportLineItems.push({ label: "Previous Transport Dues (Arrears)", amount: record.transportPreviousDues! });
+                }
+
                 fetch("/api/send-receipt", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -288,8 +325,8 @@ export default function ManageFeesPage() {
                             rollNo: record.rollNo || undefined,
                             paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
                             feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
-                            lineItems: [{ label: "Transport / Bus Fee", amount: record.transportFeeAmount || 0 }],
-                            totalAmount: record.transportFeeAmount || 0,
+                            lineItems: transportLineItems,
+                            totalAmount: transpTotalPaid,
                             paymentMode
                         }
                     })
@@ -537,20 +574,30 @@ export default function ManageFeesPage() {
                                                     // Transport-only student — no school fee record
                                                     <div className="text-xs text-indigo-500 font-medium">— (transport only)</div>
                                                 ) : (
-                                                    <div className="font-bold text-navy">₹{record.amount?.toLocaleString()}</div>
+                                                    <div>
+                                                        <div className="font-bold text-navy">₹{(record.totalAmount || record.amount)?.toLocaleString()}</div>
+                                                        {(record.previousDues || 0) > 0 && (
+                                                            <div className="text-xs text-rose-500 mt-0.5">
+                                                                incl. ₹{record.previousDues?.toLocaleString()} prev. dues
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                                 {isBusStudent && (
                                                     <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
                                                         {!record.isTransportOnly && (
                                                             <div className="flex items-center gap-1">
                                                                 <School className="w-2.5 h-2.5" />
-                                                                <span>School: ₹{record.amount.toLocaleString()}</span>
+                                                                <span>School: ₹{(record.totalAmount || record.amount).toLocaleString()}</span>
                                                                 {schoolPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
                                                             </div>
                                                         )}
                                                         <div className="flex items-center gap-1">
                                                             <Bus className="w-2.5 h-2.5" />
-                                                            <span>Transport: ₹{transportFee.toLocaleString()}</span>
+                                                            <span>Transport: ₹{(record.transportTotalAmount || transportFee).toLocaleString()}</span>
+                                                            {(record.transportPreviousDues || 0) > 0 && (
+                                                                <span className="text-rose-400">(+₹{record.transportPreviousDues?.toLocaleString()} prev)</span>
+                                                            )}
                                                             {transportPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
                                                         </div>
                                                     </div>
@@ -712,24 +759,44 @@ export default function ManageFeesPage() {
                             <div className="space-y-2">
                                 {(() => {
                                     const transportFee = markPaidRecord.transportFeeAmount || 0;
-                                    const schoolFeeOnly = markPaidRecord.amount; // school fee is independent now
+                                    const schoolFeeBase = markPaidRecord.amount;
+                                    const schoolPrevDues = markPaidRecord.previousDues || 0;
+                                    const schoolTotal = markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues);
+                                    const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
+                                    const transportTotal = markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
                                     return (
                                         <>
                                             {!markPaidRecord.isTransportOnly && (
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee</span>
-                                                    <span className="font-semibold text-navy">₹{schoolFeeOnly.toLocaleString()}</span>
-                                                </div>
+                                                <>
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee (Current)</span>
+                                                        <span className="font-semibold text-navy">₹{schoolFeeBase.toLocaleString()}</span>
+                                                    </div>
+                                                    {schoolPrevDues > 0 && (
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues</span>
+                                                            <span className="font-semibold text-rose-600">₹{schoolPrevDues.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                             {transportFee > 0 && (
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="flex items-center gap-1.5 text-gray-600"><Bus className="w-4 h-4" /> Transport Fee</span>
-                                                    <span className="font-semibold text-navy">₹{transportFee.toLocaleString()}</span>
-                                                </div>
+                                                <>
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="flex items-center gap-1.5 text-gray-600"><Bus className="w-4 h-4" /> Transport Fee (Current)</span>
+                                                        <span className="font-semibold text-navy">₹{transportFee.toLocaleString()}</span>
+                                                    </div>
+                                                    {transportPrevDues > 0 && (
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous Transport Dues</span>
+                                                            <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                             <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
-                                                <span>Total</span>
-                                                <span>₹{(markPaidRecord.amount + transportFee).toLocaleString()}</span>
+                                                <span>Total Payable</span>
+                                                <span>₹{(schoolTotal + transportTotal).toLocaleString()}</span>
                                             </div>
                                         </>
                                     );
