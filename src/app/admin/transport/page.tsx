@@ -286,8 +286,11 @@ export default function TransportAdminPage() {
     const handleMarkTransportPaid = async (record: TransportFeeRecord) => {
         setActionLoading(record.id);
         try {
-            const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
-            const receiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+            const _dn = new Date();
+            const _dp = (n: number) => String(n).padStart(2, "0");
+            const _ds = `${_dn.getFullYear()}${_dp(_dn.getMonth()+1)}${_dp(_dn.getDate())}`;
+            const _ts = `${_dp(_dn.getHours())}${_dp(_dn.getMinutes())}${_dp(_dn.getSeconds())}`;
+            const receiptNo = `TRP-${_ds}-${_ts}-${Math.random().toString(36).substring(2,5).toUpperCase()}`;
             const path = record.path || `transportFeeRecords/${record.year}/months/${record.month}/students/${record.id}`;
             await updateDoc(doc(db, path), {
                 status: "paid",
