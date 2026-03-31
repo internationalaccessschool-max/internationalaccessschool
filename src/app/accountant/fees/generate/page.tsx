@@ -82,15 +82,21 @@ export default function GenerateFeesPage() {
 
                     const breakdown = {
                         tuitionFee: feeData.tuitionFee || 0,
-                        annualFee: feeData.annualFee || 0,
-                        admissionFee: 0, // one-time fee — charged at admission only, NOT in monthly generation
-                        transportFee: feeData.transportFee || 0,
+                        // annualFee is NOT included in monthly generation.
+                        // It is managed separately via the Annual Fees page (once per session).
                         registrationFee: feeData.registrationFee || 0,
                         sportsFee: feeData.sportsFee || 0,
                         miscFee: feeData.miscFee || 0,
                     };
 
-                    if (amount === 0) { skipped++; return; }
+                    // Monthly amount = tuition + registration + sports + misc (NO annual fee)
+                    const monthlyAmount =
+                        breakdown.tuitionFee +
+                        breakdown.registrationFee +
+                        breakdown.sportsFee +
+                        breakdown.miscFee;
+
+                    if (monthlyAmount === 0) { skipped++; return; }
 
                     // Build due date
                     const dueDate = new Date(targetYear, targetMonth - 1, dueDay);
@@ -168,12 +174,12 @@ export default function GenerateFeesPage() {
                         section: student.section || "",
                         parentEmail: student.notificationEmail || student.parentEmail || student.fatherEmail || student.email || "",
                         parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
-                        amount,            // current month fee
-                        previousDues,      // sum of unpaid previous months
-                        totalAmount: amount + previousDues, // what the parent must pay
+                        amount: monthlyAmount,       // current month fee (tuition+registration+sports+misc)
+                        previousDues,               // sum of unpaid previous months
+                        totalAmount: monthlyAmount + previousDues, // what the parent must pay
                         arrearsDetails: carriedOverIds, // for reference
                         breakdown,
-                        session,           // e.g. "2026"
+                        session,                    // e.g. "2026"
                         month: targetMonth,
                         year: targetYear,
                         dueDate,
@@ -188,7 +194,7 @@ export default function GenerateFeesPage() {
                         id: student.id,
                         name: studentFullName,
                         class: classId,
-                        amount: amount + previousDues
+                        amount: monthlyAmount + previousDues
                     });
 
                     created++;
