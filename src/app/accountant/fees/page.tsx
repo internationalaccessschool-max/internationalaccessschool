@@ -287,81 +287,53 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
-                // ── AUTO-DEDUCT FROM NEXT MONTH (when paying a carried_forward/arrear record) ──
-                // If this was a carried_forward record, find the next month that absorbed its dues
-                // and reduce that month's previousDues by the amount we just paid.
-                if (record.status === "carried_forward") {
-                    try {
-                        const paidArrearAmount = record.totalAmount || record.amount;
-                        // Scan forward up to 12 months to find the record that absorbed this
-                        for (let offset = 1; offset <= 12; offset++) {
-                            let nextMonth = record.month + offset;
-                            let nextYear = record.year;
-                            while (nextMonth > 12) { nextMonth -= 12; nextYear += 1; }
-
-                            const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
-                            const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
-                            const nextSnap = await getDoc(nextRef);
-
-                            if (!nextSnap.exists()) break; // no record further, stop
-
-                            const nextData = nextSnap.data() as any;
-                            const nextArrears: string[] = nextData.arrearsDetails || [];
-
-                            // Check if this next month's record contains our record ID in its arrearsDetails
-                            if (nextArrears.includes(record.id) && nextData.status !== "paid") {
-                                const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidArrearAmount);
-                                const newTotal = (nextData.amount || 0) + newPrevDues;
-                                const newArrearsDetails = nextArrears.filter((id: string) => id !== record.id);
-
-                                await updateDoc(nextRef, {
-                                    previousDues: newPrevDues,
-                                    totalAmount: newTotal,
-                                    arrearsDetails: newArrearsDetails,
-                                });
-
-                                // Update local state if this next month is currently in view
-                                setRecords(prev => prev.map(r =>
-                                    r.id === nextRecordId
-                                        ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
-                                        : r
-                                ));
-                                break; // found and updated — stop scanning
-                            }
-
-                            // If this next record is also carried_forward itself, keep scanning forward
-                            if (nextData.status !== "carried_forward") break;
-                        }
-                    } catch { /* best-effort */ }
-                }
-                // ── END AUTO-DEDUCT ───────────────────────────────────────────
-
-                // ── RECONCILE STALE DUES (if March was paid BEFORE April) ────
-                // If someone paid March separately first, April's record may
-                // still have stale previousDues — deduct from next month.
+                // ── UNIFIED CASCADE DEDUCTION ─────────────────────────────────
+                // When any month is paid, scan FORWARD through the chain to find
+                // the first LIVE (pending/overdue) bill that absorbed its dues,
+                // skipping over carried_forward (stale) months.
+                // Example: March paid → April(CF, skip) → May(CF, skip) → June(pending) → deduct ✅
                 try {
                     const paidAmount = record.totalAmount || record.amount;
-                    let nextMonth = record.month + 1;
-                    let nextYear = record.year;
-                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let nextMonth = record.month + offset;
+                        let nextYear = record.year;
+                        while (nextMonth > 12) { nextMonth -= 12; nextYear += 1; }
 
-                    const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
-                    const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
-                    const nextSnap = await getDoc(nextRef);
+                        const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
+                        const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
+                        const nextSnap = await getDoc(nextRef);
 
-                    if (nextSnap.exists()) {
+                        if (!nextSnap.exists()) break; // chain ends — no further records
                         const nextData = nextSnap.data() as any;
-                        if ((nextData.previousDues || 0) > 0 && nextData.status !== "paid") {
+
+                        if (nextData.status === "paid") break; // already paid — nothing to fix
+
+                        // Skip carried_forward months — they are stale, dues already absorbed further
+                        if (nextData.status === "carried_forward") continue;
+
+                        // Found the LIVE bill (pending / overdue) — deduct here
+                        if ((nextData.previousDues || 0) > 0) {
                             const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidAmount);
                             const newTotal = (nextData.amount || 0) + newPrevDues;
-                            await updateDoc(nextRef, { previousDues: newPrevDues, totalAmount: newTotal });
+                            // Also remove this record's ID from arrearsDetails if present
+                            const nextArrears: string[] = nextData.arrearsDetails || [];
+                            const newArrearsDetails = nextArrears.filter((id: string) => id !== record.id);
+
+                            await updateDoc(nextRef, {
+                                previousDues: newPrevDues,
+                                totalAmount: newTotal,
+                                arrearsDetails: newArrearsDetails,
+                            });
                             setRecords(prev => prev.map(r =>
-                                r.id === nextRecordId ? { ...r, previousDues: newPrevDues, totalAmount: newTotal } : r
+                                r.id === nextRecordId
+                                    ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
+                                    : r
                             ));
                         }
+                        break; // found the live bill — deducted (or nothing to deduct) — stop
                     }
                 } catch { /* best-effort */ }
-                // ── END RECONCILE ────────────────────────────────────────────
+                // ── END CASCADE DEDUCTION ────────────────────────────────────────
 
 
                 // Send Receipt via Email
@@ -992,25 +964,51 @@ export default function ManageFeesPage() {
 
                         {/* Bill Summary */}
                         <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 {(() => {
+                                    const bd = markPaidRecord.breakdown || {};
                                     const transportFee = markPaidRecord.transportFeeAmount || 0;
                                     const schoolFeeBase = markPaidRecord.amount;
                                     const schoolPrevDues = markPaidRecord.previousDues || 0;
                                     const schoolTotal = markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues);
                                     const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
                                     const transportTotal = markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
+                                    // Build breakdown lines (only show non-zero items)
+                                    const breakdownLines: { label: string; amount: number }[] = [
+                                        { label: "Tuition Fee",      amount: bd.tuitionFee      || 0 },
+                                        { label: "Annual Fee",       amount: bd.annualFee        || 0 },
+                                        { label: "Registration Fee", amount: bd.registrationFee  || 0 },
+                                        { label: "Sports Fee",       amount: bd.sportsFee        || 0 },
+                                        { label: "Misc Fee",         amount: bd.miscFee          || 0 },
+                                    ].filter(l => l.amount > 0);
+                                    const hasBreakdown = breakdownLines.length > 0;
                                     return (
                                         <>
                                             {!markPaidRecord.isTransportOnly && (
                                                 <>
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="flex items-center gap-1.5 text-gray-600"><School className="w-4 h-4" /> School Fee (Current)</span>
-                                                        <span className="font-semibold text-navy">₹{schoolFeeBase.toLocaleString()}</span>
+                                                    {/* School fee header */}
+                                                    <div className="flex justify-between text-sm font-semibold text-navy">
+                                                        <span className="flex items-center gap-1.5"><School className="w-4 h-4" /> School Fee (Current Month)</span>
+                                                        <span>₹{schoolFeeBase.toLocaleString()}</span>
                                                     </div>
+                                                    {/* Breakdown details */}
+                                                    {hasBreakdown && (
+                                                        <div className="ml-6 space-y-1 py-1">
+                                                            {breakdownLines.map(l => (
+                                                                <div key={l.label} className="flex justify-between text-xs text-gray-500">
+                                                                    <span>{l.label}</span>
+                                                                    <span>₹{l.amount.toLocaleString()}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {!hasBreakdown && (
+                                                        <div className="ml-6 text-xs text-gray-400">No breakdown available</div>
+                                                    )}
+                                                    {/* Previous dues */}
                                                     {schoolPrevDues > 0 && (
                                                         <div className="flex justify-between text-sm">
-                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues</span>
+                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues (Arrears)</span>
                                                             <span className="font-semibold text-rose-600">₹{schoolPrevDues.toLocaleString()}</span>
                                                         </div>
                                                     )}
@@ -1018,9 +1016,9 @@ export default function ManageFeesPage() {
                                             )}
                                             {transportFee > 0 && (
                                                 <>
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="flex items-center gap-1.5 text-gray-600"><Bus className="w-4 h-4" /> Transport Fee (Current)</span>
-                                                        <span className="font-semibold text-navy">₹{transportFee.toLocaleString()}</span>
+                                                    <div className="flex justify-between text-sm font-semibold text-navy mt-1">
+                                                        <span className="flex items-center gap-1.5"><Bus className="w-4 h-4" /> Transport Fee (Current Month)</span>
+                                                        <span>₹{transportFee.toLocaleString()}</span>
                                                     </div>
                                                     {transportPrevDues > 0 && (
                                                         <div className="flex justify-between text-sm">
