@@ -61,7 +61,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
     paid: { label: "Paid", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: CheckCircle2 },
     pending: { label: "Pending", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", icon: Clock },
     overdue: { label: "Overdue", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", icon: AlertCircle },
-    carried_forward: { label: "Carried Fwd", bg: "bg-gray-50", text: "text-gray-500", border: "border-gray-200", icon: AlertCircle },
+    carried_forward: { label: "Arrear", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", icon: AlertCircle },
 };
 
 export default function ManageFeesPage() {
@@ -106,7 +106,6 @@ export default function ManageFeesPage() {
             const schoolRecords = snapshots.flatMap(snap =>
                 snap.docs
                     .map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
-                    .filter(r => r.status !== "carried_forward") // hide records merged into newer months
             );
 
 
@@ -283,45 +282,54 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
-                // ── CLEAR CARRIED-FORWARD ARREAR RECORDS ────────────────────
-                // When April is paid (which includes March dues), also mark
-                // March's "carried_forward" record as "paid" automatically.
-                try {
-                    const arrearsIds: string[] = (record as any).arrearsDetails || [];
-                    if (arrearsIds.length > 0 && (record.previousDues || 0) > 0) {
-                        for (const arrearId of arrearsIds) {
-                            // arrearId format: "studentId_year_MM"
-                            const parts = arrearId.split("_");
-                            if (parts.length >= 3) {
-                                // Reconstruct path: feeRecords/{year}/months/{month}/classes/{class}/records/{id}
-                                // We scan backwards from current month to find it
-                                let prevMonth = record.month - 1;
-                                let prevYear = record.year;
-                                if (prevMonth <= 0) { prevMonth = 12; prevYear -= 1; }
+                // ── AUTO-DEDUCT FROM NEXT MONTH (when paying a carried_forward/arrear record) ──
+                // If this was a carried_forward record, find the next month that absorbed its dues
+                // and reduce that month's previousDues by the amount we just paid.
+                if (record.status === "carried_forward") {
+                    try {
+                        const paidArrearAmount = record.totalAmount || record.amount;
+                        // Scan forward up to 12 months to find the record that absorbed this
+                        for (let offset = 1; offset <= 12; offset++) {
+                            let nextMonth = record.month + offset;
+                            let nextYear = record.year;
+                            while (nextMonth > 12) { nextMonth -= 12; nextYear += 1; }
 
-                                const prevRef = doc(
-                                    db,
-                                    `feeRecords/${prevYear}/months/${prevMonth}/classes/${record.class}/records`,
-                                    arrearId
-                                );
-                                const prevSnap = await getDoc(prevRef);
-                                if (prevSnap.exists() && prevSnap.data()?.status === "carried_forward") {
-                                    await updateDoc(prevRef, {
-                                        status: "paid",
-                                        paidOn: new Date(),
-                                        clearedViaReceiptNo: receiptNo,
-                                        clearedViaMonth: record.month,
-                                        clearedViaYear: record.year,
-                                    });
-                                    setRecords(prev => prev.map(r =>
-                                        r.id === arrearId ? { ...r, status: "paid" } : r
-                                    ));
-                                }
+                            const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
+                            const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
+                            const nextSnap = await getDoc(nextRef);
+
+                            if (!nextSnap.exists()) break; // no record further, stop
+
+                            const nextData = nextSnap.data() as any;
+                            const nextArrears: string[] = nextData.arrearsDetails || [];
+
+                            // Check if this next month's record contains our record ID in its arrearsDetails
+                            if (nextArrears.includes(record.id) && nextData.status !== "paid") {
+                                const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidArrearAmount);
+                                const newTotal = (nextData.amount || 0) + newPrevDues;
+                                const newArrearsDetails = nextArrears.filter((id: string) => id !== record.id);
+
+                                await updateDoc(nextRef, {
+                                    previousDues: newPrevDues,
+                                    totalAmount: newTotal,
+                                    arrearsDetails: newArrearsDetails,
+                                });
+
+                                // Update local state if this next month is currently in view
+                                setRecords(prev => prev.map(r =>
+                                    r.id === nextRecordId
+                                        ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
+                                        : r
+                                ));
+                                break; // found and updated — stop scanning
                             }
+
+                            // If this next record is also carried_forward itself, keep scanning forward
+                            if (nextData.status !== "carried_forward") break;
                         }
-                    }
-                } catch { /* best-effort — previous dues clearing */ }
-                // ── END CLEAR CARRIED-FORWARD ────────────────────────────────
+                    } catch { /* best-effort */ }
+                }
+                // ── END AUTO-DEDUCT ───────────────────────────────────────────
 
                 // ── RECONCILE STALE DUES (if March was paid BEFORE April) ────
                 // If someone paid March separately first, April's record may
@@ -706,6 +714,7 @@ export default function ManageFeesPage() {
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="overdue">Overdue</option>
+                        <option value="carried_forward">Arrear (Carried Fwd)</option>
                     </select>
                     <select value={filterClass} onChange={e => setFilterClass(e.target.value)}
                         className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none">
@@ -784,7 +793,12 @@ export default function ManageFeesPage() {
                                                 ) : (
                                                     <div>
                                                         <div className="font-bold text-navy">₹{(record.totalAmount || record.amount)?.toLocaleString()}</div>
-                                                        {(record.previousDues || 0) > 0 && (
+                                                        {record.status === "carried_forward" && (
+                                                            <div className="text-xs text-purple-500 mt-0.5 font-medium">
+                                                                Arrear — {MONTHS[(record.month || 1) - 1]} {record.year}
+                                                            </div>
+                                                        )}
+                                                        {record.status !== "carried_forward" && (record.previousDues || 0) > 0 && (
                                                             <div className="text-xs text-rose-500 mt-0.5">
                                                                 incl. ₹{record.previousDues?.toLocaleString()} prev. dues
                                                             </div>
@@ -856,17 +870,21 @@ export default function ManageFeesPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    {/* Mark Paid — show if either school or transport is unpaid */}
-                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
+                                                    {/* Mark Paid — show if school is unpaid (includes carried_forward) or transport is unpaid */}
+                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && record.status !== "paid" && (
                                                         <button
                                                             onClick={() => openMarkPaidDialog(record)}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
+                                                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                                                record.status === "carried_forward"
+                                                                    ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                                                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                            }`}
                                                         >
                                                             <CheckCircle2 className="w-3 h-3" />
-                                                            Mark Paid
+                                                            {record.status === "carried_forward" ? "Pay Arrear" : "Mark Paid"}
                                                         </button>
                                                     )}
-                                                    {record.status === "pending" && (
+                                                    {(record.status === "pending" || record.status === "overdue") && (
                                                         <button
                                                             onClick={() => handleMarkOverdue(record)}
                                                             disabled={actionLoading === record.id + "_overdue"}
