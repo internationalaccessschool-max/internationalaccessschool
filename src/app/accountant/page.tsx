@@ -329,7 +329,7 @@ export default function AccountantDashboard() {
                             </select>
                             <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
                                 className="px-3 py-2 rounded-xl bg-white/10 text-white text-sm border border-white/20 focus:outline-none">
-                                {[NOW_YEAR - 1, NOW_YEAR, NOW_YEAR + 1].map(y => <option key={y} value={y} className="text-navy bg-white">{y}</option>)}
+                                {Array.from({ length: 2050 - 2020 + 1 }, (_, i) => 2020 + i).map(y => <option key={y} value={y} className="text-navy bg-white">{y}</option>)}
                             </select>
                             <button onClick={fetchOverview} className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all">
                                 <RefreshCw className="w-4 h-4" />
