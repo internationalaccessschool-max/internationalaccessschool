@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "@/lib/firebase";
 import {
-    collection, getDocs, doc, setDoc, updateDoc,
-    query, where, getDoc, Timestamp
+    collection, collectionGroup, getDocs, doc, setDoc, updateDoc,
+    getDoc, Timestamp
 } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -99,32 +99,46 @@ export default function AnnualFeesPage() {
         let created = 0, skipped = 0, errors = 0;
 
         try {
-            // 1. Load all active students
-            const studentsSnap = await getDocs(
-                query(collection(db, "students"), where("status", "==", "active"))
-            );
-
-            // 2. Load fee structures
-            const feeStructuresSnap = await getDocs(collection(db, "feeStructures"));
+            // 1. Load ALL fee structures from correct path
+            const feeStructSnap = await getDocs(collection(db, "fees", "structure", "classes"));
             const feeMap: Record<string, any> = {};
-            feeStructuresSnap.docs.forEach(d => { feeMap[d.id] = d.data(); });
+            feeStructSnap.docs.forEach(d => { feeMap[d.id] = d.data(); });
 
-            for (const studentDoc of studentsSnap.docs) {
-                const student = studentDoc.data();
-                const studentId = studentDoc.id;
-                const classId = student.class || student.className || "";
+            // 2. Load all active students using collectionGroup (same as rest of app)
+            const studentsSnap = await getDocs(collectionGroup(db, "profiles"));
+            const allStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+
+            // Filter only active students
+            const activeStudents = allStudents.filter(s => {
+                const status = (s.status || "").toUpperCase();
+                return status !== "LEFT" && status !== "TC" && status !== "INACTIVE";
+            });
+
+            for (const student of activeStudents) {
+                const studentId = student.id;
+
+                // Normalize class name: "Class 7" → "7", "NUR" stays "NUR"
+                const rawClass = student.className?.toString() ||
+                    student.currentClass?.toString() ||
+                    student.class?.toString() || "";
+                const classId = rawClass.replace(/^class\s*/i, "").trim();
 
                 if (!classId) { skipped++; continue; }
 
                 const feeData = feeMap[classId];
-                if (!feeData || !feeData.annualFee) { skipped++; continue; }
+                if (!feeData) { skipped++; continue; }
 
-                // Check if record already exists
+                // annualFee field name matches fee structure
+                const annualFeeAmt = feeData.annualFee || 0;
+                if (annualFeeAmt <= 0) { skipped++; continue; }
+
+                // Check if record already exists for this session
                 const ref = doc(db, `annualFeeRecords/${genSession}/students/${studentId}`);
                 const existing = await getDoc(ref);
                 if (existing.exists()) { skipped++; continue; }
 
-                const studentName = [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ");
+                const studentName = [student.firstName, student.middleName, student.lastName]
+                    .filter(Boolean).join(" ") || student.name || "Unknown";
 
                 await setDoc(ref, {
                     studentId,
@@ -132,9 +146,9 @@ export default function AnnualFeesPage() {
                     class: classId,
                     section: student.section || "",
                     session: genSession,
-                    totalFee: feeData.annualFee,
+                    totalFee: annualFeeAmt,
                     amountPaid: 0,
-                    balance: feeData.annualFee,
+                    balance: annualFeeAmt,
                     status: "unpaid" as AnnualFeeStatus,
                     payments: [],
                     generatedAt: Timestamp.now(),
@@ -145,6 +159,7 @@ export default function AnnualFeesPage() {
             setGenResults({ created, skipped, errors });
             toast.success(`Annual fees generated! ${created} created, ${skipped} skipped.`);
         } catch (e) {
+            console.error("Annual fee generation error:", e);
             toast.error("Failed to generate annual fees");
             errors++;
             setGenResults({ created, skipped, errors });
@@ -152,6 +167,7 @@ export default function AnnualFeesPage() {
             setGenLoading(false);
         }
     };
+
 
     // ── Record a Payment ──────────────────────────────────────────────────────
     const openPayModal = (record: AnnualFeeRecord) => {
