@@ -29,7 +29,7 @@ export default function GenerateFeesPage() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [generating, setGenerating] = useState(false);
-    const [result, setResult] = useState<{ created: number; skipped: number; total: number; withArrears: number } | null>(null);
+    const [result, setResult] = useState<{ created: number; skipped: number; total: number; withArrears: number; generatedStudents: {id: string; name: string; class: string; amount: number}[] } | null>(null);
 
     const handleGenerate = async () => {
         setGenerating(true);
@@ -58,6 +58,7 @@ export default function GenerateFeesPage() {
             let created = 0;
             let skipped = 0;
             let withArrears = 0;
+            const generatedList: {id: string; name: string; class: string; amount: number}[] = [];
 
             // 3. Process in batches of 10 for concurrent writes
             const BATCH_SIZE = 10;
@@ -183,13 +184,20 @@ export default function GenerateFeesPage() {
                         createdAt: new Date(),
                     });
 
+                    generatedList.push({
+                        id: student.id,
+                        name: studentFullName,
+                        class: classId,
+                        amount: amount + previousDues
+                    });
+
                     created++;
                 }));
                 // Count actual failures (optional — results already tracked above)
                 results.forEach(r => { if (r.status === "rejected") skipped++; });
             }
 
-            setResult({ created, skipped, total: activeStudents.length, withArrears });
+            setResult({ created, skipped, total: activeStudents.length, withArrears, generatedStudents: generatedList });
             if (created > 0) {
                 toast.success(`Generated ${created} fee records! (${withArrears} with previous dues)`);
             } else {
@@ -333,7 +341,39 @@ export default function GenerateFeesPage() {
                             <div className="text-xs text-rose-600 mt-1">With Previous Dues</div>
                         </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-4 flex items-center gap-1.5">
+
+                    {result.generatedStudents.length > 0 && (
+                        <div className="mt-8 border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                            <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-navy flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-emerald-500" />
+                                    Successfully Generated ({result.generatedStudents.length})
+                                </h4>
+                            </div>
+                            <div className="max-h-[400px] overflow-y-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-white sticky top-0 border-b border-gray-100">
+                                        <tr>
+                                            <th className="px-4 py-3 font-medium text-gray-500">Student Name</th>
+                                            <th className="px-4 py-3 font-medium text-gray-500 w-24 text-center">Class</th>
+                                            <th className="px-4 py-3 font-medium text-gray-500 w-32 text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50 bg-white">
+                                        {result.generatedStudents.map((stu, i) => (
+                                            <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-4 py-3 font-medium text-navy">{stu.name}</td>
+                                                <td className="px-4 py-3 text-gray-600 text-center">{stu.class}</td>
+                                                <td className="px-4 py-3 text-emerald-600 font-semibold text-right">₹{stu.amount}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    <p className="text-xs text-gray-400 mt-6 flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5" />
                         Go to <strong className="text-navy">Manage Fees</strong> to view and manage all generated fee records.
                     </p>
