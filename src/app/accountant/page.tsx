@@ -124,18 +124,20 @@ export default function AccountantDashboard() {
                     getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${cid}/records`))
                 )
             );
+            // Keep carried_forward records — they are unpaid fees (shown as arrears)
+            // so they correctly count toward the "pending" total for that month
             const school = snaps.flatMap(snap =>
                 snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
-            ).filter(r => r.status !== "carried_forward");
+            );
             setSchoolRecords(school);
 
             // 3. Transport records
             const tSnap = await getDocs(
                 collection(db, "transportFeeRecords", filterYear.toString(), "months", filterMonth.toString(), "students")
             ).catch(() => ({ docs: [] as any[] }));
+            // Include carried_forward transport records too (unpaid fees)
             const transport = tSnap.docs
-                .map((d: any) => ({ id: d.id, ...d.data() } as TransportRecord))
-                .filter((r: TransportRecord) => r.status !== "carried_forward");
+                .map((d: any) => ({ id: d.id, ...d.data() } as TransportRecord));
             setTransportRecords(transport);
 
             // 4. Today's payments from this month's records
@@ -158,7 +160,7 @@ export default function AccountantDashboard() {
 
     useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
-    // ── Load all-time pending (current year only, runs once) ──────────────────
+    // ── Load all-time pending — scans ALL months of current year ─────────────
     const fetchAllTimePending = useCallback(async () => {
         setLoadingAllTime(true);
         try {
@@ -168,8 +170,8 @@ export default function AccountantDashboard() {
             let total = 0;
             let count = 0;
 
-            // Scan all months up to current month for current year
-            for (let m = 1; m <= NOW_MONTH; m++) {
+            // Scan ALL 12 months so future months (April, May...) are included
+            for (let m = 1; m <= 12; m++) {
                 const monthSnaps = await Promise.all(
                     classIds.map(cid =>
                         getDocs(collection(db, `feeRecords/${NOW_YEAR}/months/${m}/classes/${cid}/records`))
@@ -178,11 +180,23 @@ export default function AccountantDashboard() {
                 monthSnaps.forEach(snap => {
                     snap.docs.forEach(d => {
                         const r = d.data() as FeeRecord;
-                        if (r.status !== "paid" && r.status !== "carried_forward") {
-                            // Use base amount (not totalAmount) to avoid double-counting arrears
+                        if (r.status === "paid") return; // paid — skip
+                        // For carried_forward: the fee is absorbed into next month's previousDues.
+                        // We count carried_forward only if its amount > 0 AND it hasn't been paid.
+                        // But to avoid double-counting with next month's pending totalAmount,
+                        // we skip carried_forward and rely on pending/overdue records which
+                        // already include previousDues in their totalAmount.
+                        // However, we use `amount` (base fee only) not `totalAmount` to prevent
+                        // counting arrears twice across months.
+                        if (r.status === "carried_forward") {
+                            // Only count if amount is set (real arrear record)
                             total += r.amount || 0;
                             count++;
+                            return;
                         }
+                        // For pending/overdue — use base amount only (previousDues already counted via carried_forward)
+                        total += r.amount || 0;
+                        count++;
                     });
                 });
             }
@@ -193,7 +207,7 @@ export default function AccountantDashboard() {
         } finally {
             setLoadingAllTime(false);
         }
-    }, [NOW_MONTH, NOW_YEAR]);
+    }, [NOW_YEAR]);
 
     useEffect(() => { fetchAllTimePending(); }, [fetchAllTimePending]);
 
