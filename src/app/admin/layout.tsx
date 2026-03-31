@@ -42,7 +42,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
                 { href: "/admin/applications", label: "Applications", icon: Briefcase },
                 { href: "/admin/admissions", label: "Admissions", icon: UserCheck },
-                { href: "/admin/transport", label: "Transport", icon: Bus },
             ],
         },
         {
@@ -72,6 +71,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/finance/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
                 { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
                 { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
+                { href: "/admin/transport", label: "Transport", icon: Bus },
             ],
         },
         {
