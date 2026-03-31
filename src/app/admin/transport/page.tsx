@@ -769,7 +769,7 @@ export default function TransportAdminPage() {
                                         <label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Year</label>
                                         <select value={feeYear} onChange={e => setFeeYear(Number(e.target.value))}
                                             className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-indigo-400 outline-none bg-white">
-                                            {[feeYear - 1, feeYear, feeYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                                            {Array.from({ length: 2050 - 2020 + 1 }, (_, i) => 2020 + i).map(y => <option key={y} value={y}>{y}</option>)}
                                         </select>
                                     </div>
                                     <Button
