@@ -118,7 +118,7 @@ export default function SupervisorFeeDashboard() {
                 </select>
                 <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
                     className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none bg-white">
-                    {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                    {Array.from({ length: 2050 - 2020 + 1 }, (_, i) => 2020 + i).map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
             </div>
 
