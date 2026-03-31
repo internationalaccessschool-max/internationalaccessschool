@@ -258,8 +258,13 @@ export default function ManageFeesPage() {
             const studentUid = record.studentId || record.id;
 
             if (markPaidType === "school" || markPaidType === "both") {
-                const seq = Math.floor(Math.random() * 90000) + 10000;
-                const receiptNo = `REC-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                // Receipt format: REC-YYYYMMDD-HHMMSS e.g. REC-20260331-144523-A3F
+                const _now = new Date();
+                const _pad = (n: number) => String(n).padStart(2, "0");
+                const _dateStr = `${_now.getFullYear()}${_pad(_now.getMonth()+1)}${_pad(_now.getDate())}`;
+                const _timeStr = `${_pad(_now.getHours())}${_pad(_now.getMinutes())}${_pad(_now.getSeconds())}`;
+                const _rnd = Math.random().toString(36).substring(2, 5).toUpperCase();
+                const receiptNo = `REC-${_dateStr}-${_timeStr}-${_rnd}`;
                 const schoolBaseTotal = record.totalAmount || record.amount;
                 const schoolDiscount = computeDiscount(schoolBaseTotal);
                 const schoolTotalPaid = schoolBaseTotal - schoolDiscount;
@@ -406,8 +411,13 @@ export default function ManageFeesPage() {
             }
 
             if (markPaidType === "transport" || markPaidType === "both") {
-                const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
-                const transportReceiptNo = `TRP-${record.year}-${String(record.month).padStart(2, "0")}-${seq}`;
+                // Receipt format: TRP-YYYYMMDD-HHMMSS e.g. TRP-20260331-144523-B7K
+                const _tnow = new Date();
+                const _tpad = (n: number) => String(n).padStart(2, "0");
+                const _tdateStr = `${_tnow.getFullYear()}${_tpad(_tnow.getMonth()+1)}${_tpad(_tnow.getDate())}`;
+                const _ttimeStr = `${_tpad(_tnow.getHours())}${_tpad(_tnow.getMinutes())}${_tpad(_tnow.getSeconds())}`;
+                const _trnd = Math.random().toString(36).substring(2, 5).toUpperCase();
+                const transportReceiptNo = `TRP-${_tdateStr}-${_ttimeStr}-${_trnd}`;
                 const transpBaseTotal = record.transportTotalAmount || record.transportFeeAmount || 0;
                 const transpDiscount = computeDiscount(transpBaseTotal);
                 const transpTotalPaid = transpBaseTotal - transpDiscount;
