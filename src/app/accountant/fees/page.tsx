@@ -3,7 +3,7 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp, collectionGroup } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -81,6 +81,7 @@ export default function ManageFeesPage() {
     const [discountValue, setDiscountValue] = useState<number>(0);
     // Notification email override
     const [notifEmail, setNotifEmail] = useState<string>("");
+    const [isFetchingEmail, setIsFetchingEmail] = useState(false);
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -210,7 +211,7 @@ export default function ManageFeesPage() {
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
     // ---------- Mark Paid Logic ----------
-    const openMarkPaidDialog = (record: FeeRecord) => {
+    const openMarkPaidDialog = async (record: FeeRecord) => {
         // hasTransport: only if a real transport record exists (transportFeeAmount set from transportFeeRecords)
         const hasTransport = (record.transportFeeAmount || 0) > 0;
         setMarkPaidType(hasTransport ? "both" : "school");
@@ -222,6 +223,26 @@ export default function ManageFeesPage() {
         const stored = record.parentEmail || "";
         const isAuthEmail = stored.includes("@ias.edu") || stored.includes("@school.");
         setNotifEmail(isAuthEmail ? "" : stored);
+        
+        // Fetch fresh notification email from student profile
+        setIsFetchingEmail(true);
+        try {
+            const studentUid = record.studentId || record.id;
+            const q = query(collectionGroup(db, "profiles"), where("id", "==", studentUid));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+                const profile = snap.docs[0].data() as any;
+                if (profile.notificationEmail) {
+                    setNotifEmail(profile.notificationEmail);
+                } else if (profile.parentEmail && !profile.parentEmail.includes("@ias.edu") && !profile.parentEmail.includes("@school.")) {
+                    setNotifEmail(profile.parentEmail);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch profile email:", e);
+        } finally {
+            setIsFetchingEmail(false);
+        }
     };
 
     // Compute discount amount from current markPaidRecord
@@ -503,6 +524,24 @@ export default function ManageFeesPage() {
                         }
                     })
                 }).catch(console.error);
+            }
+
+            // Update Notification Email on the student's profile if it was entered/changed
+            if (notifEmail) {
+                try {
+                    const q = query(collectionGroup(db, "profiles"), where("id", "==", studentUid));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        const profileRef = snap.docs[0].ref;
+                        const profileData = snap.docs[0].data() as any;
+                        if (profileData.notificationEmail !== notifEmail) {
+                            await updateDoc(profileRef, { notificationEmail: notifEmail });
+                        }
+                    }
+                } catch (e) {
+                    // ignore non-critical update error
+                    console.error("Failed to update student notification email", e);
+                }
             }
 
             setMarkPaidRecord(null);
@@ -1094,6 +1133,7 @@ export default function ManageFeesPage() {
                             <div className="pt-3 border-t border-gray-100">
                                 <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
                                     <Mail className="w-4 h-4 text-gray-400" /> Receipt Email
+                                    {isFetchingEmail && <Loader2 className="w-3 h-3 text-gray-400 animate-spin ml-1" />}
                                 </p>
                                 {notifEmail ? (
                                     <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
