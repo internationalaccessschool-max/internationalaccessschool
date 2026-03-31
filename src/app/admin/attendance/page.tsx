@@ -29,9 +29,8 @@ function generateMonthOptions(): { label: string; value: string }[] {
 }
 
 function generateYearOptions(): string[] {
-    const now = new Date().getFullYear();
     const years: string[] = [];
-    for (let y = now; y >= 2024; y--) {
+    for (let y = 2050; y >= 2020; y--) {
         years.push(String(y));
     }
     return years;
