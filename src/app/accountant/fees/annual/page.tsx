@@ -8,9 +8,10 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
 import {
-    CalendarDays, Search, Loader2, ChevronDown, CheckCircle2,
-    AlertCircle, Clock, IndianRupee, Plus, History, X
+    CalendarDays, Search, Loader2, CheckCircle2,
+    IndianRupee, Plus, History, X, Printer
 } from "lucide-react";
+import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
 import toast from "react-hot-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,6 +169,27 @@ export default function AnnualFeesPage() {
         }
     };
 
+
+    // ── Print Annual Fee Receipt ───────────────────────────────────────────────
+    const printAnnualReceipt = (record: AnnualFeeRecord, payment: AnnualPayment) => {
+        const paidOn = new Date(payment.date).toLocaleDateString("en-IN", {
+            day: "numeric", month: "long", year: "numeric"
+        });
+        const html = buildReceiptHTML({
+            title: "Annual Fee Receipt",
+            receiptNo: payment.receiptNo,
+            studentName: record.studentName,
+            classSection: `Class ${record.class}${record.section ? ` - ${record.section}` : ""}`,
+            paidOn,
+            feeMonth: `Session ${record.session}`,
+            lineItems: [
+                { label: "Annual Fee (Installment)", amount: payment.amount },
+            ],
+            totalAmount: payment.amount,
+            paymentMode: payment.paymentMode,
+        });
+        printReceiptHTML(html, `Annual Fee Receipt — ${record.studentName}`);
+    };
 
     // ── Record a Payment ──────────────────────────────────────────────────────
     const openPayModal = (record: AnnualFeeRecord) => {
@@ -532,14 +554,27 @@ export default function AnnualFeesPage() {
                             </button>
                         </div>
 
-                        <div className="px-6 py-4 max-h-80 overflow-y-auto space-y-3">
+                        <div className="px-6 py-4 max-h-96 overflow-y-auto space-y-3">
                             {historyModal.payments.map((p, i) => (
-                                <div key={i} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl">
-                                    <div>
+                                <div key={i} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl gap-3">
+                                    <div className="flex-1 min-w-0">
                                         <p className="text-xs text-gray-400">{new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">{p.paymentMode} · {p.receiptNo}</p>
+                                        <p className="text-xs text-gray-500 mt-0.5 font-mono">{p.receiptNo}</p>
+                                        <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                            p.paymentMode === "UPI" ? "bg-violet-50 text-violet-700" :
+                                            p.paymentMode === "CHEQUE" ? "bg-blue-50 text-blue-700" :
+                                            "bg-green-50 text-green-700"
+                                        }`}>{p.paymentMode}</span>
                                     </div>
-                                    <span className="font-bold text-emerald-700 text-sm">₹{p.amount.toLocaleString()}</span>
+                                    <div className="flex flex-col items-end gap-2 shrink-0">
+                                        <span className="font-bold text-emerald-700 text-sm">₹{p.amount.toLocaleString()}</span>
+                                        <button
+                                            onClick={() => printAnnualReceipt(historyModal, p)}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-navy/5 text-navy text-xs font-semibold hover:bg-navy hover:text-white transition-all"
+                                        >
+                                            <Printer className="w-3 h-3" /> Receipt
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
