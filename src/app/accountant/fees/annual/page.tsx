@@ -42,7 +42,7 @@ interface AnnualFeeRecord {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SESSION_OPTIONS = ["2025", "2026", "2027", "2028"];
+const SESSION_OPTIONS = Array.from({ length: 2050 - 2020 + 1 }, (_, i) => String(2020 + i));
 const PAYMENT_MODES = ["CASH", "UPI", "CHEQUE"] as const;
 
 const STATUS_STYLES: Record<AnnualFeeStatus, { bg: string; text: string; border: string; label: string }> = {
