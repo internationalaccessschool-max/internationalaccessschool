@@ -224,18 +224,17 @@ export default function ManageFeesPage() {
         const isAuthEmail = stored.includes("@ias.edu") || stored.includes("@school.");
         setNotifEmail(isAuthEmail ? "" : stored);
         
-        // Fetch fresh notification email from student profile
+        // Fetch fresh notification email from student profile using direct Firestore path
         setIsFetchingEmail(true);
         try {
             const studentUid = record.studentId || record.id;
-            const q = query(collectionGroup(db, "profiles"), where("id", "==", studentUid));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-                const profile = snap.docs[0].data() as any;
-                if (profile.notificationEmail) {
-                    setNotifEmail(profile.notificationEmail);
-                } else if (profile.parentEmail && !profile.parentEmail.includes("@ias.edu") && !profile.parentEmail.includes("@school.")) {
-                    setNotifEmail(profile.parentEmail);
+            const directPath = `users/classes/${record.class}/sections/${record.section}/students/profiles/${studentUid}`;
+            const profileSnap = await getDoc(doc(db, directPath));
+            if (profileSnap.exists()) {
+                const data = profileSnap.data() as any;
+                const email = data.notificationEmail || data.parentEmail || "";
+                if (email && !email.includes("@ias.edu") && !email.includes("@school.")) {
+                    setNotifEmail(email);
                 }
             }
         } catch (e) {
@@ -526,20 +525,18 @@ export default function ManageFeesPage() {
                 }).catch(console.error);
             }
 
-            // Update Notification Email on the student's profile if it was entered/changed
+            // Save notification email back to student profile
             if (notifEmail) {
                 try {
-                    const q = query(collectionGroup(db, "profiles"), where("id", "==", studentUid));
-                    const snap = await getDocs(q);
-                    if (!snap.empty) {
-                        const profileRef = snap.docs[0].ref;
-                        const profileData = snap.docs[0].data() as any;
-                        if (profileData.notificationEmail !== notifEmail) {
-                            await updateDoc(profileRef, { notificationEmail: notifEmail });
+                    const directPath = `users/classes/${record.class}/sections/${record.section}/students/profiles/${studentUid}`;
+                    const profileSnap = await getDoc(doc(db, directPath));
+                    if (profileSnap.exists()) {
+                        const existing = (profileSnap.data() as any).notificationEmail;
+                        if (existing !== notifEmail) {
+                            await updateDoc(doc(db, directPath), { notificationEmail: notifEmail });
                         }
                     }
                 } catch (e) {
-                    // ignore non-critical update error
                     console.error("Failed to update student notification email", e);
                 }
             }
