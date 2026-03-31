@@ -165,7 +165,7 @@ export default function GenerateFeesPage() {
                         rollNo: student.rollNo || student.admissionNumber || "",
                         class: classId,
                         section: student.section || "",
-                        parentEmail: student.parentEmail || student.fatherEmail || student.email || "",
+                        parentEmail: student.notificationEmail || student.parentEmail || student.fatherEmail || student.email || "",
                         parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
                         amount,            // current month fee
                         previousDues,      // sum of unpaid previous months
