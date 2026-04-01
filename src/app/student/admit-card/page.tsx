@@ -21,21 +21,26 @@ export default function StudentAdmitCardPage() {
         const fetchCards = async () => {
             try {
                 // Get student's class info
-                const { className } = await getStudentClassInfo(user.uid);
+                let { className } = await getStudentClassInfo(user.uid);
 
                 // Fetch all exams
                 const examsSnap = await getDocs(collection(db, "exams"));
 
-                const cards: AdmitCard[] = [];
+                const cards: (AdmitCard & { session?: string; examType?: string })[] = [];
 
                 await Promise.all(examsSnap.docs.map(async examDoc => {
+                    const examData = examDoc.data();
                     // 1. Try NEW nested path: exams/{examId}/classes/{classId}/admitCards/{studentId}
                     if (className) {
                         const newRef = doc(db, "exams", examDoc.id, "classes", className, "admitCards", user.uid);
                         const newSnap = await getDoc(newRef);
                         if (newSnap.exists()) {
-                            cards.push({ id: newSnap.id, ...newSnap.data() } as AdmitCard);
-                            return; // found, skip old path
+                            cards.push({
+                                id: newSnap.id, ...newSnap.data(),
+                                session: examData.session || "",
+                                examType: examData.examType || "",
+                            } as any);
+                            return;
                         }
                     }
 
@@ -43,7 +48,11 @@ export default function StudentAdmitCardPage() {
                     const oldRef = doc(db, "exams", examDoc.id, "admitCards", user.uid);
                     const oldSnap = await getDoc(oldRef);
                     if (oldSnap.exists()) {
-                        cards.push({ id: oldSnap.id, ...oldSnap.data() } as AdmitCard);
+                        cards.push({
+                            id: oldSnap.id, ...oldSnap.data(),
+                            session: examData.session || "",
+                            examType: examData.examType || "",
+                        } as any);
                     }
                 }));
 
@@ -221,10 +230,15 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
                             <p className="text-sm text-muted-foreground mb-1">
                                 {card.startDate} — {card.endDate}
                             </p>
-                            {card.timing && (
-                                <p className="text-xs font-medium text-amber-600 mb-4 bg-amber-50 inline-block px-2 py-1 rounded w-fit">
-                                    ⏱ {card.timing}
-                                </p>
+                            {(card as any).examType && (
+                                <Badge variant="outline" className="text-xs bg-violet-50 text-violet-700 border-violet-200 mb-1">
+                                    {(card as any).examType}
+                                </Badge>
+                            )}
+                            {(card as any).session && (
+                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200 ml-1 mb-1">
+                                    Session {(card as any).session}
+                                </Badge>
                             )}
                             <div className="grid grid-cols-2 gap-3 text-sm mb-5 mt-3">
                                 <div>
