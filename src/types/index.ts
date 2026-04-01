@@ -80,16 +80,16 @@ export interface ClassSubjectMap {
 
 export interface Exam {
     id?: string;
-    name: string; // e.g., "Term 1", "Mid-Term", "Final"
+    name: string; // e.g., "Unit I Test (2026-27)"
     startDate: string;
     endDate: string;
-    status: "Draft" | "Published";
+    status: "Inactive" | "Draft" | "Active" | "Published";
     classesApplicable: string[]; // Array of class names that take this exam
     createdAt?: number;
     updatedAt?: number;
-    /** New: exam type for 4-exam academic structure */
+    /** Exam type for 4-exam academic structure */
     examType?: "Standard" | "Unit Test" | "Term Exam" | "Annual Exam";
-    /** New: academic session e.g. "2026-27" */
+    /** Academic session e.g. "2026-27" */
     session?: string;
 }
 
