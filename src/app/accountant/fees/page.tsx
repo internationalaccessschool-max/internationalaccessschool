@@ -300,6 +300,36 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
+                // ── BACKWARD CASCADE (Auto-Mark Arrears as Paid) ──────────────
+                try {
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevMonth = record.month - offset;
+                        let prevYear = record.year;
+                        while (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+                        
+                        const pastColl = collection(db, `feeRecords/${prevYear}/months/${prevMonth}/classes/${record.class}/records`);
+                        const studentQ = query(pastColl, where("studentId", "==", studentUid));
+                        const pastSnaps = await getDocs(studentQ);
+                        
+                        for (const pastDoc of pastSnaps.docs) {
+                            const pastData = pastDoc.data() as any;
+                            if (pastData.status === "carried_forward") {
+                                await updateDoc(pastDoc.ref, {
+                                    status: "paid",
+                                    paidOn: new Date(),
+                                    receiptNo,
+                                    paymentMode,
+                                    markedBy: user?.uid || "",
+                                    totalAmountPaid: pastData.amount || 0,
+                                    note: `Auto-paid via consolidated bill ${receiptNo}`
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("School backward cascade failed", e);
+                }
+
                 // ── UNIFIED CASCADE DEDUCTION ─────────────────────────────────
                 // When any month is paid, scan FORWARD through the chain:
                 //   1. For each intermediate carried_forward month → clear its stale
@@ -465,6 +495,38 @@ export default function ManageFeesPage() {
                     r.id === record.id ? { ...r, transportStatus: "paid", transportReceiptNo } : r
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
+
+                // ── BACKWARD TRANSPORT CASCADE ────────────────────────────────
+                try {
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevTMonth = (record.month || 1) - offset;
+                        let prevTYear = record.year;
+                        while (prevTMonth <= 0) { prevTMonth += 12; prevTYear -= 1; }
+                        
+                        const prevTransRef = doc(
+                            db, "transportFeeRecords",
+                            prevTYear.toString(), "months", prevTMonth.toString(), "students", studentUid
+                        );
+                        const prevTransSnap = await getDoc(prevTransRef);
+                        
+                        if (prevTransSnap.exists()) {
+                            const prevNtd = prevTransSnap.data() as any;
+                            if (prevNtd.status === "carried_forward") {
+                                await updateDoc(prevTransRef, {
+                                    status: "paid",
+                                    paidOn: new Date(),
+                                    receiptNo: transportReceiptNo,
+                                    paymentMode,
+                                    markedBy: user?.uid || "",
+                                    totalAmountPaid: prevNtd.amount || 0,
+                                    note: `Auto-paid via consolidated bill ${transportReceiptNo}`
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Transport backward cascade failed", e);
+                }
 
                 // ── UNIFIED TRANSPORT CASCADE DEDUCTION ───────────────────────
                 // Same logic as the school fee cascade:
