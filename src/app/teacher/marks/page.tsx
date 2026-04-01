@@ -1,37 +1,44 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-    collection, getDocs, doc, getDoc,
-    setDoc, query, where,
+    collection, getDocs, doc, getDoc, setDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Exam, Result, SubjectMark } from "@/types";
+import { Exam } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Loader2, Save, ShieldAlert } from "lucide-react";
+import {
+    Loader2, Save, ShieldAlert, BookOpen, CheckCircle2, AlertCircle,
+} from "lucide-react";
 
-interface SubjectEntry {
-    id: string;
-    name: string;
-    maxMarks: number;
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface SubjectEntry { id: string; name: string; maxMarks: number; }
+interface StudentRow { id: string; firstName: string; lastName: string; admissionNumber: string; }
+
+const CO_SCHOLASTIC_ITEMS = [
+    { id: "workEd",  label: "Work Education" },
+    { id: "artEd",   label: "Art Education" },
+    { id: "sports",  label: "Sports / Yoga / NCC" },
+];
+const CO_SCHO_GRADES = ["A", "B", "C", "D"];
+
+function resultDocRef(examId: string, cls: string, sec: string, uid: string) {
+    return doc(db, "results", examId, "classes", cls, "sections", sec, "students", uid);
+}
+function resultSectionCol(examId: string, cls: string, sec: string) {
+    return collection(db, "results", examId, "classes", cls, "sections", sec, "students");
 }
 
-interface StudentRow {
-    id: string;
-    firstName: string;
-    lastName: string;
-    admissionNumber: string;
-}
-
-// Standard grade calc (for non-4-exam exams)
-const calculateGrade = (pct: number) => {
+// ─── Grade Calculation ────────────────────────────────────────────────────────
+function calcGrade(pct: number): string {
     if (pct >= 90.5) return "A1";
     if (pct >= 81) return "A2";
     if (pct >= 71) return "B1";
@@ -40,716 +47,692 @@ const calculateGrade = (pct: number) => {
     if (pct >= 41) return "C2";
     if (pct >= 33) return "D";
     return "E";
-};
-
-/** Nested result path */
-function resultDocRef(examId: string, classId: string, sectionId: string, studentId: string) {
-    return doc(db, "results", examId, "classes", classId, "sections", sectionId, "students", studentId);
-}
-function resultSectionCol(examId: string, classId: string, sectionId: string) {
-    return collection(db, "results", examId, "classes", classId, "sections", sectionId, "students");
 }
 
-// For Unit Test: marks map has sub-keys like subId__perTest, subId__noteBook, subId__sea
-// For others: single key subId
-
-const CO_SCHOLASTIC_ITEMS = [
-    { id: "workEd", label: "Work Education" },
-    { id: "artEd", label: "Art Education" },
-    { id: "sports", label: "Sports / Yoga / NCC" },
-];
-const CO_SCHO_GRADES = ["A", "B", "C", "D"];
-
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function TeacherMarksPage() {
     const { user } = useAuth();
 
     const [myClass, setMyClass] = useState<{ className: string; section: string } | null>(null);
     const [isClassTeacher, setIsClassTeacher] = useState<boolean | null>(null);
 
-    const [exams, setExams] = useState<Exam[]>([]);
+    // All exams for this session
+    const [sessions, setSessions] = useState<string[]>([]);
+    const [selectedSession, setSelectedSession] = useState("");
+    const [sessionExams, setSessionExams] = useState<Exam[]>([]);
+
     const [subjects, setSubjects] = useState<SubjectEntry[]>([]);
     const [students, setStudents] = useState<StudentRow[]>([]);
 
-    // resultsMap: studentId -> { subjectId or subjectId__perTest etc -> value string }
-    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, string>>>({});
+    // which exam slot to enter marks for
+    type TabKey = "unit1" | "halfYearly" | "unit2" | "annual";
+    const [activeTab, setActiveTab] = useState<TabKey>("unit1");
 
-    // coScholastic: studentId -> { activityId -> { hy: string, annual: string } }
+    // resultsMap[examId][studentId][fieldKey] = value
+    const [resultsMap, setResultsMap] = useState<Record<string, Record<string, Record<string, string>>>>({});
+    // coSchoMap[studentId][actId] = { hy, annual }
     const [coSchoMap, setCoSchoMap] = useState<Record<string, Record<string, { hy: string; annual: string }>>>({});
 
-    const [selectedExamId, setSelectedExamId] = useState("");
-    const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-
-    const [isLoadingMeta, setIsLoadingMeta] = useState(true);
-    const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState<TabKey | null>(null);
+    const [isLoadingMarks, setIsLoadingMarks] = useState(false);
 
-    // Step 1: Find if this teacher is a class teacher and which class they manage
+    // ── 1. Verify class teacher assignment ────────────────────────────────────
     useEffect(() => {
         if (!user) return;
-
-        const findClassTeacher = async () => {
+        const check = async () => {
             try {
-                let teacherDocRef = doc(db, "teachers", user.uid);
-                let teacherSnap = await getDoc(teacherDocRef);
-
-                if (!teacherSnap.exists() && user.email) {
-                    const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
-                    const emailSnaps = await getDocs(emailQ);
-                    if (!emailSnaps.empty) {
-                        teacherSnap = emailSnaps.docs[0] as any;
-                    }
-                }
-
-                let foundClass: { className: string; section: string } | null = null;
-
-                if (teacherSnap.exists()) {
-                    const data = teacherSnap.data();
-                    const a = data.assignment;
-                    let matches: { cls: string, section: string }[] = [];
-
-                    if (a?.classSections) {
-                        Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
-                            if (Array.isArray(secs)) {
-                                secs.forEach((sec: string) => matches.push({ cls, section: sec }));
-                            }
-                        });
-                    } else if (a?.classes?.length) {
-                        (a.classes as string[]).forEach((c: string) => {
-                            (a.sections || []).forEach((s: string) => matches.push({ cls: c, section: s }));
-                        });
-                    }
-
-                    if (matches.length === 0) {
-                        const ctSnap = await getDocs(collection(db, "class_teachers"));
-                        ctSnap.docs.forEach(d => {
-                            const ctData = d.data();
-                            if (
-                                ctData.teacherId === user.uid ||
-                                (data.email && ctData.teacherEmail === data.email) ||
-                                ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()
-                            ) {
-                                matches.push({ cls: ctData.cls, section: ctData.section });
-                            }
-                        });
-                    }
-
-                    if (matches.length > 0) {
-                        foundClass = { className: matches[0].cls, section: matches[0].section };
-                    }
-                }
-
-                if (foundClass) {
+                const snap = await getDocs(collection(db, "classTeachers"));
+                const assignment = snap.docs.map(d => d.data()).find(
+                    d => d.teacherId === user.uid && d.active !== false
+                );
+                if (assignment) {
+                    const cls = (assignment.className || "").replace(/^class\s*/i, "").trim();
+                    setMyClass({ className: cls, section: assignment.section });
                     setIsClassTeacher(true);
-                    setMyClass(foundClass);
-
-                    const rawClassName = (foundClass as any).className as string;
-                    const normClass = rawClassName.replace(/^class\s*/i, "").trim();
-
-                    let subjectsLoaded = false;
-                    for (const key of [normClass, rawClassName]) {
-                        const subDoc = await getDoc(doc(db, "classSubjects", key));
-                        if (subDoc.exists()) {
-                            const rawSubjects = subDoc.data().subjects || [];
-                            const subjectEntries = rawSubjects.map((s: any) =>
-                                typeof s === "object"
-                                    ? { id: s.id || s.name, name: s.name, maxMarks: s.maxMarks || 100 }
-                                    : { id: s, name: s, maxMarks: 100 }
-                            );
-                            setSubjects(subjectEntries);
-                            subjectsLoaded = true;
-                            break;
-                        }
-                    }
-                    if (!subjectsLoaded) setSubjects([]);
-
-                    const examsSnap = await getDocs(collection(db, "exams"));
-                    const applicableExams = examsSnap.docs
-                        .map(d => ({ id: d.id, ...d.data() }) as Exam)
-                        .filter(e => {
-                            const classes = e.classesApplicable ?? [];
-                            return (
-                                (e.status === "Published" || e.status === "Draft") &&
-                                (classes.includes(normClass) || classes.includes(rawClassName))
-                            );
-                        });
-                    setExams(applicableExams);
                 } else {
                     setIsClassTeacher(false);
                 }
-            } catch (err) {
-                console.error("Error checking class teacher:", err);
-                setIsClassTeacher(false);
-            } finally {
-                setIsLoadingMeta(false);
-            }
+            } catch { setIsClassTeacher(false); }
         };
-
-        findClassTeacher();
+        check();
     }, [user]);
 
-    // Update selectedExam whenever selectedExamId changes
+    // ── 2. Load all sessions from exams ───────────────────────────────────────
     useEffect(() => {
-        const exam = exams.find(e => e.id === selectedExamId) || null;
-        setSelectedExam(exam);
-    }, [selectedExamId, exams]);
-
-    // Step 2: Load students and existing marks when exam is selected
-    useEffect(() => {
-        if (!myClass || !selectedExamId) {
-            setStudents([]);
-            setResultsMap({});
-            setCoSchoMap({});
-            return;
-        }
-
-        const loadData = async () => {
-            setIsLoadingStudents(true);
-            try {
-                const normMyClass = myClass.className.replace(/^class\s*/i, "").trim();
-
-                let allProfiles: any[] = [];
-
-                const directSnap = await getDocs(
-                    collection(db, "users", "classes", myClass.className, "sections", myClass.section, "students", "profiles")
-                );
-                allProfiles = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                if (allProfiles.length === 0) {
-                    const altSnap = await getDocs(
-                        collection(db, "users", "classes", normMyClass, "sections", myClass.section, "students", "profiles")
-                    );
-                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                }
-
-                if (allProfiles.length === 0) {
-                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                    allProfiles = usersSnap.docs
-                        .map((d): any => ({ id: d.id, ...d.data() }))
-                        .filter((d: any) => {
-                            const cls = d.className || d.currentClass || "";
-                            return (cls === myClass.className || cls === normMyClass) && d.section === myClass.section;
-                        });
-                }
-
-                const seenIds = new Set<string>();
-                const filtered: StudentRow[] = [];
-                for (const data of allProfiles) {
-                    if (seenIds.has(data.id)) continue;
-                    seenIds.add(data.id);
-                    filtered.push({
-                        id: data.id,
-                        firstName: data.firstName || "",
-                        lastName: data.lastName || "",
-                        admissionNumber: data.admissionNumber || "—",
-                    });
-                }
-                filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
-                setStudents(filtered);
-
-                const initMap: Record<string, Record<string, string>> = {};
-                const initCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
-                filtered.forEach(s => {
-                    initMap[s.id] = {};
-                    initCoScho[s.id] = {};
-                    CO_SCHOLASTIC_ITEMS.forEach(cs => {
-                        initCoScho[s.id][cs.id] = { hy: "", annual: "" };
-                    });
-                });
-
-                // Fetch existing results from nested path
-                const resultsSnap = await getDocs(
-                    resultSectionCol(selectedExamId, myClass.className, myClass.section)
-                );
-                resultsSnap.docs.forEach(d => {
-                    const data = d.data() as Result;
-                    if (initMap[d.id]) {
-                        Object.entries(data.marks).forEach(([subId, markData]) => {
-                            if (markData.obtained !== null) {
-                                initMap[d.id][subId] = String(markData.obtained);
-                            }
-                            // Restore sub-marks if present
-                            if (markData.perTest !== undefined && markData.perTest !== null) {
-                                initMap[d.id][`${subId}__perTest`] = String(markData.perTest);
-                            }
-                            if (markData.noteBook !== undefined && markData.noteBook !== null) {
-                                initMap[d.id][`${subId}__noteBook`] = String(markData.noteBook);
-                            }
-                            if (markData.sea !== undefined && markData.sea !== null) {
-                                initMap[d.id][`${subId}__sea`] = String(markData.sea);
-                            }
-                        });
-                        // Restore co-scholastic if present
-                        if (data.coScholastic) {
-                            Object.entries(data.coScholastic).forEach(([csId, val]) => {
-                                initCoScho[d.id][csId] = { hy: val.hy || "", annual: val.annual || "" };
-                            });
-                        }
-                    }
-                });
-
-                // Fallback: old flat path
-                await Promise.all(filtered.map(async student => {
-                    if (Object.keys(initMap[student.id]).length > 0) return;
-                    const oldRef = doc(db, "results", `${selectedExamId}_${student.id}`);
-                    const oldSnap = await getDoc(oldRef);
-                    if (oldSnap.exists()) {
-                        const oldData = oldSnap.data() as Result;
-                        Object.entries(oldData.marks).forEach(([subId, markData]) => {
-                            if (markData.obtained !== null) {
-                                initMap[student.id][subId] = String(markData.obtained);
-                            }
-                        });
-                    }
-                }));
-
-                setResultsMap(initMap);
-                setCoSchoMap(initCoScho);
-            } catch (err) {
-                console.error("Error loading data:", err);
-                alert("Failed to load student data.");
-            } finally {
-                setIsLoadingStudents(false);
-            }
+        const load = async () => {
+            const snap = await getDocs(collection(db, "exams"));
+            const all = snap.docs.map(d => ({ id: d.id, ...d.data() }) as Exam);
+            const sessionSet = Array.from(new Set(all.map(e => e.session || "").filter(Boolean))).sort().reverse();
+            setSessions(sessionSet);
+            if (sessionSet.length > 0) setSelectedSession(sessionSet[0]!);
         };
+        load();
+    }, []);
 
-        loadData();
-    }, [myClass, selectedExamId]);
+    // ── 3. When session changes, load its 4 exams ─────────────────────────────
+    useEffect(() => {
+        if (!selectedSession) return;
+        const load = async () => {
+            const snap = await getDocs(collection(db, "exams"));
+            const all = snap.docs.map(d => ({ id: d.id, ...d.data() }) as Exam);
+            const filtered = all.filter(e => e.session === selectedSession);
+            setSessionExams(filtered);
+        };
+        load();
+    }, [selectedSession]);
 
-    const handleMarkChange = (studentId: string, key: string, value: string) => {
-        if (value !== "" && isNaN(Number(value))) return;
+    // ── 4. When class is known, load subjects and students ────────────────────
+    useEffect(() => {
+        if (!myClass) return;
+        const load = async () => {
+            // Subjects
+            const normCls = myClass.className.replace(/^class\s*/i, "").trim();
+            for (const key of [normCls, myClass.className, `Class ${normCls}`]) {
+                const subDoc = await getDoc(doc(db, "classSubjects", key));
+                if (subDoc.exists()) {
+                    const rawSubs = subDoc.data().subjects || [];
+                    setSubjects(rawSubs.map((s: any) =>
+                        typeof s === "object"
+                            ? { id: s.id || s.name, name: s.name, maxMarks: s.maxMarks || 100 }
+                            : { id: s, name: s, maxMarks: 100 }
+                    ));
+                    break;
+                }
+            }
+
+            // Students
+            const normSec = myClass.section;
+            let studs: StudentRow[] = [];
+            for (const cls of [normCls, myClass.className]) {
+                try {
+                    const snap = await getDocs(
+                        collection(db, "users", "classes", cls, "sections", normSec, "students", "profiles")
+                    );
+                    if (snap.docs.length > 0) {
+                        studs = snap.docs.map(d => {
+                            const data = d.data();
+                            return {
+                                id: d.id,
+                                firstName: data.firstName || "",
+                                lastName: data.lastName || "",
+                                admissionNumber: data.admissionNumber || "",
+                            };
+                        });
+                        break;
+                    }
+                } catch { /* try next */ }
+            }
+            if (studs.length === 0) {
+                // Fallback: query users collection
+                const usersSnap = await getDocs(collection(db, "users"));
+                studs = usersSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }) as any)
+                    .filter((d: any) =>
+                        d.role === "student" &&
+                        (d.className === normCls || d.className === myClass.className || d.currentClass === normCls) &&
+                        d.section === normSec
+                    )
+                    .map((d: any) => ({
+                        id: d.id,
+                        firstName: d.firstName || d.name || "",
+                        lastName: d.lastName || "",
+                        admissionNumber: d.admissionNumber || "",
+                    }));
+            }
+            studs.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+            setStudents(studs);
+        };
+        load();
+    }, [myClass]);
+
+    // ── 5. Load existing marks for all 4 exams ────────────────────────────────
+    useEffect(() => {
+        if (!myClass || sessionExams.length === 0 || students.length === 0) return;
+        const load = async () => {
+            setIsLoadingMarks(true);
+            const newMap: Record<string, Record<string, Record<string, string>>> = {};
+            const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
+
+            for (const exam of sessionExams) {
+                if (!exam.id) continue;
+                newMap[exam.id] = {};
+                const normCls = myClass.className.replace(/^class\s*/i, "").trim();
+                for (const cls of [normCls, myClass.className]) {
+                    try {
+                        const snap = await getDocs(resultSectionCol(exam.id, cls, myClass.section));
+                        if (snap.docs.length > 0) {
+                            snap.docs.forEach(d => {
+                                const data = d.data();
+                                const entryMap: Record<string, string> = {};
+                                Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
+                                    if (exam.examType === "Unit Test") {
+                                        entryMap[`${subId}__perTest`]  = m.perTest  !== null && m.perTest  !== undefined ? String(m.perTest)  : "";
+                                        entryMap[`${subId}__noteBook`] = m.noteBook !== null && m.noteBook !== undefined ? String(m.noteBook) : "";
+                                        entryMap[`${subId}__sea`]      = m.sea      !== null && m.sea      !== undefined ? String(m.sea)      : "";
+                                    } else {
+                                        entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
+                                    }
+                                });
+                                newMap[exam.id!][d.id] = entryMap;
+
+                                // co-scholastic (stored on Annual exam)
+                                if (exam.examType === "Annual Exam" && data.coScholastic) {
+                                    newCoScho[d.id] = data.coScholastic;
+                                }
+                            });
+                            break;
+                        }
+                    } catch { /* try next cls */ }
+                }
+            }
+            setResultsMap(newMap);
+            setCoSchoMap(newCoScho);
+            setIsLoadingMarks(false);
+        };
+        load();
+    }, [myClass, sessionExams, students]);
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const getExamByType = (type: string): Exam | undefined =>
+        sessionExams.find(e => e.examType === type);
+
+    // Get the Unit I or Unit II exam (since both have examType "Unit Test")
+    const getUnitExam = (which: "unit1" | "unit2"): Exam | undefined => {
+        const all = sessionExams.filter(e => e.examType === "Unit Test");
+        if (which === "unit1") {
+            return all.find(e => e.name?.toLowerCase().includes("unit i") && !e.name?.toLowerCase().includes("unit ii"))
+                ?? all[0];
+        }
+        return all.find(e => e.name?.toLowerCase().includes("unit ii"))
+            ?? (all.length > 1 ? all[1] : undefined);
+    };
+
+    const currentExam = (): Exam | undefined => {
+        if (activeTab === "unit1")      return getUnitExam("unit1");
+        if (activeTab === "halfYearly") return getExamByType("Term Exam");
+        if (activeTab === "unit2")      return getUnitExam("unit2");
+        if (activeTab === "annual")     return getExamByType("Annual Exam");
+    };
+
+    const markVal = (examId: string, studentId: string, key: string) =>
+        resultsMap[examId]?.[studentId]?.[key] ?? "";
+
+    const setMarkVal = (examId: string, studentId: string, key: string, val: string) => {
         setResultsMap(prev => ({
             ...prev,
-            [studentId]: { ...prev[studentId], [key]: value },
+            [examId]: {
+                ...prev[examId],
+                [studentId]: {
+                    ...(prev[examId]?.[studentId] || {}),
+                    [key]: val,
+                },
+            },
         }));
     };
 
-    const handleCoSchoChange = (studentId: string, actId: string, term: "hy" | "annual", value: string) => {
+    const coVal = (studentId: string, actId: string, term: "hy" | "annual") =>
+        coSchoMap[studentId]?.[actId]?.[term] ?? "";
+    const setCoVal = (studentId: string, actId: string, term: "hy" | "annual", val: string) => {
         setCoSchoMap(prev => ({
             ...prev,
             [studentId]: {
                 ...prev[studentId],
                 [actId]: {
                     ...(prev[studentId]?.[actId] || { hy: "", annual: "" }),
-                    [term]: value,
+                    [term]: val,
                 },
             },
         }));
     };
 
+    // ── Save marks ────────────────────────────────────────────────────────────
     const handleSave = async () => {
-        if (!selectedExamId || !myClass || !selectedExam) return;
+        const exam = currentExam();
+        if (!exam?.id || !myClass) return;
         setIsSaving(true);
-        const isUnitTest = selectedExam.examType === "Unit Test";
-        const isAnnual = selectedExam.examType === "Annual Exam";
-        let saved = 0;
+        const normCls = myClass.className.replace(/^class\s*/i, "").trim();
+        const examId = exam.id;
+        const isUnit = exam.examType === "Unit Test";
+        const isAnnual = exam.examType === "Annual Exam";
+
         try {
-            await Promise.all(students.map(async student => {
-                const studentMarks = resultsMap[student.id] || {};
-                const hasAnyData = Object.values(studentMarks).some(v => v !== "");
-                const hasCoScho = isAnnual && Object.values(coSchoMap[student.id] || {}).some(v => v.hy || v.annual);
-                if (!hasAnyData && !hasCoScho) return;
+            for (const student of students) {
+                const entry = resultsMap[examId]?.[student.id] || {};
+                const marks: Record<string, any> = {};
 
-                const processedMarks: Record<string, SubjectMark> = {};
-                let totalObtained = 0;
-                let totalMax = 0;
-
-                subjects.forEach(sub => {
-                    if (isUnitTest) {
-                        const perTestStr = studentMarks[`${sub.id}__perTest`] || "";
-                        const noteBookStr = studentMarks[`${sub.id}__noteBook`] || "";
-                        const seaStr = studentMarks[`${sub.id}__sea`] || "";
-
-                        if (!perTestStr && !noteBookStr && !seaStr) return;
-
-                        const perTest = perTestStr !== "" ? Math.min(Number(perTestStr), 10) : null;
-                        const noteBook = noteBookStr !== "" ? Math.min(Number(noteBookStr), 5) : null;
-                        const sea = seaStr !== "" ? Math.min(Number(seaStr), 5) : null;
-
-                        const obtained = (perTest ?? 0) + (noteBook ?? 0) + (sea ?? 0);
-                        processedMarks[sub.id] = {
+                if (isUnit) {
+                    subjects.forEach(sub => {
+                        const pt  = parseFloat(entry[`${sub.id}__perTest`]  || "") || 0;
+                        const nb  = parseFloat(entry[`${sub.id}__noteBook`] || "") || 0;
+                        const sea = parseFloat(entry[`${sub.id}__sea`]      || "") || 0;
+                        const total = pt + nb + sea;
+                        marks[sub.id] = {
                             subjectId: sub.id,
-                            obtained,
+                            perTest: pt,
+                            noteBook: nb,
+                            sea: sea,
+                            obtained: total,
                             total: 20,
-                            perTest,
-                            noteBook,
-                            sea,
                         };
-                        totalObtained += obtained;
-                        totalMax += 20;
-                    } else {
-                        const valStr = studentMarks[sub.id];
-                        if (!valStr || valStr.trim() === "") return;
-                        const maxMarks = (selectedExam.examType === "Term Exam" || selectedExam.examType === "Annual Exam") ? 80 : sub.maxMarks;
-                        const obtained = Math.min(Number(valStr), maxMarks);
-                        processedMarks[sub.id] = { subjectId: sub.id, obtained, total: maxMarks };
-                        totalObtained += obtained;
-                        totalMax += maxMarks;
-                    }
-                });
+                    });
+                } else {
+                    subjects.forEach(sub => {
+                        const obt = parseFloat(entry[sub.id] || "") || 0;
+                        const maxM = isAnnual ? 80 : sub.maxMarks;
+                        marks[sub.id] = {
+                            subjectId: sub.id,
+                            obtained: obt,
+                            total: maxM,
+                        };
+                    });
+                }
 
-                const percentage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0;
-                const resultPayload: Partial<Result> = {
+                const totalObtained = Object.values(marks).reduce((s, m) => s + (m.obtained || 0), 0);
+                const totalMax = subjects.reduce((s, sub) => s + (isUnit ? 20 : isAnnual ? 80 : sub.maxMarks), 0);
+                const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+
+                const payload: Record<string, any> = {
                     studentId: student.id,
-                    examId: selectedExamId,
-                    classId: myClass.className,
+                    studentName: `${student.firstName} ${student.lastName}`.trim(),
+                    examId,
+                    examName: exam.name,
+                    examType: exam.examType,
+                    session: exam.session || "",
+                    classId: normCls,
                     sectionId: myClass.section,
-                    marks: processedMarks,
+                    marks,
                     totalObtained,
                     totalMax,
-                    percentage,
-                    overallGrade: calculateGrade(percentage),
+                    percentage: Math.round(pct * 10) / 10,
+                    overallGrade: calcGrade(pct),
                     updatedAt: Date.now(),
                 };
 
                 if (isAnnual) {
-                    const coScho = coSchoMap[student.id] || {};
-                    const coSchoPayload: Record<string, { hy?: string; annual?: string }> = {};
-                    CO_SCHOLASTIC_ITEMS.forEach(cs => {
-                        const val = coScho[cs.id];
-                        if (val && (val.hy || val.annual)) {
-                            coSchoPayload[cs.id] = { hy: val.hy, annual: val.annual };
-                        }
-                    });
-                    if (Object.keys(coSchoPayload).length > 0) {
-                        resultPayload.coScholastic = coSchoPayload;
-                    }
+                    payload.coScholastic = coSchoMap[student.id] || {};
                 }
 
-                await setDoc(
-                    resultDocRef(selectedExamId, myClass.className, myClass.section, student.id),
-                    resultPayload,
-                    { merge: true }
-                );
-                saved++;
-            }));
-            alert(`Marks saved for ${saved} student(s).`);
+                await setDoc(resultDocRef(examId, normCls, myClass.section, student.id), payload, { merge: true });
+            }
+            setSaveSuccess(activeTab);
+            setTimeout(() => setSaveSuccess(null), 3000);
         } catch (err: any) {
-            console.error("Save error:", err);
-            alert("Failed to save marks: " + err.message);
+            alert("Error saving marks: " + err.message);
         } finally {
             setIsSaving(false);
         }
     };
 
-    if (isLoadingMeta) {
+    // ─── Guard: not a class teacher ───────────────────────────────────────────
+    if (isClassTeacher === null) {
         return (
             <div className="flex items-center justify-center p-16">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
     }
-
     if (isClassTeacher === false) {
         return (
             <div className="flex flex-col items-center justify-center p-16 gap-4 text-center">
-                <ShieldAlert className="h-16 w-16 text-muted-foreground/40" />
-                <h2 className="text-xl font-semibold">Not a Class Teacher</h2>
-                <p className="text-muted-foreground max-w-md">
-                    You are not assigned as a class teacher for any class. Contact the admin to get assigned.
+                <ShieldAlert className="h-12 w-12 text-destructive" />
+                <h2 className="text-xl font-bold">Access Restricted</h2>
+                <p className="text-muted-foreground max-w-sm">
+                    Only assigned Class Teachers can enter marks. Please contact the admin to assign you as a class teacher.
                 </p>
             </div>
         );
     }
 
-    const isExamPublished = selectedExam?.status === "Published";
-    const isUnitTest = selectedExam?.examType === "Unit Test";
-    const isTermOrAnnual = selectedExam?.examType === "Term Exam" || selectedExam?.examType === "Annual Exam";
-    const isAnnualExam = selectedExam?.examType === "Annual Exam";
-    const maxPerSubject = isUnitTest ? 20 : isTermOrAnnual ? 80 : null;
+    // ─── Helpers for the active exam ──────────────────────────────────────────
+    const exam = currentExam();
+    const isUnit  = exam?.examType === "Unit Test";
+    const isAnnual = exam?.examType === "Annual Exam";
+
+    const tabs: { key: TabKey; label: string; term: string; color: string }[] = [
+        { key: "unit1",      label: "Unit I Test",    term: "Term 1", color: "blue"    },
+        { key: "halfYearly", label: "Half Yearly",    term: "Term 1", color: "indigo"  },
+        { key: "unit2",      label: "Unit II Test",   term: "Term 2", color: "orange"  },
+        { key: "annual",     label: "Annual Exam",    term: "Term 2", color: "emerald" },
+    ];
+
+    const tabColorClasses: Record<string, { active: string; badge: string }> = {
+        blue:    { active: "border-blue-500 text-blue-700 bg-blue-50",    badge: "bg-blue-100 text-blue-700" },
+        indigo:  { active: "border-indigo-500 text-indigo-700 bg-indigo-50",  badge: "bg-indigo-100 text-indigo-700" },
+        orange:  { active: "border-orange-500 text-orange-700 bg-orange-50",  badge: "bg-orange-100 text-orange-700" },
+        emerald: { active: "border-emerald-500 text-emerald-700 bg-emerald-50", badge: "bg-emerald-100 text-emerald-700" },
+    };
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="p-6 space-y-6 max-w-7xl">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Enter Marks</h1>
-                    <p className="text-muted-foreground">
-                        Class: <strong>{myClass?.className}</strong> — Section: <strong>{myClass?.section}</strong>
-                    </p>
+                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                        <BookOpen className="h-8 w-8 text-primary" /> Marks Entry
+                    </h1>
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        {myClass && (
+                            <Badge variant="secondary" className="text-sm font-semibold px-3 py-1">
+                                Class {myClass.className} — Section {myClass.section}
+                            </Badge>
+                        )}
+                        <span className="text-muted-foreground text-sm">{students.length} students</span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    {isExamPublished && (
-                        <span className="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-1.5">
-                            <ShieldAlert className="w-4 h-4" />
-                            Published exams cannot be edited by teachers
-                        </span>
-                    )}
-                    <Button
-                        onClick={handleSave}
-                        disabled={isSaving || students.length === 0 || !selectedExamId || isExamPublished}
-                    >
-                        {isSaving
-                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-                            : <><Save className="mr-2 h-4 w-4" /> Save All Marks</>}
-                    </Button>
-                </div>
-            </div>
 
-            <Card className="border-border/50 shadow-sm">
-                <CardHeader className="bg-muted/10 border-b pb-4">
-                    <div className="space-y-2 max-w-xs">
-                        <Label>Select Examination</Label>
-                        <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Choose an exam..." />
+                {/* Session selector */}
+                {sessions.length > 1 && (
+                    <div className="flex items-center gap-2">
+                        <Label className="text-sm whitespace-nowrap">Academic Session</Label>
+                        <Select value={selectedSession} onValueChange={setSelectedSession}>
+                            <SelectTrigger className="w-36">
+                                <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {exams.length === 0
-                                    ? <SelectItem value="_none" disabled>No exams available</SelectItem>
-                                    : exams.map(e => (
-                                        <SelectItem key={e.id} value={e.id!}>
-                                            {e.name}{e.examType && e.examType !== "Standard" ? ` (${e.examType})` : ""} ({e.status})
-                                        </SelectItem>
-                                    ))
-                                }
+                                {sessions.map(s => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
-                    {selectedExam && selectedExam.examType && selectedExam.examType !== "Standard" && (
-                        <div className="mt-2 flex gap-2 flex-wrap">
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                                isUnitTest ? "bg-blue-50 text-blue-700 border-blue-200" :
-                                isAnnualExam ? "bg-purple-50 text-purple-700 border-purple-200" :
-                                "bg-green-50 text-green-700 border-green-200"
-                            }`}>
-                                {selectedExam.examType}
-                                {isUnitTest && " — Per Test (10) + Note Book (5) + SEA (5) = 20"}
-                                {isTermOrAnnual && " — 80 marks per subject"}
-                            </span>
-                            {selectedExam.session && (
-                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
-                                    Session: {selectedExam.session}
-                                </span>
+                )}
+            </div>
+
+            {/* Session not found */}
+            {sessions.length === 0 && (
+                <Card className="border-dashed bg-muted/5">
+                    <CardContent className="py-12 text-center">
+                        <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                        <p className="font-semibold">No exam sessions configured</p>
+                        <p className="text-muted-foreground text-sm mt-1">Ask admin to set up the academic session first.</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {sessions.length > 0 && (
+                <>
+                    {/* Term Labels + Tabs */}
+                    <div className="space-y-1">
+                        {/* Term Indicators */}
+                        <div className="grid grid-cols-4">
+                            <div className="col-span-2 text-xs font-bold text-blue-600 uppercase tracking-wide px-1 pb-1 border-b-2 border-blue-200">
+                                ◀ Term 1
+                            </div>
+                            <div className="col-span-2 text-xs font-bold text-orange-600 uppercase tracking-wide px-1 pb-1 border-b-2 border-orange-200 text-right">
+                                Term 2 ▶
+                            </div>
+                        </div>
+
+                        {/* Exam Tabs */}
+                        <div className="grid grid-cols-4 gap-1">
+                            {tabs.map(tab => {
+                                const tc = tabColorClasses[tab.color]!;
+                                const isActive = activeTab === tab.key;
+                                const tabExam = tab.key === "unit1" ? getUnitExam("unit1")
+                                    : tab.key === "unit2" ? getUnitExam("unit2")
+                                    : tab.key === "halfYearly" ? getExamByType("Term Exam")
+                                    : getExamByType("Annual Exam");
+                                const hasExam = !!tabExam;
+
+                                return (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => hasExam && setActiveTab(tab.key)}
+                                        disabled={!hasExam}
+                                        className={`py-3 px-2 rounded-lg border-2 text-sm font-semibold transition-all text-center ${
+                                            !hasExam
+                                                ? "opacity-40 border-dashed border-gray-200 bg-gray-50 cursor-not-allowed"
+                                                : isActive
+                                                    ? `${tc.active} border-current shadow-sm`
+                                                    : "border-transparent hover:border-gray-200 hover:bg-gray-50 text-muted-foreground"
+                                        }`}
+                                    >
+                                        <div>{tab.label}</div>
+                                        {hasExam && (
+                                            <div className={`text-xs mt-0.5 font-normal ${isActive ? "" : "text-muted-foreground"}`}>
+                                                {tab.key === "unit1" || tab.key === "unit2" ? "/20 per sub" : "/80 per sub"}
+                                            </div>
+                                        )}
+                                        {!hasExam && (
+                                            <div className="text-xs mt-0.5 text-muted-foreground">Not set up</div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Exam not set up */}
+                    {!exam && (
+                        <Card className="border-dashed bg-muted/5">
+                            <CardContent className="py-12 text-center">
+                                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                                <p className="font-semibold">Exam not configured for session {selectedSession}</p>
+                                <p className="text-muted-foreground text-sm mt-1">Ask admin to set up this exam.</p>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Marks Grid */}
+                    {exam && (
+                        <div className="space-y-5">
+                            {/* Exam info strip */}
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/20 border border-border/50 flex-wrap">
+                                <div>
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Exam</span>
+                                    <p className="font-bold text-base">{exam.name}</p>
+                                </div>
+                                <div className="ml-4">
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Max Marks / Subject</span>
+                                    <p className="font-bold text-base">{isUnit ? "20" : "80"}</p>
+                                </div>
+                                {exam.startDate && exam.endDate && (
+                                    <div className="ml-4">
+                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Dates</span>
+                                        <p className="font-bold text-base">
+                                            {new Date(exam.startDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                            {" – "}
+                                            {new Date(exam.endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                        </p>
+                                    </div>
+                                )}
+                                {saveSuccess === activeTab && (
+                                    <div className="ml-auto flex items-center gap-2 text-emerald-600 font-semibold text-sm">
+                                        <CheckCircle2 className="h-5 w-5" /> Saved!
+                                    </div>
+                                )}
+                            </div>
+
+                            {isLoadingMarks && (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                    <span className="ml-2 text-muted-foreground">Loading existing marks...</span>
+                                </div>
+                            )}
+
+                            {!isLoadingMarks && students.length === 0 && (
+                                <Card className="border-dashed bg-muted/5">
+                                    <CardContent className="py-12 text-center">
+                                        <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                                        <p className="font-semibold">No students found</p>
+                                        <p className="text-muted-foreground text-sm mt-1">No students enrolled in Class {myClass!.className} — {myClass!.section}</p>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {!isLoadingMarks && students.length > 0 && subjects.length > 0 && (
+                                <div className="overflow-x-auto rounded-xl border border-border/60 shadow-sm">
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-800 text-white">
+                                                <th className="text-left px-4 py-3 font-semibold w-8">#</th>
+                                                <th className="text-left px-4 py-3 font-semibold min-w-[180px]">Student</th>
+                                                <th className="text-left px-3 py-3 font-semibold text-xs text-slate-300 w-24">Adm. No.</th>
+
+                                                {/* Unit Test columns: Per Test / Note Book / SEA per subject */}
+                                                {isUnit && subjects.map(sub => (
+                                                    <th key={sub.id} colSpan={3} className="text-center px-2 py-3 font-semibold border-l border-slate-600">
+                                                        <div className="text-xs leading-tight">{sub.name}</div>
+                                                        <div className="grid grid-cols-3 gap-0.5 mt-1 text-xs font-normal text-slate-300">
+                                                            <span>PT/10</span>
+                                                            <span>NB/5</span>
+                                                            <span>SEA/5</span>
+                                                        </div>
+                                                    </th>
+                                                ))}
+
+                                                {/* Standard / Annual: single column per subject */}
+                                                {!isUnit && subjects.map(sub => (
+                                                    <th key={sub.id} className="text-center px-2 py-3 font-semibold min-w-[80px] border-l border-slate-600">
+                                                        <div className="text-xs leading-tight">{sub.name}</div>
+                                                        <div className="text-xs font-normal text-slate-300 mt-0.5">/80</div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {students.map((student, idx) => (
+                                                <tr
+                                                    key={student.id}
+                                                    className={`border-b border-border/40 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-primary/5`}
+                                                >
+                                                    <td className="px-4 py-2.5 text-muted-foreground text-xs font-medium">{idx + 1}</td>
+                                                    <td className="px-4 py-2.5">
+                                                        <p className="font-semibold text-sm leading-tight">
+                                                            {student.firstName} {student.lastName}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{student.admissionNumber}</td>
+
+                                                    {/* Unit Test sub-cells */}
+                                                    {isUnit && subjects.map(sub => (
+                                                        <td key={sub.id} className="border-l border-border/30 px-1 py-1.5">
+                                                            <div className="flex gap-0.5">
+                                                                {(["perTest", "noteBook", "sea"] as const).map(field => {
+                                                                    const max = field === "perTest" ? 10 : 5;
+                                                                    const key = `${sub.id}__${field}`;
+                                                                    const val = markVal(exam.id!, student.id, key);
+                                                                    const numVal = parseFloat(val);
+                                                                    const isOver = !isNaN(numVal) && numVal > max;
+                                                                    return (
+                                                                        <input
+                                                                            key={field}
+                                                                            type="number"
+                                                                            min={0}
+                                                                            max={max}
+                                                                            value={val}
+                                                                            onChange={e => setMarkVal(exam.id!, student.id, key, e.target.value)}
+                                                                            className={`w-10 h-8 text-center text-xs rounded border ${isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </td>
+                                                    ))}
+
+                                                    {/* Standard / Annual single cell */}
+                                                    {!isUnit && subjects.map(sub => {
+                                                        const val = markVal(exam.id!, student.id, sub.id);
+                                                        const numVal = parseFloat(val);
+                                                        const max = 80;
+                                                        const isOver = !isNaN(numVal) && numVal > max;
+                                                        return (
+                                                            <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={max}
+                                                                    value={val}
+                                                                    onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
+                                                                    className={`w-16 h-8 text-center text-xs rounded border ${isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                />
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Co-Scholastic (Annual only) */}
+                            {isAnnual && !isLoadingMarks && students.length > 0 && (
+                                <div className="space-y-3">
+                                    <h3 className="text-base font-bold flex items-center gap-2">
+                                        <BookOpen className="h-4 w-4 text-emerald-600" />
+                                        Co-Scholastic Activities
+                                        <span className="text-xs font-normal text-muted-foreground ml-1">Grade: A / B / C / D</span>
+                                    </h3>
+                                    <div className="overflow-x-auto rounded-xl border border-border/60 shadow-sm">
+                                        <table className="w-full text-sm border-collapse">
+                                            <thead>
+                                                <tr className="bg-emerald-800 text-white">
+                                                    <th className="text-left px-4 py-3 font-semibold w-8">#</th>
+                                                    <th className="text-left px-4 py-3 font-semibold min-w-[200px]">Student</th>
+                                                    {CO_SCHOLASTIC_ITEMS.map(cs => (
+                                                        <th key={cs.id} colSpan={2} className="text-center px-2 py-3 font-semibold border-l border-emerald-700 min-w-[140px]">
+                                                            <div className="text-xs">{cs.label}</div>
+                                                            <div className="flex justify-around text-xs font-normal text-emerald-200 mt-1">
+                                                                <span>HY</span>
+                                                                <span>Annual</span>
+                                                            </div>
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {students.map((student, idx) => (
+                                                    <tr key={student.id} className={`border-b border-border/40 ${idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
+                                                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{idx + 1}</td>
+                                                        <td className="px-4 py-2.5 font-semibold text-sm">{student.firstName} {student.lastName}</td>
+                                                        {CO_SCHOLASTIC_ITEMS.map(cs => (
+                                                            <td key={cs.id} className="border-l border-border/30 px-2 py-2">
+                                                                <div className="flex gap-2 justify-center">
+                                                                    {(["hy", "annual"] as const).map(term => (
+                                                                        <select
+                                                                            key={term}
+                                                                            value={coVal(student.id, cs.id, term)}
+                                                                            onChange={e => setCoVal(student.id, cs.id, term, e.target.value)}
+                                                                            className="w-16 h-8 text-center text-xs rounded border border-border/50 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white"
+                                                                        >
+                                                                            <option value="">—</option>
+                                                                            {CO_SCHO_GRADES.map(g => (
+                                                                                <option key={g} value={g}>{g}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Save Button */}
+                            {!isLoadingMarks && students.length > 0 && (
+                                <div className="flex justify-end pt-2">
+                                    <Button
+                                        onClick={handleSave}
+                                        disabled={isSaving}
+                                        size="lg"
+                                        className="gap-2 min-w-[180px]"
+                                    >
+                                        {isSaving
+                                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                                            : <><Save className="h-4 w-4" /> Save {tabs.find(t => t.key === activeTab)?.label} Marks</>
+                                        }
+                                    </Button>
+                                </div>
                             )}
                         </div>
                     )}
-                </CardHeader>
-
-                <CardContent className="p-0">
-                    {!selectedExamId ? (
-                        <div className="py-12 text-center text-muted-foreground">
-                            Select an exam above to load the marks entry grid.
-                        </div>
-                    ) : isLoadingStudents ? (
-                        <div className="py-12 flex items-center justify-center gap-2 text-muted-foreground">
-                            <Loader2 className="h-5 w-5 animate-spin" /> Loading students...
-                        </div>
-                    ) : students.length === 0 ? (
-                        <div className="py-12 text-center text-muted-foreground">
-                            No students found in {myClass?.className} - {myClass?.section}.
-                        </div>
-                    ) : subjects.length === 0 ? (
-                        <div className="py-12 text-center text-muted-foreground">
-                            No subjects configured for {myClass?.className}. Ask admin to set up class subjects.
-                        </div>
-                    ) : isUnitTest ? (
-                        /* ── Unit Test: 3 sub-columns per subject ── */
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b sticky top-0">
-                                    <tr>
-                                        <th className="px-4 py-3 font-medium sticky left-0 bg-muted/30 min-w-[180px]" rowSpan={2}>Student</th>
-                                        <th className="px-4 py-3 font-medium min-w-[80px]" rowSpan={2}>Adm No.</th>
-                                        {subjects.map(sub => (
-                                            <th key={sub.id} className="px-2 py-2 font-medium text-center border-l" colSpan={3}>
-                                                {sub.name} <span className="normal-case font-normal text-[10px]">(Max 20)</span>
-                                            </th>
-                                        ))}
-                                    </tr>
-                                    <tr>
-                                        {subjects.map(sub => (
-                                            <>
-                                                <th key={`${sub.id}_pt`} className="px-2 py-2 text-center font-medium border-l min-w-[70px]">
-                                                    Per Test<br /><span className="font-normal text-[10px] normal-case">/10</span>
-                                                </th>
-                                                <th key={`${sub.id}_nb`} className="px-2 py-2 text-center font-medium min-w-[70px]">
-                                                    Note Book<br /><span className="font-normal text-[10px] normal-case">/5</span>
-                                                </th>
-                                                <th key={`${sub.id}_sea`} className="px-2 py-2 text-center font-medium min-w-[70px]">
-                                                    SEA<br /><span className="font-normal text-[10px] normal-case">/5</span>
-                                                </th>
-                                            </>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {students.map(student => (
-                                        <tr key={student.id} className="hover:bg-muted/10 transition-colors">
-                                            <td className="px-4 py-3 font-medium sticky left-0 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                                                {student.firstName} {student.lastName}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                                                {student.admissionNumber || "—"}
-                                            </td>
-                                            {subjects.map(sub => {
-                                                const ptVal = resultsMap[student.id]?.[`${sub.id}__perTest`] || "";
-                                                const nbVal = resultsMap[student.id]?.[`${sub.id}__noteBook`] || "";
-                                                const seaVal = resultsMap[student.id]?.[`${sub.id}__sea`] || "";
-                                                return (
-                                                    <>
-                                                        <td key={`${sub.id}_pt`} className="px-2 py-2 border-l">
-                                                            <Input type="number" min={0} max={10} placeholder="—"
-                                                                value={ptVal}
-                                                                onChange={e => handleMarkChange(student.id, `${sub.id}__perTest`, e.target.value)}
-                                                                disabled={isExamPublished}
-                                                                className={`w-full text-center h-9 ${Number(ptVal) > 10 ? "text-red-500 border-red-400" : ""} ${isExamPublished ? "bg-muted cursor-not-allowed opacity-70" : ""}`}
-                                                            />
-                                                        </td>
-                                                        <td key={`${sub.id}_nb`} className="px-2 py-2">
-                                                            <Input type="number" min={0} max={5} placeholder="—"
-                                                                value={nbVal}
-                                                                onChange={e => handleMarkChange(student.id, `${sub.id}__noteBook`, e.target.value)}
-                                                                disabled={isExamPublished}
-                                                                className={`w-full text-center h-9 ${Number(nbVal) > 5 ? "text-red-500 border-red-400" : ""} ${isExamPublished ? "bg-muted cursor-not-allowed opacity-70" : ""}`}
-                                                            />
-                                                        </td>
-                                                        <td key={`${sub.id}_sea`} className="px-2 py-2">
-                                                            <Input type="number" min={0} max={5} placeholder="—"
-                                                                value={seaVal}
-                                                                onChange={e => handleMarkChange(student.id, `${sub.id}__sea`, e.target.value)}
-                                                                disabled={isExamPublished}
-                                                                className={`w-full text-center h-9 ${Number(seaVal) > 5 ? "text-red-500 border-red-400" : ""} ${isExamPublished ? "bg-muted cursor-not-allowed opacity-70" : ""}`}
-                                                            />
-                                                        </td>
-                                                    </>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        /* ── Standard / Term Exam / Annual Exam: single column per subject ── */
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b sticky top-0">
-                                    <tr>
-                                        <th className="px-4 py-4 font-medium sticky left-0 bg-muted/30 min-w-[200px]">Student</th>
-                                        <th className="px-4 py-4 font-medium w-28">Adm No.</th>
-                                        {subjects.map(sub => (
-                                            <th key={sub.id} className="px-4 py-4 font-medium text-center min-w-[120px]">
-                                                {sub.name}
-                                                <br />
-                                                <span className="text-[10px] font-normal normal-case text-muted-foreground">
-                                                    (Max {maxPerSubject ?? sub.maxMarks})
-                                                </span>
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {students.map(student => (
-                                        <tr key={student.id} className="hover:bg-muted/10 transition-colors">
-                                            <td className="px-4 py-3 font-medium sticky left-0 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                                                {student.firstName} {student.lastName}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                                                {student.admissionNumber || "—"}
-                                            </td>
-                                            {subjects.map(sub => {
-                                                const effectiveMax = maxPerSubject ?? sub.maxMarks;
-                                                const val = resultsMap[student.id]?.[sub.id] || "";
-                                                const isOver = val !== "" && Number(val) > effectiveMax;
-                                                return (
-                                                    <td key={sub.id} className="px-4 py-2">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            max={effectiveMax}
-                                                            placeholder="—"
-                                                            value={val}
-                                                            onChange={e => handleMarkChange(student.id, sub.id, e.target.value)}
-                                                            disabled={isExamPublished}
-                                                            className={`w-full text-center h-9 ${isOver ? "text-red-500 border-red-400" : ""} ${isExamPublished ? "bg-muted cursor-not-allowed opacity-70" : ""}`}
-                                                        />
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Co-Scholastic section — only for Annual Exam */}
-            {isAnnualExam && students.length > 0 && (
-                <Card className="border-border/50 shadow-sm">
-                    <CardHeader className="bg-muted/10 border-b pb-3">
-                        <h2 className="text-lg font-semibold">Co-Scholastic Activities</h2>
-                        <p className="text-sm text-muted-foreground">Enter grades (A/B/C/D) for each activity. Half Yearly and Annual columns.</p>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b">
-                                    <tr>
-                                        <th className="px-4 py-3 font-medium sticky left-0 bg-muted/30 min-w-[200px]">Student</th>
-                                        {CO_SCHOLASTIC_ITEMS.map(cs => (
-                                            <>
-                                                <th key={`${cs.id}_hy`} className="px-3 py-3 font-medium text-center min-w-[120px] border-l">
-                                                    {cs.label}<br /><span className="font-normal normal-case text-[10px]">Half Yearly</span>
-                                                </th>
-                                                <th key={`${cs.id}_an`} className="px-3 py-3 font-medium text-center min-w-[120px]">
-                                                    {cs.label}<br /><span className="font-normal normal-case text-[10px]">Annual</span>
-                                                </th>
-                                            </>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {students.map(student => (
-                                        <tr key={student.id} className="hover:bg-muted/10 transition-colors">
-                                            <td className="px-4 py-3 font-medium sticky left-0 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                                                {student.firstName} {student.lastName}
-                                            </td>
-                                            {CO_SCHOLASTIC_ITEMS.map(cs => {
-                                                const hyVal = coSchoMap[student.id]?.[cs.id]?.hy || "";
-                                                const anVal = coSchoMap[student.id]?.[cs.id]?.annual || "";
-                                                return (
-                                                    <>
-                                                        <td key={`${cs.id}_hy`} className="px-3 py-2 border-l">
-                                                            <Select
-                                                                value={hyVal}
-                                                                onValueChange={v => handleCoSchoChange(student.id, cs.id, "hy", v)}
-                                                                disabled={isExamPublished}
-                                                            >
-                                                                <SelectTrigger className="h-9 w-full">
-                                                                    <SelectValue placeholder="—" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="">—</SelectItem>
-                                                                    {CO_SCHO_GRADES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </td>
-                                                        <td key={`${cs.id}_an`} className="px-3 py-2">
-                                                            <Select
-                                                                value={anVal}
-                                                                onValueChange={v => handleCoSchoChange(student.id, cs.id, "annual", v)}
-                                                                disabled={isExamPublished}
-                                                            >
-                                                                <SelectTrigger className="h-9 w-full">
-                                                                    <SelectValue placeholder="—" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="">—</SelectItem>
-                                                                    {CO_SCHO_GRADES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </td>
-                                                    </>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
+                </>
             )}
         </div>
     );
