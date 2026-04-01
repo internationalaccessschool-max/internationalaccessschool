@@ -13,7 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Search, Printer, FileText } from "lucide-react";
+import { Loader2, Search, Printer, FileText, LayoutTemplate } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
@@ -23,6 +23,9 @@ type AdminResultView = Result & {
     admissionNumber: string;
 };
 
+// Store exam metadata including examType
+let cachedExamType: string | null = null;
+
 export default function AdminViewResultsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: examId } = use(params);
 
@@ -30,6 +33,7 @@ export default function AdminViewResultsPage({ params }: { params: Promise<{ id:
     const [examName, setExamName] = useState("");
     const [examStartDate, setExamStartDate] = useState("");
     const [examEndDate, setExamEndDate] = useState("");
+    const [examType, setExamType] = useState<string>("Standard");
 
     const [allResults, setAllResults] = useState<AdminResultView[]>([]);
     const [filteredResults, setFilteredResults] = useState<AdminResultView[]>([]);
@@ -54,6 +58,7 @@ export default function AdminViewResultsPage({ params }: { params: Promise<{ id:
                     setExamName(examSnap.data().name || "Exam");
                     setExamStartDate(examSnap.data().startDate || "");
                     setExamEndDate(examSnap.data().endDate || "");
+                    setExamType(examSnap.data().examType || "Standard");
                     classesApplicable = examSnap.data().classesApplicable || [];
                 }
 
@@ -282,16 +287,27 @@ th:not(:first-child){text-align:right;}
 
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-center gap-3">
-                <Link href="/admin/exams">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">&larr;</Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">View Generated Results</h1>
-                    <p className="text-muted-foreground">
-                        {examName} — View and print generated report cards
-                    </p>
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <Link href="/admin/exams">
+                        <Button variant="ghost" size="icon" className="h-8 w-8">&larr;</Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">View Generated Results</h1>
+                        <p className="text-muted-foreground">
+                            {examName} — View and print generated report cards
+                            {examType && examType !== "Standard" && (
+                                <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{examType}</span>
+                            )}
+                        </p>
+                    </div>
                 </div>
+                <Link href={`/admin/exams/${examId}/results/landscape`}>
+                    <Button variant="outline" className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                        <LayoutTemplate className="h-4 w-4" />
+                        Generate Landscape Report Cards
+                    </Button>
+                </Link>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 items-center bg-muted/20 p-4 rounded-xl border">
