@@ -216,7 +216,14 @@ export default function ManageFeesPage() {
     const openMarkPaidDialog = async (record: FeeRecord) => {
         // hasTransport: only if a real transport record exists (transportFeeAmount set from transportFeeRecords)
         const hasTransport = (record.transportFeeAmount || 0) > 0;
-        setMarkPaidType(hasTransport ? "both" : "school");
+        const schoolAlreadyPaid = record.status === "paid";
+        const transportAlreadyPaid = record.transportStatus === "paid";
+        // Pre-select the most relevant payment type
+        if (schoolAlreadyPaid && !transportAlreadyPaid && hasTransport) {
+            setMarkPaidType("transport"); // School done, only transport remains
+        } else {
+            setMarkPaidType(hasTransport ? "both" : "school");
+        }
         setMarkPaidRecord(record);
         setPaymentMode("CASH");
         setDiscountType("none");
@@ -855,7 +862,8 @@ export default function ManageFeesPage() {
                                                         {!record.isTransportOnly && (
                                                             <div className="flex items-center gap-1">
                                                                 <School className="w-2.5 h-2.5" />
-                                                                <span>School: ₹{(record.totalAmount || record.amount).toLocaleString()}</span>
+                                                                {/* Show base fee for CF records (stale totalAmount is misleading) */}
+                                                                <span>School: ₹{(record.status === "carried_forward" ? record.amount : (record.totalAmount || record.amount)).toLocaleString()}</span>
                                                                 {schoolPaid && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />}
                                                             </div>
                                                         )}
@@ -915,18 +923,27 @@ export default function ManageFeesPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    {/* Mark Paid — show if school is unpaid (includes carried_forward) or transport is unpaid */}
-                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && record.status !== "paid" && (
+                                                    {/* Mark Paid / Pay Transport / Pay Arrear button
+                                                         Show if school is unpaid OR transport is still pending.
+                                                         The old '&& record.status !== paid' check was wrong — it
+                                                         blocked the button when school was paid but transport pending. */}
+                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
                                                         <button
                                                             onClick={() => openMarkPaidDialog(record)}
                                                             className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                                                                 record.status === "carried_forward"
                                                                     ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
-                                                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                                    : schoolPaid && !transportPaid
+                                                                        ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                                                                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                                             }`}
                                                         >
                                                             <CheckCircle2 className="w-3 h-3" />
-                                                            {record.status === "carried_forward" ? "Pay Arrear" : "Mark Paid"}
+                                                            {record.status === "carried_forward"
+                                                                ? "Pay Arrear"
+                                                                : (schoolPaid && !transportPaid)
+                                                                    ? "Pay Transport"
+                                                                    : "Mark Paid"}
                                                         </button>
                                                     )}
                                                     {(record.status === "pending" || record.status === "overdue") && (
@@ -943,7 +960,8 @@ export default function ManageFeesPage() {
                                                             Overdue
                                                         </button>
                                                     )}
-                                                    {record.status !== "paid" && (
+                                                    {/* Remind + WhatsApp — show if any fee (school or transport) is still unpaid */}
+                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
                                                         <button
                                                             onClick={() => handleSendReminder(record)}
                                                             disabled={actionLoading === record.id + "_email"}
@@ -958,7 +976,7 @@ export default function ManageFeesPage() {
                                                             Remind
                                                         </button>
                                                     )}
-                                                    {record.status !== "paid" && (
+                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
                                                         <a
                                                             href={`https://wa.me/91${record.parentPhone || ""}?text=${encodeURIComponent(
                                                                 `Dear Parent, school fee for ${record.studentName} (Class ${record.class}) of ₹${record.amount} for ${MONTHS[(record.month || 1) - 1]} ${record.year} is ${record.status}. Please pay at the earliest. - International Access School`
@@ -1034,9 +1052,14 @@ export default function ManageFeesPage() {
                                     const schoolFeeBase = markPaidRecord.amount;
                                     const schoolPrevDues = markPaidRecord.previousDues || 0;
                                     const isCF = markPaidRecord.status === "carried_forward";
-                                                         const schoolTotal = isCF ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
+                                    const schoolAlreadyPaid = markPaidRecord.status === "paid";
+                                    const schoolTotal = (schoolAlreadyPaid || isCF) ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
                                     const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
                                     const transportTotal = markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
+                                    // Amount payable changes based on what accountant selected
+                                    const totalPayable = markPaidType === "school" ? (schoolAlreadyPaid ? 0 : schoolTotal)
+                                        : markPaidType === "transport" ? transportTotal
+                                        : (schoolAlreadyPaid ? 0 : schoolTotal) + transportTotal;
                                     // Build breakdown lines (only show non-zero items)
                                     const breakdownLines: { label: string; amount: number }[] = [
                                         { label: "Tuition Fee",      amount: bd.tuitionFee      || 0 },
@@ -1050,10 +1073,16 @@ export default function ManageFeesPage() {
                                         <>
                                             {!markPaidRecord.isTransportOnly && (
                                                 <>
-                                                    {/* School fee header */}
+                                                    {/* School fee header — show 'Already Paid ✓' when school done */}
                                                     <div className="flex justify-between text-sm font-semibold text-navy">
                                                         <span className="flex items-center gap-1.5"><School className="w-4 h-4" /> School Fee (Current Month)</span>
-                                                        <span>₹{schoolFeeBase.toLocaleString()}</span>
+                                                        {schoolAlreadyPaid ? (
+                                                            <span className="flex items-center gap-1 text-emerald-600 font-medium text-xs">
+                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Already Paid
+                                                            </span>
+                                                        ) : (
+                                                            <span>₹{schoolFeeBase.toLocaleString()}</span>
+                                                        )}
                                                     </div>
                                                     {/* Breakdown details */}
                                                     {hasBreakdown && (
@@ -1101,7 +1130,7 @@ export default function ManageFeesPage() {
                                             )}
                                             <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
                                                 <span>Total Payable</span>
-                                                <span>₹{(schoolTotal + transportTotal).toLocaleString()}</span>
+                                                <span>₹{totalPayable.toLocaleString()}</span>
                                             </div>
                                         </>
                                     );
@@ -1120,7 +1149,8 @@ export default function ManageFeesPage() {
                                 ...(hasTransportFee(markPaidRecord) ? [
                                     { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: `₹${(markPaidRecord.transportFeeAmount || 0).toLocaleString()}`, icon: Bus, disabled: isTransportPaid(markPaidRecord) },
                                     ...(!markPaidRecord.isTransportOnly ? [
-                                        { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${(markPaidRecord.amount + (markPaidRecord.transportFeeAmount || 0)).toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) && isTransportPaid(markPaidRecord) },
+                                        // "Both" disabled when school already paid (can't re-charge paid fee)
+                                        { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${(markPaidRecord.amount + (markPaidRecord.transportFeeAmount || 0)).toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) || isTransportPaid(markPaidRecord) },
                                     ] : []),
                                 ] : []),
                             ] as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
