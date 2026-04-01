@@ -87,6 +87,10 @@ export interface Exam {
     classesApplicable: string[]; // Array of class names that take this exam
     createdAt?: number;
     updatedAt?: number;
+    /** New: exam type for 4-exam academic structure */
+    examType?: "Standard" | "Unit Test" | "Term Exam" | "Annual Exam";
+    /** New: academic session e.g. "2026-27" */
+    session?: string;
 }
 
 export interface SubjectMark {
@@ -94,6 +98,10 @@ export interface SubjectMark {
     obtained: number | null; // null if absent or not yet entered
     total: number;
     grade?: string;
+    /** Sub-marks for Unit Test exams (max 10 / 5 / 5) */
+    perTest?: number | null;
+    noteBook?: number | null;
+    sea?: number | null;
 }
 
 export interface Result {
@@ -113,6 +121,8 @@ export interface Result {
     overallGrade: string;
     teacherRemarks?: string;
     updatedAt: number;
+    /** Co-Scholastic area grades (only for Annual Exam) */
+    coScholastic?: Record<string, { hy?: string; annual?: string }>;
 }
 
 export interface AdmitCard {
