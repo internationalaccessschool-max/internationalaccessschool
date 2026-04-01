@@ -167,10 +167,15 @@ export default function AdminExamsPage() {
     const ungrouped = exams.filter(e => !e.session); // legacy exams with no session
 
     function getSessionExam(session: string, slot: Slot): Exam | undefined {
-        return exams.find(e => e.session === session && e.examType === slot.examType &&
-            // distinguish Unit I vs Unit II by label
-            (slot.examType !== "Unit Test" || e.name?.toLowerCase().includes(slot.key === "unit1" ? "unit i" : "unit ii") || (e.name?.toLowerCase().includes("unit") && (slot.key === "unit1" ? !e.name?.toLowerCase().includes("ii") : e.name?.toLowerCase().includes("ii"))))
-        );
+        const sessionExams = exams.filter(e => e.session === session && e.examType === slot.examType);
+        if (slot.examType !== "Unit Test") return sessionExams[0];
+        // For Unit Tests, distinguish Unit I vs Unit II properly
+        if (slot.key === "unit1") {
+            // Match "Unit I" but NOT "Unit II" — use regex word boundary
+            return sessionExams.find(e => /unit\s+i(?!i)/i.test(e.name || "")) ?? sessionExams[0];
+        }
+        // unit2
+        return sessionExams.find(e => /unit\s+ii/i.test(e.name || "")) ?? (sessionExams.length > 1 ? sessionExams[1] : undefined);
     }
 
     // ── Create / setup a new session (auto-creates 4 exam docs) ─────────────
@@ -213,6 +218,8 @@ export default function AdminExamsPage() {
                      exam.status === "Active"   ? "Published" : "Active";
         try {
             await updateDoc(doc(db, "exams", exam.id!), { status: next });
+            // Refresh the exams list so UI reflects the change for THIS exam only
+            setExams(prev => prev.map(e => e.id === exam.id ? { ...e, status: next } : e));
         } catch (err: any) {
             alert("Error: " + err.message);
         }
