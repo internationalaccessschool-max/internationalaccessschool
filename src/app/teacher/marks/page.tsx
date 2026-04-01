@@ -647,12 +647,12 @@ export default function TeacherMarksPage() {
 
                                                 {/* Unit Test columns: Per Test / Note Book / SEA per subject */}
                                                 {isUnit && subjects.map(sub => (
-                                                    <th key={sub.id} colSpan={3} className="text-center px-2 py-3 font-semibold border-l border-slate-600">
+                                                    <th key={sub.id} className="text-center px-2 py-3 font-semibold border-l border-slate-600">
                                                         <div className="text-xs leading-tight">{sub.name}</div>
-                                                        <div className="grid grid-cols-3 gap-0.5 mt-1 text-xs font-normal text-slate-300">
-                                                            <span>PT/10</span>
-                                                            <span>NB/5</span>
-                                                            <span>SEA/5</span>
+                                                        <div className="flex justify-center gap-0.5 mt-1 text-[10px] font-normal text-slate-300">
+                                                            <span className="w-10 text-center">PT/10</span>
+                                                            <span className="w-10 text-center">NB/5</span>
+                                                            <span className="w-10 text-center">SEA/5</span>
                                                         </div>
                                                     </th>
                                                 ))}
@@ -691,7 +691,7 @@ export default function TeacherMarksPage() {
                                                     {/* Unit Test sub-cells */}
                                                     {isUnit && subjects.map(sub => (
                                                         <td key={sub.id} className="border-l border-border/30 px-1 py-1.5">
-                                                            <div className="flex gap-0.5">
+                                                            <div className="flex justify-center gap-0.5">
                                                                 {(["perTest", "noteBook", "sea"] as const).map(field => {
                                                                     const max = field === "perTest" ? 10 : 5;
                                                                     const key = `${sub.id}__${field}`;
