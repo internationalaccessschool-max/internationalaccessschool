@@ -150,15 +150,18 @@ export default function TeacherMarksPage() {
                         collection(db, "users", "classes", cls, "sections", normSec, "students", "profiles")
                     );
                     if (snap.docs.length > 0) {
-                        studs = snap.docs.map(d => {
-                            const data = d.data();
-                            return {
-                                id: d.id,
+                        studs = snap.docs
+                            .map(d => ({ id: d.id, ...d.data() }))
+                            .filter((data: any) => {
+                                const st = (data.status || "").toUpperCase();
+                                return st !== "LEFT" && st !== "TC" && st !== "INACTIVE";
+                            })
+                            .map((data: any) => ({
+                                id: data.id,
                                 firstName: data.firstName || "",
                                 lastName: data.lastName || "",
                                 admissionNumber: data.admissionNumber || "",
-                            };
-                        });
+                            }));
                         break;
                     }
                 } catch { /* try next */ }
@@ -168,11 +171,13 @@ export default function TeacherMarksPage() {
                 const usersSnap = await getDocs(collection(db, "users"));
                 studs = usersSnap.docs
                     .map(d => ({ id: d.id, ...d.data() }) as any)
-                    .filter((d: any) =>
-                        d.role === "student" &&
-                        (d.className === normCls || d.className === myClass.className || d.currentClass === normCls) &&
-                        d.section === normSec
-                    )
+                    .filter((d: any) => {
+                        const st = (d.status || "").toUpperCase();
+                        return d.role === "student" &&
+                            (d.className === normCls || d.className === myClass.className || d.currentClass === normCls) &&
+                            d.section === normSec &&
+                            st !== "LEFT" && st !== "TC" && st !== "INACTIVE";
+                    })
                     .map((d: any) => ({
                         id: d.id,
                         firstName: d.firstName || d.name || "",
