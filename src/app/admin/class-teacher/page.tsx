@@ -130,6 +130,7 @@ export default function ClassTeacherPage() {
             if (teacherId) {
                 await setDoc(doc(db, "class_teachers", docId), {
                     cls, section, teacherId, teacherName,
+                    teacherEmail: teacher?.email || null,
                     updatedAt: serverTimestamp(),
                 });
                 setClassTeachers(prev => ({
@@ -138,7 +139,7 @@ export default function ClassTeacherPage() {
                 }));
             } else {
                 await setDoc(doc(db, "class_teachers", docId), {
-                    cls, section, teacherId: null, teacherName: null,
+                    cls, section, teacherId: null, teacherName: null, teacherEmail: null,
                     updatedAt: serverTimestamp(),
                 });
                 setClassTeachers(prev => ({
