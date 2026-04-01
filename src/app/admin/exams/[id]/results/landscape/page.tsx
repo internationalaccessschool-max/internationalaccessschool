@@ -661,10 +661,10 @@ body{font-family:Arial,sans-serif;background:#f4f4f4;font-size:10px;}
                     {/* Exam selectors */}
                     <div className="space-y-2">
                         <Label>Unit I Test (exam)</Label>
-                        <Select value={unitExamId} onValueChange={setUnitExamId}>
+                        <Select value={unitExamId || "__none__"} onValueChange={v => setUnitExamId(v === "__none__" ? "" : v)}>
                             <SelectTrigger><SelectValue placeholder="Select Unit I exam" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">— Leave blank —</SelectItem>
+                                <SelectItem value="__none__">— Leave blank —</SelectItem>
                                 {allSessionExams.map(e => (
                                     <SelectItem key={e.id} value={e.id!}>{e.name} {e.examType ? `(${e.examType})` : ""}</SelectItem>
                                 ))}
@@ -673,10 +673,10 @@ body{font-family:Arial,sans-serif;background:#f4f4f4;font-size:10px;}
                     </div>
                     <div className="space-y-2">
                         <Label>Half Yearly (Term Exam)</Label>
-                        <Select value={hyExamId} onValueChange={setHyExamId}>
+                        <Select value={hyExamId || "__none__"} onValueChange={v => setHyExamId(v === "__none__" ? "" : v)}>
                             <SelectTrigger><SelectValue placeholder="Select Half Yearly exam" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">— Leave blank —</SelectItem>
+                                <SelectItem value="__none__">— Leave blank —</SelectItem>
                                 {allSessionExams.map(e => (
                                     <SelectItem key={e.id} value={e.id!}>{e.name} {e.examType ? `(${e.examType})` : ""}</SelectItem>
                                 ))}
@@ -685,10 +685,10 @@ body{font-family:Arial,sans-serif;background:#f4f4f4;font-size:10px;}
                     </div>
                     <div className="space-y-2">
                         <Label>Unit II Test (exam)</Label>
-                        <Select value={unit2ExamId} onValueChange={setUnit2ExamId}>
+                        <Select value={unit2ExamId || "__none__"} onValueChange={v => setUnit2ExamId(v === "__none__" ? "" : v)}>
                             <SelectTrigger><SelectValue placeholder="Select Unit II exam" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">— Leave blank —</SelectItem>
+                                <SelectItem value="__none__">— Leave blank —</SelectItem>
                                 {allSessionExams.map(e => (
                                     <SelectItem key={e.id} value={e.id!}>{e.name} {e.examType ? `(${e.examType})` : ""}</SelectItem>
                                 ))}
