@@ -134,11 +134,11 @@ export default function AdminBulkMarksEntryPage() {
 
     // ── 4. When class is known, load subjects and students ────────────────────
     useEffect(() => {
-        if (!myClass) return;
+        if (!selectedClass || !selectedSection) return;
         const load = async () => {
             // Subjects
-            const normCls = myClass.className.replace(/^class\s*/i, "").trim();
-            for (const key of [normCls, myClass.className, `Class ${normCls}`]) {
+            const normCls = selectedClass.replace(/^class\s*/i, "").trim();
+            for (const key of [normCls, selectedClass, `Class ${normCls}`]) {
                 const subDoc = await getDoc(doc(db, "classSubjects", key));
                 if (subDoc.exists()) {
                     const rawSubs = subDoc.data().subjects || [];
@@ -152,9 +152,9 @@ export default function AdminBulkMarksEntryPage() {
             }
 
             // Students
-            const normSec = myClass.section;
+            const normSec = selectedSection;
             let studs: StudentRow[] = [];
-            for (const cls of [normCls, myClass.className]) {
+            for (const cls of [normCls, selectedClass]) {
                 try {
                     const snap = await getDocs(
                         collection(db, "users", "classes", cls, "sections", normSec, "students", "profiles")
@@ -184,7 +184,7 @@ export default function AdminBulkMarksEntryPage() {
                     .filter((d: any) => {
                         const st = (d.status || "").toUpperCase();
                         return d.role === "student" &&
-                            (d.className === normCls || d.className === myClass.className || d.currentClass === normCls) &&
+                            (d.className === normCls || d.className === selectedClass || d.currentClass === normCls) &&
                             d.section === normSec &&
                             st !== "LEFT" && st !== "TC" && st !== "INACTIVE";
                     })
@@ -199,11 +199,11 @@ export default function AdminBulkMarksEntryPage() {
             setStudents(studs);
         };
         load();
-    }, [myClass]);
+    }, [selectedClass, selectedSection]);
 
     // ── 5. Load existing marks for all 4 exams ────────────────────────────────
     useEffect(() => {
-        if (!myClass || sessionExams.length === 0 || students.length === 0) return;
+        if (!selectedClass || !selectedSection || sessionExams.length === 0 || students.length === 0) return;
         const load = async () => {
             setIsLoadingMarks(true);
             const newMap: Record<string, Record<string, Record<string, string>>> = {};
@@ -212,10 +212,10 @@ export default function AdminBulkMarksEntryPage() {
             for (const exam of sessionExams) {
                 if (!exam.id) continue;
                 newMap[exam.id] = {};
-                const normCls = myClass.className.replace(/^class\s*/i, "").trim();
-                for (const cls of [normCls, myClass.className]) {
+                const normCls = selectedClass.replace(/^class\s*/i, "").trim();
+                for (const cls of [normCls, selectedClass]) {
                     try {
-                        const snap = await getDocs(resultSectionCol(exam.id, cls, myClass.section));
+                        const snap = await getDocs(resultSectionCol(exam.id, cls, selectedSection));
                         if (snap.docs.length > 0) {
                             snap.docs.forEach(d => {
                                 const data = d.data();
@@ -246,7 +246,7 @@ export default function AdminBulkMarksEntryPage() {
             setIsLoadingMarks(false);
         };
         load();
-    }, [myClass, sessionExams, students]);
+    }, [selectedClass, selectedSection, sessionExams, students]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     const getExamByType = (type: string): Exam | undefined =>
