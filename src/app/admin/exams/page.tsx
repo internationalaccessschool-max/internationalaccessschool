@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import {
     CheckCircle2, Circle, Globe, Lock, Loader2, CalendarCheck,
-    ChevronRight, Settings2, Plus, Eye, BookOpen, FileCheck, Layers,
+    ChevronRight, Settings2, Plus, Eye, BookOpen, FileCheck, Layers, Ticket,
 } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -615,6 +615,22 @@ function ExamSlotCard({
                                 </>
                             )}
                         </div>
+
+                        {/* Admit Card buttons — visible when Active or Published */}
+                        {(status === "Active" || status === "Published") && (
+                            <div className="flex gap-2">
+                                <Link href={`/admin/exams/${exam.id}/admit-cards`} className="flex-1">
+                                    <Button size="sm" variant="outline" className="w-full gap-1 text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
+                                        <Ticket className="h-3.5 w-3.5" /> Admit Cards
+                                    </Button>
+                                </Link>
+                                <Link href={`/admin/exams/${exam.id}/admit-cards/view`} className="flex-1">
+                                    <Button size="sm" variant="outline" className="w-full gap-1 text-xs">
+                                        <Eye className="h-3.5 w-3.5" /> View Cards
+                                    </Button>
+                                </Link>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <div className="py-4 text-center">
