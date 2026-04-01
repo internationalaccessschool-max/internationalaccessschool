@@ -129,7 +129,10 @@ export default function ManageFeesPage() {
             }> = {};
             for (const d of transportSnap.docs) {
                 const td = d.data();
-                if (td.status === "carried_forward") continue; // skip old merged records
+                // NOTE: Do NOT skip carried_forward transport records here.
+                // A transport record for this month may be carried_forward if a later month
+                // absorbed its dues during generation — but we still need to display it
+                // (e.g. show the transport receipt for this month if it was paid before carry-forward).
                 transportMap[d.id] = {
                     status: td.status || "pending",
                     receiptNo: td.receiptNo || null,
@@ -265,7 +268,10 @@ export default function ManageFeesPage() {
                 const _timeStr = `${_pad(_now.getHours())}${_pad(_now.getMinutes())}${_pad(_now.getSeconds())}`;
                 const _rnd = Math.random().toString(36).substring(2, 5).toUpperCase();
                 const receiptNo = `REC-${_dateStr}-${_timeStr}-${_rnd}`;
-                const schoolBaseTotal = record.totalAmount || record.amount;
+                // CF records: only charge base fee — their previousDues have already
+                // been absorbed (and separately billed) in the next live month's bill.
+                const isRecordCF = record.status === "carried_forward";
+                const schoolBaseTotal = isRecordCF ? record.amount : (record.totalAmount || record.amount);
                 const schoolDiscount = computeDiscount(schoolBaseTotal);
                 const schoolTotalPaid = schoolBaseTotal - schoolDiscount;
                 const discountFields = discountType !== "none" && schoolDiscount > 0 ? {
@@ -288,12 +294,15 @@ export default function ManageFeesPage() {
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
                 // ── UNIFIED CASCADE DEDUCTION ─────────────────────────────────
-                // When any month is paid, scan FORWARD through the chain to find
-                // the first LIVE (pending/overdue) bill that absorbed its dues,
-                // skipping over carried_forward (stale) months.
-                // Example: March paid → April(CF, skip) → May(CF, skip) → June(pending) → deduct ✅
+                // When any month is paid, scan FORWARD through the chain:
+                //   1. For each intermediate carried_forward month → clear its stale
+                //      previousDues so it shows only its own base fee (not stale total).
+                //   2. For the first LIVE (pending/overdue) month → deduct the paid
+                //      amount from its previousDues so the active bill is correct.
+                // Example: April paid → May(CF, fix dues→0) → June(pending, deduct) ✅
                 try {
                     const paidAmount = record.totalAmount || record.amount;
+
                     for (let offset = 1; offset <= 12; offset++) {
                         let nextMonth = record.month + offset;
                         let nextYear = record.year;
@@ -306,16 +315,39 @@ export default function ManageFeesPage() {
                         if (!nextSnap.exists()) break; // chain ends — no further records
                         const nextData = nextSnap.data() as any;
 
-                        if (nextData.status === "paid") break; // already paid — nothing to fix
+                        if (nextData.status === "paid") break; // already paid — stop
 
-                        // Skip carried_forward months — they are stale, dues already absorbed further
-                        if (nextData.status === "carried_forward") continue;
+                        if (nextData.status === "carried_forward") {
+                            // ── Fix stale CF record ──────────────────────────────────
+                            // This month's dues were absorbed into a later month.
+                            // Its previousDues reference the now-paid record — clear them
+                            // so the CF record accurately shows only its own base fee.
+                            const oldPrev = nextData.previousDues || 0;
+                            if (oldPrev > 0) {
+                                const newPrev = Math.max(0, oldPrev - paidAmount);
+                                const newTotal = (nextData.amount || 0) + newPrev;
+                                const cfArrears: string[] = nextData.arrearsDetails || [];
+                                const newCfArrears = cfArrears.filter((id: string) => id !== record.id);
+                                try {
+                                    await updateDoc(nextRef, {
+                                        previousDues: newPrev,
+                                        totalAmount: newTotal,
+                                        arrearsDetails: newCfArrears,
+                                    });
+                                    setRecords(prev => prev.map(r =>
+                                        r.id === nextRecordId
+                                            ? { ...r, previousDues: newPrev, totalAmount: newTotal }
+                                            : r
+                                    ));
+                                } catch { /* best-effort */ }
+                            }
+                            continue; // keep scanning to find the live bill
+                        }
 
-                        // Found the LIVE bill (pending / overdue) — deduct here
+                        // ── Found the LIVE bill (pending / overdue) — deduct here ──
                         if ((nextData.previousDues || 0) > 0) {
                             const newPrevDues = Math.max(0, (nextData.previousDues || 0) - paidAmount);
                             const newTotal = (nextData.amount || 0) + newPrevDues;
-                            // Also remove this record's ID from arrearsDetails if present
                             const nextArrears: string[] = nextData.arrearsDetails || [];
                             const newArrearsDetails = nextArrears.filter((id: string) => id !== record.id);
 
@@ -330,10 +362,11 @@ export default function ManageFeesPage() {
                                     : r
                             ));
                         }
-                        break; // found the live bill — deducted (or nothing to deduct) — stop
+                        break; // processed the live bill — stop
                     }
                 } catch { /* best-effort */ }
                 // ── END CASCADE DEDUCTION ────────────────────────────────────────
+
 
 
                 // Send Receipt via Email
@@ -774,10 +807,18 @@ export default function ManageFeesPage() {
                                                     <div className="text-xs text-indigo-500 font-medium">— (transport only)</div>
                                                 ) : (
                                                     <div>
-                                                        <div className="font-bold text-navy">₹{(record.totalAmount || record.amount)?.toLocaleString()}</div>
+                                                        {/* CF records: only show base fee — their previousDues
+                                                            are already absorbed into the next live bill */}
+                                                        <div className="font-bold text-navy">
+                                                            ₹{(record.status === "carried_forward"
+                                                                ? record.amount
+                                                                : (record.totalAmount || record.amount)
+                                                            )?.toLocaleString()}
+                                                        </div>
                                                         {record.status === "carried_forward" && (
                                                             <div className="text-xs text-purple-500 mt-0.5 font-medium">
                                                                 Arrear — {MONTHS[(record.month || 1) - 1]} {record.year}
+                                                                <span className="text-gray-400 font-normal block">dues merged into next bill</span>
                                                             </div>
                                                         )}
                                                         {record.status !== "carried_forward" && (record.previousDues || 0) > 0 && (
@@ -970,7 +1011,8 @@ export default function ManageFeesPage() {
                                     const transportFee = markPaidRecord.transportFeeAmount || 0;
                                     const schoolFeeBase = markPaidRecord.amount;
                                     const schoolPrevDues = markPaidRecord.previousDues || 0;
-                                    const schoolTotal = markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues);
+                                    const isCF = markPaidRecord.status === "carried_forward";
+                                                         const schoolTotal = isCF ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
                                     const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
                                     const transportTotal = markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
                                     // Build breakdown lines (only show non-zero items)
@@ -1005,11 +1047,18 @@ export default function ManageFeesPage() {
                                                     {!hasBreakdown && (
                                                         <div className="ml-6 text-xs text-gray-400">No breakdown available</div>
                                                     )}
-                                                    {/* Previous dues */}
-                                                    {schoolPrevDues > 0 && (
+                                                    {/* Previous dues: hidden for CF records (dues already in next live bill) */}
+                                                    {!isCF && schoolPrevDues > 0 && (
                                                         <div className="flex justify-between text-sm">
                                                             <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues (Arrears)</span>
                                                             <span className="font-semibold text-rose-600">₹{schoolPrevDues.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                    {/* CF notice: inform accountant this is an arrear-only payment */}
+                                                    {isCF && (
+                                                        <div className="flex items-start gap-1.5 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mt-1">
+                                                            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                            <span>This is an arrear month — previous dues are already included in the current active bill. Paying here clears only this month&apos;s base fee.</span>
                                                         </div>
                                                     )}
                                                 </>
