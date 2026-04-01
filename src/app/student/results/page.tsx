@@ -43,8 +43,10 @@ export default function StudentResultsPage() {
 
         const fetchData = async () => {
             try {
-                const { className, section, name } = await getStudentClassInfo(user.uid);
-                setStudentInfo({ className, section, name });
+                let { className, section, name } = await getStudentClassInfo(user.uid);
+
+                // Normalize class name — teacher saves marks using normalized form (e.g. "5" not "Class 5")
+                const normClass = (cls: string) => cls.replace(/^class\s*/i, "").trim();
 
                 const seenExamIds = new Set<string>();
                 const loaded: ExamWithResult[] = [];
@@ -57,22 +59,32 @@ export default function StudentResultsPage() {
                     if (seenExamIds.has(exam.id!)) continue;
                     let resultData: Result | null = null;
 
-                    // Try new nested path
-                    if (section && className) {
-                        const newRef = doc(db, "results", exam.id!, "classes", className, "sections", section, "students", user.uid);
-                        const newSnap = await getDoc(newRef);
-                        if (newSnap.exists()) {
-                            resultData = { id: newSnap.id, ...newSnap.data() } as Result;
-                        }
+                    // Try multiple className variants — teacher may save as "5" even if profile has "Class 5"
+                    const classVariants = className
+                        ? [className, normClass(className), `Class ${normClass(className)}`]
+                        : [];
+
+                    for (const clsVariant of classVariants) {
+                        if (!clsVariant || !section) break;
+                        try {
+                            const ref = doc(db, "results", exam.id!, "classes", clsVariant, "sections", section, "students", user.uid);
+                            const snap = await getDoc(ref);
+                            if (snap.exists()) {
+                                resultData = { id: snap.id, ...snap.data() } as Result;
+                                break;
+                            }
+                        } catch { /* try next variant */ }
                     }
 
-                    // Fallback: old composite ID
+                    // Fallback: old composite ID path
                     if (!resultData) {
-                        const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
-                        const oldSnap = await getDoc(oldRef);
-                        if (oldSnap.exists()) {
-                            resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
-                        }
+                        try {
+                            const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
+                            const oldSnap = await getDoc(oldRef);
+                            if (oldSnap.exists()) {
+                                resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
+                            }
+                        } catch { /* ignore */ }
                     }
 
                     if (resultData) {
@@ -84,6 +96,16 @@ export default function StudentResultsPage() {
                     }
                 }
 
+                // FALLBACK: if getStudentClassInfo returned empty, extract class/section from the result docs
+                if ((!className || !section) && loaded.length > 0) {
+                    const firstResult = loaded[0].result;
+                    className = firstResult.classId || className;
+                    section = firstResult.sectionId || section;
+                    name = name || (firstResult as any).studentName || "";
+                }
+
+                setStudentInfo({ className, section, name });
+
                 loaded.sort((a, b) => {
                     const dateA = a.exam.endDate ? new Date(a.exam.endDate).getTime() : 0;
                     const dateB = b.exam.endDate ? new Date(b.exam.endDate).getTime() : 0;
@@ -92,16 +114,24 @@ export default function StudentResultsPage() {
 
                 setExamResults(loaded);
 
-                // Load subjects
-                if (className) {
-                    const classSubDoc = await getDoc(doc(db, "classSubjects", className));
-                    if (classSubDoc.exists()) {
-                        const subjectList: Subject[] = classSubDoc.data().subjects || [];
-                        setSubjects(subjectList);
-                        const subsMap: Record<string, Subject> = {};
-                        subjectList.forEach(s => { subsMap[s.id || s.name] = s; });
-                        setSubjectsMap(subsMap);
-                    }
+                // Load subjects — try multiple class name variants
+                const classToTry = className || "";
+                const normCls = normClass(classToTry);
+                for (const key of [normCls, classToTry, `Class ${normCls}`]) {
+                    if (!key) continue;
+                    try {
+                        const classSubDoc = await getDoc(doc(db, "classSubjects", key));
+                        if (classSubDoc.exists()) {
+                            const subjectList: Subject[] = (classSubDoc.data().subjects || []).map((s: any) =>
+                                typeof s === "object" ? s : { id: s, name: s, maxMarks: 100 }
+                            );
+                            setSubjects(subjectList);
+                            const subsMap: Record<string, Subject> = {};
+                            subjectList.forEach(s => { subsMap[(s.id || s.name) as string] = s; });
+                            setSubjectsMap(subsMap);
+                            break;
+                        }
+                    } catch { /* try next */ }
                 }
             } catch (err) {
                 console.error("Error fetching student results:", err);
@@ -131,6 +161,12 @@ export default function StudentResultsPage() {
     const getMarksForExam = (examId: string): Record<string, any> => {
         const er = examResults.find(e => e.exam.id === examId);
         return er?.result?.marks || {};
+    };
+
+    // ── Helper: get co-scholastic from a result ──
+    const getCoScholastic = (examId: string): Record<string, any> => {
+        const er = examResults.find(e => e.exam.id === examId);
+        return (er?.result as any)?.coScholastic || {};
     };
 
     // ── Print: Full Year Landscape Report Card (all 4 exams) ──
