@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
-    collection, getDocs, doc, getDoc, setDoc,
+    collection, getDocs, doc, getDoc, setDoc, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -82,18 +82,73 @@ export default function TeacherMarksPage() {
         if (!user) return;
         const check = async () => {
             try {
-                const snap = await getDocs(collection(db, "classTeachers"));
-                const assignment = snap.docs.map(d => d.data()).find(
-                    d => d.teacherId === user.uid && d.active !== false
-                );
-                if (assignment) {
-                    const cls = (assignment.className || "").replace(/^class\s*/i, "").trim();
-                    setMyClass({ className: cls, section: assignment.section });
+                let teacherDocRef = doc(db, "teachers", user.uid);
+                let teacherSnap = await getDoc(teacherDocRef);
+
+                if (!teacherSnap.exists() && user.email) {
+                    const emailQ = query(collection(db, "teachers"), where("email", "==", user.email));
+                    const emailSnaps = await getDocs(emailQ);
+                    if (!emailSnaps.empty) {
+                        teacherSnap = emailSnaps.docs[0] as any;
+                    }
+                }
+
+                let matches: { cls: string, section: string }[] = [];
+
+                if (teacherSnap.exists()) {
+                    const data = teacherSnap.data();
+                    const a = data.assignment;
+
+                    if (a?.classSections) {
+                        Object.entries(a.classSections).forEach(([cls, secs]: [string, any]) => {
+                            if (Array.isArray(secs)) {
+                                secs.forEach((sec: string) => {
+                                    matches.push({ cls, section: sec });
+                                });
+                            }
+                        });
+                    } else if (a?.classes?.length) {
+                        (a.classes as string[]).forEach((c: string) => {
+                            (a.sections || []).forEach((s: string) => {
+                                matches.push({ cls: c, section: s });
+                            });
+                        });
+                    }
+
+                    if (matches.length === 0) {
+                        const ctSnap = await getDocs(collection(db, "class_teachers"));
+                        ctSnap.docs.forEach(d => {
+                            const ctData = d.data();
+                            if (ctData.teacherId === user.uid || (data.email && ctData.teacherEmail === data.email) || ctData.teacherName === `${data.firstName || ""} ${data.lastName || ""}`.trim()) {
+                                matches.push({ cls: ctData.cls, section: ctData.section });
+                            }
+                        });
+                    }
+                } else {
+                    // No teacher doc found by UID – scan class_teachers by uid OR email
+                    const ctSnap = await getDocs(collection(db, "class_teachers"));
+                    ctSnap.docs.forEach(d => {
+                        const ctData = d.data();
+                        if (
+                            ctData.teacherId === user.uid ||
+                            (user.email && ctData.teacherEmail === user.email)
+                        ) {
+                            matches.push({ cls: ctData.cls, section: ctData.section });
+                        }
+                    });
+                }
+
+                if (matches.length > 0) {
+                    const cls = (matches[0].cls || "").replace(/^class\s*/i, "").trim();
+                    setMyClass({ className: cls, section: matches[0].section });
                     setIsClassTeacher(true);
                 } else {
                     setIsClassTeacher(false);
                 }
-            } catch { setIsClassTeacher(false); }
+            } catch (err) {
+                console.error("Error finding class teacher assignment:", err);
+                setIsClassTeacher(false);
+            }
         };
         check();
     }, [user]);
@@ -196,44 +251,49 @@ export default function TeacherMarksPage() {
         if (!myClass || sessionExams.length === 0 || students.length === 0) return;
         const load = async () => {
             setIsLoadingMarks(true);
-            const newMap: Record<string, Record<string, Record<string, string>>> = {};
-            const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
+            try {
+                const newMap: Record<string, Record<string, Record<string, string>>> = {};
+                const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
 
-            for (const exam of sessionExams) {
-                if (!exam.id) continue;
-                newMap[exam.id] = {};
-                const normCls = myClass.className.replace(/^class\s*/i, "").trim();
-                for (const cls of [normCls, myClass.className]) {
-                    try {
-                        const snap = await getDocs(resultSectionCol(exam.id, cls, myClass.section));
-                        if (snap.docs.length > 0) {
-                            snap.docs.forEach(d => {
-                                const data = d.data();
-                                const entryMap: Record<string, string> = {};
-                                Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
-                                    if (exam.examType === "Unit Test") {
-                                        entryMap[`${subId}__perTest`]  = m.perTest  !== null && m.perTest  !== undefined ? String(m.perTest)  : "";
-                                        entryMap[`${subId}__noteBook`] = m.noteBook !== null && m.noteBook !== undefined ? String(m.noteBook) : "";
-                                        entryMap[`${subId}__sea`]      = m.sea      !== null && m.sea      !== undefined ? String(m.sea)      : "";
-                                    } else {
-                                        entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
+                for (const exam of sessionExams) {
+                    if (!exam.id) continue;
+                    newMap[exam.id] = {};
+                    const normCls = myClass.className.replace(/^class\s*/i, "").trim();
+                    for (const cls of [normCls, myClass.className]) {
+                        try {
+                            const snap = await getDocs(resultSectionCol(exam.id, cls, myClass.section));
+                            if (snap.docs.length > 0) {
+                                snap.docs.forEach(d => {
+                                    const data = d.data();
+                                    const entryMap: Record<string, string> = {};
+                                    Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
+                                        if (exam.examType === "Unit Test") {
+                                            entryMap[`${subId}__perTest`]  = m.perTest  !== null && m.perTest  !== undefined ? String(m.perTest)  : "";
+                                            entryMap[`${subId}__noteBook`] = m.noteBook !== null && m.noteBook !== undefined ? String(m.noteBook) : "";
+                                            entryMap[`${subId}__sea`]      = m.sea      !== null && m.sea      !== undefined ? String(m.sea)      : "";
+                                        } else {
+                                            entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
+                                        }
+                                    });
+                                    newMap[exam.id!][d.id] = entryMap;
+
+                                    // co-scholastic (stored on Annual exam)
+                                    if (exam.examType === "Annual Exam" && data.coScholastic) {
+                                        newCoScho[d.id] = data.coScholastic;
                                     }
                                 });
-                                newMap[exam.id!][d.id] = entryMap;
-
-                                // co-scholastic (stored on Annual exam)
-                                if (exam.examType === "Annual Exam" && data.coScholastic) {
-                                    newCoScho[d.id] = data.coScholastic;
-                                }
-                            });
-                            break;
-                        }
-                    } catch { /* try next cls */ }
+                                break;
+                            }
+                        } catch (err) { console.error("Error fetching marks for", cls, err); }
+                    }
                 }
+                setResultsMap(newMap);
+                setCoSchoMap(newCoScho);
+            } catch (err) {
+                console.error("Critical error in marks loader:", err);
+            } finally {
+                setIsLoadingMarks(false);
             }
-            setResultsMap(newMap);
-            setCoSchoMap(newCoScho);
-            setIsLoadingMarks(false);
         };
         load();
     }, [myClass, sessionExams, students]);
@@ -562,6 +622,16 @@ export default function TeacherMarksPage() {
                                         <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
                                         <p className="font-semibold">No students found</p>
                                         <p className="text-muted-foreground text-sm mt-1">No students enrolled in Class {myClass!.className} — {myClass!.section}</p>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {!isLoadingMarks && students.length > 0 && subjects.length === 0 && (
+                                <Card className="border-dashed bg-muted/5">
+                                    <CardContent className="py-12 text-center">
+                                        <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                                        <p className="font-semibold">No subjects configured</p>
+                                        <p className="text-muted-foreground text-sm mt-1">Please ask the administration to configure subjects for Class {myClass!.className} before entering marks.</p>
                                     </CardContent>
                                 </Card>
                             )}
