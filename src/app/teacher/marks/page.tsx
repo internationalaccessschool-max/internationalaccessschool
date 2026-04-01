@@ -241,10 +241,10 @@ export default function TeacherMarksPage() {
     const getUnitExam = (which: "unit1" | "unit2"): Exam | undefined => {
         const all = sessionExams.filter(e => e.examType === "Unit Test");
         if (which === "unit1") {
-            return all.find(e => e.name?.toLowerCase().includes("unit i") && !e.name?.toLowerCase().includes("unit ii"))
-                ?? all[0];
+            // Match "Unit I" but NOT "Unit II" using regex negative lookahead
+            return all.find(e => /unit\s+i(?!i)/i.test(e.name || "")) ?? all[0];
         }
-        return all.find(e => e.name?.toLowerCase().includes("unit ii"))
+        return all.find(e => /unit\s+ii/i.test(e.name || ""))
             ?? (all.length > 1 ? all[1] : undefined);
     };
 
@@ -294,7 +294,7 @@ export default function TeacherMarksPage() {
         const normCls = myClass.className.replace(/^class\s*/i, "").trim();
         const examId = exam.id;
         const isUnit = exam.examType === "Unit Test";
-        const isAnnual = exam.examType === "Annual Exam";
+        const isTermOrAnnual = exam.examType === "Annual Exam" || exam.examType === "Term Exam";
 
         try {
             for (const student of students) {
@@ -319,7 +319,7 @@ export default function TeacherMarksPage() {
                 } else {
                     subjects.forEach(sub => {
                         const obt = parseFloat(entry[sub.id] || "") || 0;
-                        const maxM = isAnnual ? 80 : sub.maxMarks;
+                        const maxM = isTermOrAnnual ? 80 : sub.maxMarks;
                         marks[sub.id] = {
                             subjectId: sub.id,
                             obtained: obt,
@@ -329,7 +329,7 @@ export default function TeacherMarksPage() {
                 }
 
                 const totalObtained = Object.values(marks).reduce((s, m) => s + (m.obtained || 0), 0);
-                const totalMax = subjects.reduce((s, sub) => s + (isUnit ? 20 : isAnnual ? 80 : sub.maxMarks), 0);
+                const totalMax = subjects.reduce((s, sub) => s + (isUnit ? 20 : isTermOrAnnual ? 80 : sub.maxMarks), 0);
                 const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
 
                 const payload: Record<string, any> = {
@@ -349,7 +349,7 @@ export default function TeacherMarksPage() {
                     updatedAt: Date.now(),
                 };
 
-                if (isAnnual) {
+                if (exam.examType === "Annual Exam") {
                     payload.coScholastic = coSchoMap[student.id] || {};
                 }
 
