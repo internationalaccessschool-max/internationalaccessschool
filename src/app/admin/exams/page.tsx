@@ -27,7 +27,10 @@ import {
     Dialog, DialogContent, DialogDescription, DialogHeader,
     DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck, FileText } from "lucide-react";
+import { ClipboardList, Plus, Edit2, Trash2, Globe, Lock, Loader2, CalendarClock, Clock, FileCheck, FileText, Map } from "lucide-react";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 // Fixed canonical class list — always show NUR, LKG, UKG, 1-12
 const FIXED_CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -63,6 +66,8 @@ export default function AdminExamsPage() {
     const [timing, setTiming] = useState("");
     const [instructions, setInstructions] = useState("");
     const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+    const [examType, setExamType] = useState<string>("Standard");
+    const [session, setSession] = useState("");
 
     // Schedule publish state: examId -> datetime string ("YYYY-MM-DDTHH:mm")
     const [scheduleMap, setScheduleMap] = useState<Record<string, string>>({});
@@ -108,6 +113,8 @@ export default function AdminExamsPage() {
         setTiming("");
         setInstructions("");
         setSelectedClasses([]);
+        setExamType("Standard");
+        setSession("");
     };
 
     const openCreateDialog = () => {
@@ -123,6 +130,8 @@ export default function AdminExamsPage() {
         setTiming((exam as any).timing || "");
         setInstructions((exam as any).instructions || "");
         setSelectedClasses(exam.classesApplicable ?? []);
+        setExamType(exam.examType || "Standard");
+        setSession(exam.session || "");
         setIsDialogOpen(true);
     };
 
@@ -144,15 +153,17 @@ export default function AdminExamsPage() {
 
         setIsSaving(true);
         try {
-            const payload = {
+            const payload: Record<string, any> = {
                 name: name.trim(),
                 startDate,
                 endDate,
                 timing: timing.trim(),
                 instructions: instructions.trim(),
                 classesApplicable: selectedClasses,
+                examType: examType || "Standard",
                 updatedAt: Date.now(),
             };
+            if (session.trim()) payload.session = session.trim();
 
             if (editingId) {
                 await updateDoc(doc(db, "exams", editingId), payload);
@@ -449,8 +460,29 @@ export default function AdminExamsPage() {
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2">
                             <Label>Exam Name <span className="text-red-500">*</span></Label>
-                            <Input placeholder="e.g. Mid-Term 2025, Annual Exam"
+                            <Input placeholder="e.g. Unit I Test, Half Yearly, Annual Exam"
                                 value={name} onChange={e => setName(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Exam Type <span className="text-red-500">*</span></Label>
+                                <Select value={examType} onValueChange={setExamType}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Standard">Standard</SelectItem>
+                                        <SelectItem value="Unit Test">Unit Test (20 marks)</SelectItem>
+                                        <SelectItem value="Term Exam">Term Exam (80 marks)</SelectItem>
+                                        <SelectItem value="Annual Exam">Annual Exam (80 marks)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Academic Session</Label>
+                                <Input placeholder="e.g. 2026-27" value={session} onChange={e => setSession(e.target.value)} />
+                                <p className="text-[10px] text-muted-foreground">Apr–Mar format, e.g. 2026-27</p>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
