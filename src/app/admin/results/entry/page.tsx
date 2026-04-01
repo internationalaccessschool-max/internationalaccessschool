@@ -560,17 +560,17 @@ export default function AdminBulkMarksEntryPage() {
                                 </div>
                             )}
 
-                            {!isLoadingMarks && students.length === 0 && (
+                            {!isLoadingMarks && myClass && students.length === 0 && (
                                 <Card className="border-dashed bg-muted/5">
                                     <CardContent className="py-12 text-center">
                                         <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
                                         <p className="font-semibold">No students found</p>
-                                        <p className="text-muted-foreground text-sm mt-1">No students enrolled in Class {myClass!.className} — {myClass!.section}</p>
+                                        <p className="text-muted-foreground text-sm mt-1">No students enrolled in Class {myClass.className} — {myClass.section}</p>
                                     </CardContent>
                                 </Card>
                             )}
 
-                            {!isLoadingMarks && students.length > 0 && subjects.length > 0 && (
+                            {!isLoadingMarks && myClass && students.length > 0 && subjects.length > 0 && (
                                 <div className="overflow-x-auto rounded-xl border border-border/60 shadow-sm">
                                     <table className="w-full text-sm border-collapse">
                                         <thead>
