@@ -122,14 +122,21 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
                 }
                 setAllSessionExams(sessionExams);
 
-                // Auto-fill companion exams if they match examType
-                const unitI = sessionExams.find(e => e.examType === "Unit Test" && e.id !== examId);
-                const hy = sessionExams.find(e => e.examType === "Term Exam");
-                const unit2 = sessionExams.find(e => e.examType === "Unit Test" && e.id !== unitI?.id && e.id !== examId);
+                // Auto-fill companion exams by name matching (more reliable than position)
+                const unitTests = sessionExams
+                    .filter(e => e.examType === "Unit Test")
+                    .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+                const unitI = unitTests.find(e => /unit[\s-]*(i|1)(?![i\d])/i.test(e.name || ""))
+                    ?? unitTests[0];
+                const unit2 = unitTests.find(e => /unit[\s-]*(ii|2)/i.test(e.name || ""))
+                    ?? unitTests[1];
+                const hy = sessionExams.find(e => e.examType === "Term Exam"
+                    || /half[\s-]*year/i.test(e.name || ""));
                 if (unitI) setUnitExamId(unitI.id!);
                 if (hy) setHyExamId(hy.id!);
                 if (unit2) setUnit2ExamId(unit2.id!);
-                if (exam.examType === "Unit Test" && !unitExamId) setUnitExamId(examId);
+                // If current exam IS the annual, we're fine. If not, set unit as current.
+                if (exam.examType === "Unit Test" && !unitI) setUnitExamId(examId);
 
                 // Load available classes from the current exam
                 const classesApplicable = exam.classesApplicable || [];
@@ -148,14 +155,21 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
                         classSecMap[cn].add(sec);
                     }
                 });
-                // Also check normalized
+                // Section loading: scan profiles for section names matching accessible classes
                 const allSec = new Set<string>();
-                classesApplicable.forEach(cls => {
-                    const s1 = classSecMap[cls];
-                    const norm = cls.replace(/^class\s*/i, "").trim();
-                    const s2 = classSecMap[norm];
-                    if (s1) s1.forEach(s => allSec.add(s));
-                    if (s2) s2.forEach(s => allSec.add(s));
+                const classesApplicableNorms = classesApplicable.map(c => c.replace(/^class\s*/i, "").trim());
+                profSnap.docs.forEach(d => {
+                    // Try to get className from path parts first (most reliable)
+                    const pathParts = d.ref.path.split("/");
+                    const clsIdx = pathParts.indexOf("classes");
+                    const secIdx = pathParts.indexOf("sections");
+                    let cn = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.data().className || d.data().currentClass || "");
+                    const sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.data().section || "");
+                    const normCn = cn.replace(/^class\s*/i, "").trim();
+                    if (sec && (classesApplicable.includes(cn) || classesApplicableNorms.includes(normCn)
+                        || classesApplicable.includes(`Class ${normCn}`) || classesApplicableNorms.includes(normCn))) {
+                        allSec.add(sec);
+                    }
                 });
                 setAvailableSections(Array.from(allSec));
             } finally {
@@ -204,13 +218,25 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
                 }
             }
             if (allProfiles.length === 0) {
-                // fallback: query all users
+                // fallback 1: try "Class N" variant if tried "N", or vice versa
+                const altCls = normCls !== selectedClass ? selectedClass : `Class ${normCls}`;
+                const altSnap = await getDocs(
+                    collection(db, "users", "classes", altCls, "sections", selectedSection, "students", "profiles")
+                );
+                if (altSnap.docs.length > 0) {
+                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                }
+            }
+            if (allProfiles.length === 0) {
+                // fallback 2: query all users and filter
                 const usersSnap = await getDocs(collection(db, "users"));
                 allProfiles = usersSnap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter((d: any) =>
                         (d.role === "student") &&
-                        (d.className === selectedClass || d.className === normCls || d.currentClass === selectedClass || d.currentClass === normCls) &&
+                        (d.className === selectedClass || d.className === normCls ||
+                         d.className === `Class ${normCls}` ||
+                         d.currentClass === selectedClass || d.currentClass === normCls) &&
                         d.section === selectedSection
                     );
             }
@@ -227,7 +253,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             for (const [key, eId] of Object.entries(examIds)) {
                 if (!eId) continue;
                 allMarksData[eId] = {};
-                for (const cls of [selectedClass, normCls]) {
+                for (const cls of [normCls, selectedClass, `Class ${normCls}`]) {
                     try {
                         const snap = await getDocs(
                             collection(db, "results", eId, "classes", cls, "sections", selectedSection, "students")
@@ -252,7 +278,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
 
             // 3. Fetch co-scholastic from annual exam marks
             const coSchoData: Record<string, Record<string, { hy?: string; annual?: string }>> = {};
-            for (const cls of [selectedClass, normCls]) {
+            for (const cls of [normCls, selectedClass, `Class ${normCls}`]) {
                 try {
                     const snap = await getDocs(
                         collection(db, "results", examId, "classes", cls, "sections", selectedSection, "students")
@@ -355,13 +381,16 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             studentResults.sort((a, b) => a.name.localeCompare(b.name));
 
             // Compute rank
+            // For Unit Tests: obtained = PT+NB+SEA (saved by teacher). Use it, with fallback to recalculate.
+            const calcUnitObt = (m: MarksEntry | undefined) =>
+                m ? (m.obtained ?? ((m.perTest ?? 0) + (m.noteBook ?? 0) + (m.sea ?? 0))) : 0;
             const grandTotals = studentResults.map(s => {
                 let total = 0;
                 subjects.forEach(sub => {
                     const sid = (sub.id || sub.name) as string;
-                    const u1 = (unitExamId ? s.examMarks[unitExamId]?.[sid]?.obtained : null) ?? 0;
-                    const hy = (hyExamId ? s.examMarks[hyExamId]?.[sid]?.obtained : null) ?? 0;
-                    const u2 = (unit2ExamId ? s.examMarks[unit2ExamId]?.[sid]?.obtained : null) ?? 0;
+                    const u1 = unitExamId ? calcUnitObt(s.examMarks[unitExamId]?.[sid]) : 0;
+                    const hy = hyExamId ? (s.examMarks[hyExamId]?.[sid]?.obtained ?? 0) : 0;
+                    const u2 = unit2ExamId ? calcUnitObt(s.examMarks[unit2ExamId]?.[sid]) : 0;
                     const ann = s.examMarks[examId]?.[sid]?.obtained ?? 0;
                     total += (u1 + hy + u2 + ann);
                 });
