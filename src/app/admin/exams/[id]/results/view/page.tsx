@@ -13,7 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Search, Printer, FileText, LayoutTemplate } from "lucide-react";
+import { Loader2, Search, Printer, FileText, LayoutTemplate, Ticket } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
@@ -302,12 +302,20 @@ th:not(:first-child){text-align:right;}
                         </p>
                     </div>
                 </div>
-                <Link href={`/admin/exams/${examId}/results/landscape`}>
-                    <Button variant="outline" className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                        <LayoutTemplate className="h-4 w-4" />
-                        Generate Landscape Report Cards
-                    </Button>
-                </Link>
+                <div className="flex gap-2">
+                    <Link href={`/admin/exams/${examId}/admit-cards`}>
+                        <Button variant="outline" className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50">
+                            <Ticket className="h-4 w-4" />
+                            Admit Cards
+                        </Button>
+                    </Link>
+                    <Link href={`/admin/exams/${examId}/results/landscape`}>
+                        <Button variant="outline" className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                            <LayoutTemplate className="h-4 w-4" />
+                            Landscape Report Cards
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 items-center bg-muted/20 p-4 rounded-xl border">
