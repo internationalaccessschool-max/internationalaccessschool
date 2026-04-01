@@ -422,7 +422,7 @@ export default function TeacherMarksPage() {
                 </div>
 
                 {/* Session selector */}
-                {sessions.length > 1 && (
+                {sessions.length > 0 && (
                     <div className="flex items-center gap-2">
                         <Label className="text-sm whitespace-nowrap">Academic Session</Label>
                         <Select value={selectedSession} onValueChange={setSelectedSession}>
@@ -586,9 +586,17 @@ export default function TeacherMarksPage() {
                                                 {!isUnit && subjects.map(sub => (
                                                     <th key={sub.id} className="text-center px-2 py-3 font-semibold min-w-[80px] border-l border-slate-600">
                                                         <div className="text-xs leading-tight">{sub.name}</div>
-                                                        <div className="text-xs font-normal text-slate-300 mt-0.5">/80</div>
+                                                        <div className="text-xs font-normal text-slate-300 mt-0.5">{exam?.examType === "Term Exam" || isAnnual ? "/80" : `/${sub.maxMarks}`}</div>
                                                     </th>
                                                 ))}
+
+                                                {/* Total column */}
+                                                <th className="text-center px-3 py-3 font-semibold min-w-[70px] border-l-2 border-slate-500 bg-slate-900">
+                                                    <div className="text-xs">Total</div>
+                                                    <div className="text-xs font-normal text-slate-300 mt-0.5">
+                                                        /{isUnit ? subjects.length * 20 : subjects.length * (exam?.examType === "Term Exam" || isAnnual ? 80 : 100)}
+                                                    </div>
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -635,7 +643,7 @@ export default function TeacherMarksPage() {
                                                     {!isUnit && subjects.map(sub => {
                                                         const val = markVal(exam.id!, student.id, sub.id);
                                                         const numVal = parseFloat(val);
-                                                        const max = 80;
+                                                        const max = exam?.examType === "Term Exam" || isAnnual ? 80 : sub.maxMarks;
                                                         const isOver = !isNaN(numVal) && numVal > max;
                                                         return (
                                                             <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
@@ -650,6 +658,28 @@ export default function TeacherMarksPage() {
                                                             </td>
                                                         );
                                                     })}
+
+                                                    {/* Total cell */}
+                                                    {(() => {
+                                                        let total = 0;
+                                                        if (isUnit) {
+                                                            subjects.forEach(sub => {
+                                                                const pt = parseFloat(markVal(exam.id!, student.id, `${sub.id}__perTest`) || "0") || 0;
+                                                                const nb = parseFloat(markVal(exam.id!, student.id, `${sub.id}__noteBook`) || "0") || 0;
+                                                                const se = parseFloat(markVal(exam.id!, student.id, `${sub.id}__sea`) || "0") || 0;
+                                                                total += pt + nb + se;
+                                                            });
+                                                        } else {
+                                                            subjects.forEach(sub => {
+                                                                total += parseFloat(markVal(exam.id!, student.id, sub.id) || "0") || 0;
+                                                            });
+                                                        }
+                                                        return (
+                                                            <td className="border-l-2 border-border/50 px-2 py-1.5 bg-slate-50/80 text-center">
+                                                                <span className="font-bold text-sm text-primary">{total}</span>
+                                                            </td>
+                                                        );
+                                                    })()}
                                                 </tr>
                                             ))}
                                         </tbody>
