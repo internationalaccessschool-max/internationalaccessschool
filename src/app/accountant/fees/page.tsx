@@ -459,57 +459,79 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
 
-                // ── CLEAR CARRIED-FORWARD TRANSPORT ARREARS ─────────────────
-                // When April transport (with March dues) is paid, also mark
-                // March's "carried_forward" transport record as "paid".
+                // ── UNIFIED TRANSPORT CASCADE DEDUCTION ───────────────────────
+                // Same logic as the school fee cascade:
+                //   1. Walk FORWARD through every transport month in the chain
+                //   2. For each carried_forward month  → clear its stale previousDues
+                //      so it shows only its own base transport fee
+                //   3. For the first LIVE (pending/overdue) month → deduct the paid
+                //      transport fee so the active bill is correct
+                //
+                // Example (April paid, Sep is live):
+                //   May(CF, fix) → Jun(CF, fix) → Jul(CF, fix) → Aug(CF, fix) → Sep(deduct) ✅
                 try {
-                    if ((record.transportPreviousDues || 0) > 0) {
-                        let prevMonth = (record.month || 1) - 1;
-                        let prevYear = record.year;
-                        if (prevMonth <= 0) { prevMonth = 12; prevYear -= 1; }
+                    // Use base transport fee for this month (not stale totalAmount)
+                    const transpPaidAmount = record.transportFeeAmount || 0;
 
-                        const prevTransRef = doc(
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let nextTMonth = (record.month || 1) + offset;
+                        let nextTYear = record.year;
+                        while (nextTMonth > 12) { nextTMonth -= 12; nextTYear += 1; }
+
+                        const nextTransRef = doc(
                             db, "transportFeeRecords",
-                            prevYear.toString(), "months", prevMonth.toString(), "students", studentUid
+                            nextTYear.toString(), "months", nextTMonth.toString(), "students", studentUid
                         );
-                        const prevTransSnap = await getDoc(prevTransRef);
-                        if (prevTransSnap.exists() && prevTransSnap.data()?.status === "carried_forward") {
-                            await updateDoc(prevTransRef, {
-                                status: "paid",
-                                paidOn: new Date(),
-                                clearedViaReceiptNo: transportReceiptNo,
-                                clearedViaMonth: record.month,
-                                clearedViaYear: record.year,
-                            });
-                        }
-                    }
-                } catch { /* best-effort */ }
-                // ── END CLEAR TRANSPORT CARRIED-FORWARD ──────────────────────
+                        const nextTransSnap = await getDoc(nextTransRef);
 
-                // ── RECONCILE STALE TRANSPORT DUES (if paid separately first) 
-                try {
-                    const transpPaidAmount = transpBaseTotal;
-                    let nextMonth = (record.month || 1) + 1;
-                    let nextYear = record.year;
-                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-
-                    const nextTransRef = doc(
-                        db, "transportFeeRecords",
-                        nextYear.toString(), "months", nextMonth.toString(), "students", studentUid
-                    );
-                    const nextTransSnap = await getDoc(nextTransRef);
-                    if (nextTransSnap.exists()) {
+                        if (!nextTransSnap.exists()) break; // chain ends — nothing further
                         const ntd = nextTransSnap.data() as any;
-                        if ((ntd.previousDues || 0) > 0 && ntd.status !== "paid") {
+
+                        if (ntd.status === "paid") break; // already cleared — stop
+
+                        if (ntd.status === "carried_forward") {
+                            // Fix stale CF transport record ───────────────────────────
+                            // Clear the portion of previousDues that came from the month
+                            // just paid so this record accurately shows its own base fee.
+                            const oldPrev = ntd.previousDues || 0;
+                            if (oldPrev > 0) {
+                                const newPrev = Math.max(0, oldPrev - transpPaidAmount);
+                                const newTotal = (ntd.amount || 0) + newPrev;
+                                try {
+                                    await updateDoc(nextTransRef, {
+                                        previousDues: newPrev,
+                                        totalAmount: newTotal,
+                                    });
+                                    // Also refresh local state for merge display
+                                    setRecords(prev => prev.map(r =>
+                                        (r.studentId || r.id) === studentUid && r.month === nextTMonth && r.year === nextTYear
+                                            ? { ...r, transportPreviousDues: newPrev, transportTotalAmount: newTotal }
+                                            : r
+                                    ));
+                                } catch { /* best-effort */ }
+                            }
+                            continue; // keep scanning for the live bill
+                        }
+
+                        // ── Found the LIVE transport bill — deduct here ────────────
+                        if ((ntd.previousDues || 0) > 0) {
                             const newPrevDues = Math.max(0, (ntd.previousDues || 0) - transpPaidAmount);
+                            const newTotal = (ntd.amount || 0) + newPrevDues;
                             await updateDoc(nextTransRef, {
                                 previousDues: newPrevDues,
-                                totalAmount: (ntd.amount || 0) + newPrevDues,
+                                totalAmount: newTotal,
                             });
+                            setRecords(prev => prev.map(r =>
+                                (r.studentId || r.id) === studentUid && r.month === nextTMonth && r.year === nextTYear
+                                    ? { ...r, transportPreviousDues: newPrevDues, transportTotalAmount: newTotal }
+                                    : r
+                            ));
                         }
+                        break; // processed the live bill — stop
                     }
                 } catch { /* best-effort */ }
-                // ── END RECONCILE TRANSPORT ──────────────────────────────────
+                // ── END TRANSPORT CASCADE ─────────────────────────────────────────
+
 
 
 
