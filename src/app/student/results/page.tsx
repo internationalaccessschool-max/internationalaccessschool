@@ -8,8 +8,20 @@ import { Result, Exam, Subject } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Download, Award, FileText, ChevronRight, School } from "lucide-react";
+import { Loader2, Download, Award, FileText, ChevronRight, School, LayoutTemplate } from "lucide-react";
 import { getStudentClassInfo } from "@/lib/utils/studentProfile";
+
+// Grading scale for landscape 4-exam format
+function getGrade(pct: number): string {
+    if (pct >= 90.5) return "A1";
+    if (pct >= 81) return "A2";
+    if (pct >= 71) return "B1";
+    if (pct >= 61) return "B2";
+    if (pct >= 51) return "C1";
+    if (pct >= 41) return "C2";
+    if (pct >= 33) return "D";
+    return "E";
+}
 
 export default function StudentResultsPage() {
     const { user } = useAuth();
@@ -118,6 +130,89 @@ export default function StudentResultsPage() {
     }, [user]);
 
 
+    const handleDownloadLandscapePDF = (result: Result) => {
+        if (typeof window === "undefined") return;
+        const { examName } = result;
+        const studentName = user?.displayName || "Student";
+        const clsId = result.classId;
+        const secId = result.sectionId;
+
+        const subjectList = Object.values(result.marks);
+        const subjectRows = subjectList.map(m => {
+            const subName = subjects[m.subjectId]?.name || "Unknown Subject";
+            const examTypeMark = (result as any).examType;
+            const isUnit = examTypeMark === "Unit Test";
+            const ptVal = isUnit ? (m.perTest !== null && m.perTest !== undefined ? m.perTest : 0) : "—";
+            const nbVal = isUnit ? (m.noteBook !== null && m.noteBook !== undefined ? m.noteBook : 0) : "—";
+            const seaVal = isUnit ? (m.sea !== null && m.sea !== undefined ? m.sea : 0) : "—";
+            const testTotal = isUnit ? ((m.perTest || 0) + (m.noteBook || 0) + (m.sea || 0)) : "—";
+            const maxM = m.total;
+            const obt = m.obtained !== null ? m.obtained : 0;
+            const pct = maxM > 0 ? (obt / maxM) * 100 : 0;
+            const grade = getGrade(pct);
+            return `<tr>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:left">${subName}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center">${ptVal}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center">${nbVal}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center">${seaVal}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-weight:bold">${testTotal}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-weight:bold">${obt}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center">${m.total}</td>
+                <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;color:#1a6b2e;font-weight:bold">${grade}</td>
+            </tr>`;
+        }).join("");
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Report Card - ${studentName}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:11px;}
+.hdr{background:#1a2e4c;color:#fff;padding:12px 20px;text-align:center;}
+.school{font-size:18px;font-weight:800;}
+.exam{font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+.info{display:flex;gap:20px;flex-wrap:wrap;padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;}
+.info-item{display:flex;flex-direction:column;}
+.info-lbl{font-size:8px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:#6b7280;}
+.info-val{font-size:12px;font-weight:700;color:#1a2e4c;}
+.tbl-sec{margin:10px 20px;}
+table{width:100%;border-collapse:collapse;font-size:10px;}
+th{padding:4px 6px;background:#1a2e4c;color:#fff;text-align:center;border:1px solid #ccc;}
+.sum{display:flex;gap:10px;padding:10px 20px;}
+.sb{flex:1;padding:10px;border:1px solid #e5e7eb;border-radius:6px;}
+.sl{font-size:8px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:#6b7280;margin-bottom:3px;}
+.sv{font-size:22px;font-weight:900;color:#1a2e4c;}
+.sigs{display:flex;gap:20px;justify-content:space-around;margin:20px 20px 0;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;}
+.sline{border-bottom:2px dashed #d1d5db;margin:0 auto 6px;width:75%;height:30px;}
+.sname{font-size:8px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:#6b7280;}
+@page{size:A4 landscape;margin:8mm;}
+</style></head><body>
+<div class="hdr"><div class="school">International Access School</div>
+<div class="exam">${examName || "Report Card"}${(result as any).session ? " — Session " + (result as any).session : ""}</div></div>
+<div class="info">
+<div class="info-item"><span class="info-lbl">Student Name</span><span class="info-val">${studentName}</span></div>
+<div class="info-item"><span class="info-lbl">Class & Section</span><span class="info-val">${clsId} — ${secId}</span></div>
+<div class="info-item"><span class="info-lbl">Total Marks</span><span class="info-val">${result.totalObtained} / ${result.totalMax}</span></div>
+<div class="info-item"><span class="info-lbl">Percentage</span><span class="info-val">${result.percentage}%</span></div>
+<div class="info-item"><span class="info-lbl">Grade</span><span class="info-val">${result.overallGrade}</span></div>
+</div>
+<div class="tbl-sec"><table>
+<thead><tr><th style="text-align:left">Subject</th><th>Per Test /10</th><th>Note Book /5</th><th>SEA /5</th><th>Test Total /20</th><th>Obtained</th><th>Max</th><th>Grade</th></tr></thead>
+<tbody>${subjectRows}</tbody>
+</table></div>
+<div class="sigs">
+<div><div class="sline"></div><div class="sname">Class Teacher</div></div>
+<div><div class="sline"></div><div class="sname">Principal</div></div>
+<div><div class="sline"></div><div class="sname">Parent / Guardian</div></div>
+</div></body></html>`;
+
+        const pw = window.open("", "_blank", "width=1100,height=700");
+        if (!pw) { alert("Please allow popups to download as PDF"); return; }
+        pw.document.write(html);
+        pw.document.close();
+        pw.focus();
+        setTimeout(() => pw.print(), 600);
+    };
+
     const handleDownloadPDF = () => {
         if (typeof window === "undefined" || !selectedResult) return;
         const { marks, totalObtained, totalMax, percentage, overallGrade, examName, examStartDate, examEndDate } = selectedResult;
@@ -216,6 +311,10 @@ th:not(:first-child){text-align:right;}
         );
     }
 
+    const isNewFormat = selectedResult && [
+        "Unit Test", "Term Exam", "Annual Exam"
+    ].includes((selectedResult as any).examType || "");
+
     if (selectedResult) {
         const { marks, totalObtained, totalMax, percentage, overallGrade, examName, examStartDate } = selectedResult;
         const markEntries = Object.values(marks);
@@ -226,9 +325,20 @@ th:not(:first-child){text-align:right;}
                     <Button variant="outline" onClick={() => setSelectedResult(null)}>
                         &larr; Back to all results
                     </Button>
-                    <Button onClick={handleDownloadPDF} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        <Download className="mr-2 h-4 w-4" /> Download PDF / Print
-                    </Button>
+                    <div className="flex gap-2">
+                        {isNewFormat ? (
+                            <Button
+                                onClick={() => handleDownloadLandscapePDF(selectedResult)}
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                            >
+                                <LayoutTemplate className="mr-1 h-4 w-4" /> Download Landscape PDF / Print
+                            </Button>
+                        ) : (
+                            <Button onClick={handleDownloadPDF} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                <Download className="mr-2 h-4 w-4" /> Download PDF / Print
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <Card className="border-border shadow-md bg-white text-black overflow-hidden print:overflow-visible print:shadow-none print:border-none print:m-0 print:p-0" ref={reportCardRef}>
