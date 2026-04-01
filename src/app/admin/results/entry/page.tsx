@@ -135,9 +135,16 @@ export default function AdminBulkMarksEntryPage() {
     // ── 4. When class is known, load subjects and students ────────────────────
     useEffect(() => {
         if (!selectedClass || !selectedSection) return;
+        // Reset stale data immediately so old class data doesn't flash
+        setSubjects([]);
+        setStudents([]);
+        setResultsMap({});
+        setCoSchoMap({});
+
         const load = async () => {
             // Subjects
             const normCls = selectedClass.replace(/^class\s*/i, "").trim();
+            let foundSubs = false;
             for (const key of [normCls, selectedClass, `Class ${normCls}`]) {
                 const subDoc = await getDoc(doc(db, "classSubjects", key));
                 if (subDoc.exists()) {
@@ -147,9 +154,11 @@ export default function AdminBulkMarksEntryPage() {
                             ? { id: s.id || s.name, name: s.name, maxMarks: s.maxMarks || 100 }
                             : { id: s, name: s, maxMarks: 100 }
                     ));
+                    foundSubs = true;
                     break;
                 }
             }
+            if (!foundSubs) setSubjects([]);
 
             // Students
             const normSec = selectedSection;
@@ -206,44 +215,49 @@ export default function AdminBulkMarksEntryPage() {
         if (!selectedClass || !selectedSection || sessionExams.length === 0 || students.length === 0) return;
         const load = async () => {
             setIsLoadingMarks(true);
-            const newMap: Record<string, Record<string, Record<string, string>>> = {};
-            const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
+            try {
+                const newMap: Record<string, Record<string, Record<string, string>>> = {};
+                const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
 
-            for (const exam of sessionExams) {
-                if (!exam.id) continue;
-                newMap[exam.id] = {};
-                const normCls = selectedClass.replace(/^class\s*/i, "").trim();
-                for (const cls of [normCls, selectedClass]) {
-                    try {
-                        const snap = await getDocs(resultSectionCol(exam.id, cls, selectedSection));
-                        if (snap.docs.length > 0) {
-                            snap.docs.forEach(d => {
-                                const data = d.data();
-                                const entryMap: Record<string, string> = {};
-                                Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
-                                    if (exam.examType === "Unit Test") {
-                                        entryMap[`${subId}__perTest`]  = m.perTest  !== null && m.perTest  !== undefined ? String(m.perTest)  : "";
-                                        entryMap[`${subId}__noteBook`] = m.noteBook !== null && m.noteBook !== undefined ? String(m.noteBook) : "";
-                                        entryMap[`${subId}__sea`]      = m.sea      !== null && m.sea      !== undefined ? String(m.sea)      : "";
-                                    } else {
-                                        entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
+                for (const exam of sessionExams) {
+                    if (!exam.id) continue;
+                    newMap[exam.id] = {};
+                    const normCls = selectedClass.replace(/^class\s*/i, "").trim();
+                    for (const cls of [normCls, selectedClass]) {
+                        try {
+                            const snap = await getDocs(resultSectionCol(exam.id, cls, selectedSection));
+                            if (snap.docs.length > 0) {
+                                snap.docs.forEach(d => {
+                                    const data = d.data();
+                                    const entryMap: Record<string, string> = {};
+                                    Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
+                                        if (exam.examType === "Unit Test") {
+                                            entryMap[`${subId}__perTest`]  = m.perTest  !== null && m.perTest  !== undefined ? String(m.perTest)  : "";
+                                            entryMap[`${subId}__noteBook`] = m.noteBook !== null && m.noteBook !== undefined ? String(m.noteBook) : "";
+                                            entryMap[`${subId}__sea`]      = m.sea      !== null && m.sea      !== undefined ? String(m.sea)      : "";
+                                        } else {
+                                            entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
+                                        }
+                                    });
+                                    newMap[exam.id!][d.id] = entryMap;
+
+                                    // co-scholastic (stored on Annual exam)
+                                    if (exam.examType === "Annual Exam" && data.coScholastic) {
+                                        newCoScho[d.id] = data.coScholastic;
                                     }
                                 });
-                                newMap[exam.id!][d.id] = entryMap;
-
-                                // co-scholastic (stored on Annual exam)
-                                if (exam.examType === "Annual Exam" && data.coScholastic) {
-                                    newCoScho[d.id] = data.coScholastic;
-                                }
-                            });
-                            break;
-                        }
-                    } catch { /* try next cls */ }
+                                break;
+                            }
+                        } catch (err) { console.error("Error fetching marks for", cls, err); }
+                    }
                 }
+                setResultsMap(newMap);
+                setCoSchoMap(newCoScho);
+            } catch (err) {
+                console.error("Critical error in marks loader:", err);
+            } finally {
+                setIsLoadingMarks(false);
             }
-            setResultsMap(newMap);
-            setCoSchoMap(newCoScho);
-            setIsLoadingMarks(false);
         };
         load();
     }, [selectedClass, selectedSection, sessionExams, students]);
@@ -571,6 +585,16 @@ export default function AdminBulkMarksEntryPage() {
                                         <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
                                         <p className="font-semibold">No students found</p>
                                         <p className="text-muted-foreground text-sm mt-1">No students enrolled in Class {myClass.className} — {myClass.section}</p>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {!isLoadingMarks && myClass && students.length > 0 && subjects.length === 0 && (
+                                <Card className="border-dashed bg-muted/5">
+                                    <CardContent className="py-12 text-center">
+                                        <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                                        <p className="font-semibold">No subjects configured</p>
+                                        <p className="text-muted-foreground text-sm mt-1">Please configure subjects for Class {myClass.className} in the Admin Panel before entering marks.</p>
                                     </CardContent>
                                 </Card>
                             )}
