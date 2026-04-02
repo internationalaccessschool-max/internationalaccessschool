@@ -460,7 +460,10 @@ export default function ManageFeesPage() {
                 const _ttimeStr = `${_tpad(_tnow.getHours())}${_tpad(_tnow.getMinutes())}${_tpad(_tnow.getSeconds())}`;
                 const _trnd = Math.random().toString(36).substring(2, 5).toUpperCase();
                 const transportReceiptNo = `TRP-${_tdateStr}-${_ttimeStr}-${_trnd}`;
-                const transpBaseTotal = record.transportTotalAmount || record.transportFeeAmount || 0;
+                const isTranspCF = record.transportStatus === "carried_forward";
+                const transpBaseTotal = isTranspCF 
+                    ? record.transportFeeAmount || 0 
+                    : record.transportTotalAmount || record.transportFeeAmount || 0;
                 const transpDiscount = computeDiscount(transpBaseTotal);
                 const transpTotalPaid = transpBaseTotal - transpDiscount;
                 const transpDiscountFields = discountType !== "none" && transpDiscount > 0 ? {
@@ -539,8 +542,8 @@ export default function ManageFeesPage() {
                 // Example (April paid, Sep is live):
                 //   May(CF, fix) → Jun(CF, fix) → Jul(CF, fix) → Aug(CF, fix) → Sep(deduct) ✅
                 try {
-                    // Use base transport fee for this month (not stale totalAmount)
-                    const transpPaidAmount = record.transportFeeAmount || 0;
+                    // Deduct exactly what was paid into the base fee / arrears
+                    const transpPaidAmount = transpBaseTotal;
 
                     for (let offset = 1; offset <= 12; offset++) {
                         let nextTMonth = (record.month || 1) + offset;
@@ -1117,11 +1120,13 @@ export default function ManageFeesPage() {
                                     const schoolAlreadyPaid = markPaidRecord.status === "paid";
                                     const schoolTotal = (schoolAlreadyPaid || isCF) ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
                                     const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
-                                    const transportTotal = markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
+                                    const isTranspCF = markPaidRecord.transportStatus === "carried_forward";
+                                    const transportTotal = isTranspCF ? transportFee : markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
+                                    const transportAlreadyPaid = markPaidRecord.transportStatus === "paid";
                                     // Amount payable changes based on what accountant selected
                                     const totalPayable = markPaidType === "school" ? (schoolAlreadyPaid ? 0 : schoolTotal)
-                                        : markPaidType === "transport" ? transportTotal
-                                        : (schoolAlreadyPaid ? 0 : schoolTotal) + transportTotal;
+                                        : markPaidType === "transport" ? (transportAlreadyPaid ? 0 : transportTotal)
+                                        : (schoolAlreadyPaid ? 0 : schoolTotal) + (transportAlreadyPaid ? 0 : transportTotal);
                                     // Build breakdown lines (only show non-zero items)
                                     const breakdownLines: { label: string; amount: number }[] = [
                                         { label: "Tuition Fee",      amount: bd.tuitionFee      || 0 },
@@ -1182,12 +1187,13 @@ export default function ManageFeesPage() {
                                                         <span className="flex items-center gap-1.5"><Bus className="w-4 h-4" /> Transport Fee (Current Month)</span>
                                                         <span>₹{transportFee.toLocaleString()}</span>
                                                     </div>
-                                                    {transportPrevDues > 0 && (
+                                                    {!isTranspCF && transportPrevDues > 0 && (
                                                         <div className="flex justify-between text-sm">
                                                             <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous Transport Dues</span>
                                                             <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
                                                         </div>
                                                     )}
+
                                                 </>
                                             )}
                                             <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
