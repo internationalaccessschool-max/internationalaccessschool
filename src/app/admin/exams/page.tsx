@@ -4,14 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
     collection, doc, onSnapshot, query, orderBy,
-    collectionGroup, getDocs, setDoc, updateDoc, writeBatch,
+    collectionGroup, getDocs, updateDoc, writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Exam } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Dialog, DialogContent, DialogDescription, DialogHeader,
@@ -19,7 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import {
     CheckCircle2, Circle, Globe, Lock, Loader2, CalendarCheck,
-    ChevronRight, Settings2, Plus, Eye, BookOpen, FileCheck, Layers, Ticket,
+    Settings2, Plus, Eye, BookOpen, FileCheck, Layers, Ticket,
+    Power, PowerOff,
 } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ export default function AdminExamsPage() {
     const [sessionYear, setSessionYear] = useState("");
     const [isSavingSession, setIsSavingSession] = useState(false);
 
-    // Exam config dialog (dates + classes for one slot)
+    // Exam config dialog (dates + classes + auto-publish for one slot)
     const [configExam, setConfigExam] = useState<Exam | null>(null);
     const [cfgStartDate, setCfgStartDate] = useState("");
     const [cfgEndDate, setCfgEndDate] = useState("");
@@ -142,6 +142,7 @@ export default function AdminExamsPage() {
             setIsLoading(false);
         }, () => setIsLoading(false));
         return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ── Load class names ─────────────────────────────────────────────────────
@@ -166,19 +167,7 @@ export default function AdminExamsPage() {
     const sessions = Array.from(new Set(exams.map(e => e.session || "").filter(Boolean))).sort().reverse();
     const ungrouped = exams.filter(e => !e.session); // legacy exams with no session
 
-    function getSessionExam(session: string, slot: Slot): Exam | undefined {
-        const sessionExams = exams.filter(e => e.session === session && e.examType === slot.examType);
-        if (slot.examType !== "Unit Test") return sessionExams[0];
-        // For Unit Tests, distinguish Unit I vs Unit II properly
-        if (slot.key === "unit1") {
-            // Match "Unit I" but NOT "Unit II" — use regex word boundary
-            return sessionExams.find(e => /unit\s+i(?!i)/i.test(e.name || "")) ?? sessionExams[0];
-        }
-        // unit2
-        return sessionExams.find(e => /unit\s+ii/i.test(e.name || "")) ?? (sessionExams.length > 1 ? sessionExams[1] : undefined);
-    }
-
-    // ── Create / setup a new session (auto-creates 4 exam docs) ─────────────
+    // ── Create / setup a new session ─────────────────────────────────────────
     const handleCreateSession = async () => {
         const yr = sessionYear.trim();
         if (!yr || !/^\d{4}-\d{2}$/.test(yr) && !/^\d{4}-\d{4}$/.test(yr)) {
@@ -195,6 +184,7 @@ export default function AdminExamsPage() {
                     examType: slot.examType,
                     session: yr,
                     status: "Inactive",
+                    isActive: false,
                     classesApplicable: [],
                     startDate: "",
                     endDate: "",
@@ -212,14 +202,21 @@ export default function AdminExamsPage() {
         }
     };
 
-    // ── Activate / Publish toggle ────────────────────────────────────────────
-    const handleToggleStatus = async (exam: Exam) => {
-        const next = exam.status === "Inactive" ? "Active" :
-                     exam.status === "Active"   ? "Published" : "Active";
+    // ── Toggle isActive (marks entry on/off) ─────────────────────────────────
+    const handleToggleActive = async (exam: Exam) => {
+        const newActive = !exam.isActive;
         try {
-            await updateDoc(doc(db, "exams", exam.id!), { status: next });
-            // Refresh the exams list so UI reflects the change for THIS exam only
-            setExams(prev => prev.map(e => e.id === exam.id ? { ...e, status: next } : e));
+            await updateDoc(doc(db, "exams", exam.id!), { isActive: newActive, updatedAt: Date.now() });
+        } catch (err: any) {
+            alert("Error: " + err.message);
+        }
+    };
+
+    // ── Toggle publish status ────────────────────────────────────────────────
+    const handleTogglePublish = async (exam: Exam) => {
+        const next = exam.status === "Published" ? "Active" : "Published";
+        try {
+            await updateDoc(doc(db, "exams", exam.id!), { status: next, updatedAt: Date.now() });
         } catch (err: any) {
             alert("Error: " + err.message);
         }
@@ -241,6 +238,7 @@ export default function AdminExamsPage() {
                 startDate: cfgStartDate,
                 endDate: cfgEndDate,
                 classesApplicable: cfgClasses,
+                updatedAt: Date.now(),
             });
             setConfigExam(null);
         } catch (err: any) {
@@ -344,13 +342,14 @@ export default function AdminExamsPage() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {SESSION_EXAM_SLOTS.filter(s => s.term === "Term 1").map(slot => {
-                                const exam = getSessionExam(activeSession, slot);
+                                const exam = getSessionExam(exams, activeSession, slot);
                                 return (
                                     <ExamSlotCard
                                         key={slot.key}
                                         slot={slot}
                                         exam={exam}
-                                        onToggleStatus={() => exam && handleToggleStatus(exam)}
+                                        onToggleActive={() => exam && handleToggleActive(exam)}
+                                        onTogglePublish={() => exam && handleTogglePublish(exam)}
                                         onConfig={() => exam && openConfig(exam)}
                                     />
                                 );
@@ -367,13 +366,14 @@ export default function AdminExamsPage() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {SESSION_EXAM_SLOTS.filter(s => s.term === "Term 2").map(slot => {
-                                const exam = getSessionExam(activeSession, slot);
+                                const exam = getSessionExam(exams, activeSession, slot);
                                 return (
                                     <ExamSlotCard
                                         key={slot.key}
                                         slot={slot}
                                         exam={exam}
-                                        onToggleStatus={() => exam && handleToggleStatus(exam)}
+                                        onToggleActive={() => exam && handleToggleActive(exam)}
+                                        onTogglePublish={() => exam && handleTogglePublish(exam)}
                                         onConfig={() => exam && openConfig(exam)}
                                     />
                                 );
@@ -470,7 +470,7 @@ export default function AdminExamsPage() {
                     <DialogHeader>
                         <DialogTitle>Configure — {configExam?.name}</DialogTitle>
                         <DialogDescription>
-                            Set exam dates and which classes this exam applies to.
+                            Set exam dates and applicable classes.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-5 py-2">
@@ -484,6 +484,7 @@ export default function AdminExamsPage() {
                                 <Input type="date" value={cfgEndDate} onChange={e => setCfgEndDate(e.target.value)} />
                             </div>
                         </div>
+
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <Label>Applicable Classes</Label>
@@ -529,15 +530,18 @@ export default function AdminExamsPage() {
 // ─── Exam Slot Card (sub-component) ──────────────────────────────────────────
 function ExamSlotCard({
     slot, exam,
-    onToggleStatus, onConfig,
+    onToggleActive, onTogglePublish, onConfig,
 }: {
     slot: Slot;
     exam: Exam | undefined;
-    onToggleStatus: () => void;
+    onToggleActive: () => void;
+    onTogglePublish: () => void;
     onConfig: () => void;
 }) {
     const c = colorMap[slot.color];
     const status = exam?.status || "Inactive";
+    const isActive = exam?.isActive ?? false;
+    const isPublished = status === "Published";
 
     return (
         <Card className={`border ${exam ? c.border : "border-dashed border-gray-200"} ${exam ? c.bg : "bg-gray-50/40"} transition-all`}>
@@ -561,9 +565,22 @@ function ExamSlotCard({
             <CardContent className="space-y-3 pt-0">
                 {exam ? (
                     <>
-                        {/* Status */}
-                        <div className="flex items-center justify-between">
-                            {statusBadge(status)}
+                        {/* Status row */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                                {statusBadge(status)}
+                                {/* Marks Open/Closed pill */}
+                                <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                                    isActive
+                                        ? "bg-green-100 text-green-700 border-green-200"
+                                        : "bg-gray-100 text-gray-500 border-gray-200"
+                                }`}>
+                                    {isActive
+                                        ? <><Power className="w-3 h-3" /> Marks Open</>
+                                        : <><PowerOff className="w-3 h-3" /> Marks Closed</>
+                                    }
+                                </span>
+                            </div>
                             <span className="text-xs text-muted-foreground">
                                 {exam.classesApplicable?.length
                                     ? `${exam.classesApplicable.length} class(es)`
@@ -581,7 +598,7 @@ function ExamSlotCard({
                             </div>
                         )}
 
-                        {/* Action buttons */}
+                        {/* Row 1: Configure + Active/Deactive toggle */}
                         <div className="flex gap-2 pt-1">
                             <Button
                                 size="sm"
@@ -592,39 +609,57 @@ function ExamSlotCard({
                                 <Settings2 className="h-3.5 w-3.5" /> Configure
                             </Button>
 
-                            {status === "Inactive" && (
-                                <Button size="sm" className="flex-1 gap-1 text-xs bg-blue-600 hover:bg-blue-700" onClick={onToggleStatus}>
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate
-                                </Button>
-                            )}
-                            {status === "Active" && (
-                                <>
-                                    <Button size="sm" variant="outline" className="flex-1 gap-1 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={onToggleStatus}>
-                                        <Globe className="h-3.5 w-3.5" /> Publish
-                                    </Button>
-                                    <Link href={`/admin/exams/${exam.id}/results/view`} className="flex-1">
-                                        <Button size="sm" variant="outline" className="w-full gap-1 text-xs">
-                                            <Eye className="h-3.5 w-3.5" /> Results
-                                        </Button>
-                                    </Link>
-                                </>
-                            )}
-                            {status === "Published" && (
-                                <>
-                                    <Button size="sm" variant="outline" className="flex-1 gap-1 text-xs border-gray-300 text-gray-500 hover:bg-gray-50" onClick={onToggleStatus}>
-                                        <Lock className="h-3.5 w-3.5" /> Unpublish
-                                    </Button>
-                                    <Link href={`/admin/exams/${exam.id}/results/view`} className="flex-1">
-                                        <Button size="sm" className="w-full gap-1 text-xs bg-emerald-600 hover:bg-emerald-700">
-                                            <Eye className="h-3.5 w-3.5" /> View Results
-                                        </Button>
-                                    </Link>
-                                </>
-                            )}
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className={`flex-1 gap-1 text-xs ${
+                                    isActive
+                                        ? "border-red-200 text-red-600 hover:bg-red-50"
+                                        : "border-green-200 text-green-700 hover:bg-green-50"
+                                }`}
+                                onClick={onToggleActive}
+                            >
+                                {isActive
+                                    ? <><PowerOff className="h-3.5 w-3.5" /> Deactivate</>
+                                    : <><Power className="h-3.5 w-3.5" /> Activate</>
+                                }
+                            </Button>
                         </div>
 
-                        {/* Admit Card buttons — visible when Active or Published */}
-                        {(status === "Active" || status === "Published") && (
+                        {/* Row 2: Publish toggle + Results */}
+                        <div className="flex gap-2">
+                            {!isPublished ? (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1 gap-1 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                    onClick={onTogglePublish}
+                                >
+                                    <Globe className="h-3.5 w-3.5" /> Publish
+                                </Button>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1 gap-1 text-xs border-gray-300 text-gray-500 hover:bg-gray-50"
+                                    onClick={onTogglePublish}
+                                >
+                                    <Lock className="h-3.5 w-3.5" /> Unpublish
+                                </Button>
+                            )}
+                            <Link href={`/admin/exams/${exam.id}/results/view`} className="flex-1">
+                                <Button
+                                    size="sm"
+                                    variant={isPublished ? "default" : "outline"}
+                                    className={`w-full gap-1 text-xs ${isPublished ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
+                                >
+                                    <Eye className="h-3.5 w-3.5" /> Results
+                                </Button>
+                            </Link>
+                        </div>
+
+                        {/* Admit Card buttons */}
+                        {(isActive || isPublished) && (
                             <div className="flex gap-2">
                                 <Link href={`/admin/exams/${exam.id}/admit-cards`} className="flex-1">
                                     <Button size="sm" variant="outline" className="w-full gap-1 text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
