@@ -391,16 +391,16 @@ export default function AdminExamsPage() {
                         </div>
                     </div>
 
-                    {/* Landscape report button for session */}
+                    {/* Report card generator — links to landscape page with any exam from this session */}
                     {(() => {
-                        const annualExam = exams.find(e => e.session === activeSession && e.examType === "Annual Exam");
-                        if (!annualExam) return null;
+                        const sessionExam = exams.find(e => e.session === activeSession);
+                        if (!sessionExam) return null;
                         return (
                             <div className="flex justify-end">
-                                <Link href={`/admin/exams/${annualExam.id}/results/landscape`}>
+                                <Link href={`/admin/exams/${sessionExam.id}/results/landscape`}>
                                     <Button variant="outline" className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                                         <FileCheck className="h-4 w-4" />
-                                        Generate Annual Report Cards (Landscape)
+                                        Generate Report Cards — Session {activeSession}
                                     </Button>
                                 </Link>
                             </div>
