@@ -91,6 +91,8 @@ export interface Exam {
     examType?: "Standard" | "Unit Test" | "Term Exam" | "Annual Exam";
     /** Academic session e.g. "2026-27" */
     session?: string;
+    /** Whether teachers can enter marks for this exam (independent of publish state) */
+    isActive?: boolean;
 }
 
 export interface SubjectMark {
