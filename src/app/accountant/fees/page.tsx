@@ -87,6 +87,8 @@ export default function ManageFeesPage() {
     const [arrearMonthsLoading, setArrearMonthsLoading] = useState(false);
     const [schoolArrearMonths, setSchoolArrearMonths] = useState<string[]>([]);
     const [transportArrearMonths, setTransportArrearMonths] = useState<string[]>([]);
+    // Live transport dues fetched from Firestore (overrides stale Firestore field)
+    const [liveTransportDues, setLiveTransportDues] = useState<number>(0);
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -219,6 +221,7 @@ export default function ManageFeesPage() {
         if (!markPaidRecord) {
             setSchoolArrearMonths([]);
             setTransportArrearMonths([]);
+            setLiveTransportDues(0);
             return;
         }
 
@@ -273,24 +276,8 @@ export default function ManageFeesPage() {
                             break; // chain ends at a paid record
                         }
                     }
-                    // If we found real dues that differ from the stored field, patch markPaidRecord in local state
-                    if (liveTransportDues > 0 && liveTransportDues !== (markPaidRecord.transportPreviousDues || 0)) {
-                        setRecords(prev => prev.map(r =>
-                            (r.studentId || r.id) === studentId && r.month === feeMonth && r.year === feeYear
-                                ? {
-                                    ...r,
-                                    transportPreviousDues: liveTransportDues,
-                                    transportTotalAmount: (r.transportFeeAmount || 0) + liveTransportDues,
-                                }
-                                : r
-                        ));
-                        // Also patch markPaidRecord directly so the dialog re-renders with correct values
-                        setMarkPaidRecord(prev => prev ? {
-                            ...prev,
-                            transportPreviousDues: liveTransportDues,
-                            transportTotalAmount: (prev.transportFeeAmount || 0) + liveTransportDues,
-                        } : prev);
-                    }
+                    // Store the live-computed dues in dedicated state for the dialog to render
+                    setLiveTransportDues(liveTransportDues);
                 }
 
                 setSchoolArrearMonths(sMonths);
@@ -1216,9 +1203,10 @@ export default function ManageFeesPage() {
                                     const isCF = markPaidRecord.status === "carried_forward";
                                     const schoolAlreadyPaid = markPaidRecord.status === "paid";
                                     const schoolTotal = (schoolAlreadyPaid || isCF) ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
-                                    const transportPrevDues = markPaidRecord.transportPreviousDues || 0;
+                                    // Use live-scanned dues (overrides stale Firestore field)
+                                    const transportPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord.transportPreviousDues || 0);
                                     const isTranspCF = markPaidRecord.transportStatus === "carried_forward";
-                                    const transportTotal = isTranspCF ? transportFee : markPaidRecord.transportTotalAmount || (transportFee + transportPrevDues);
+                                    const transportTotal = isTranspCF ? transportFee : (transportFee + transportPrevDues);
                                     const transportAlreadyPaid = markPaidRecord.transportStatus === "paid";
                                     // Amount payable changes based on what accountant selected
                                     const totalPayable = markPaidType === "school" ? (schoolAlreadyPaid ? 0 : schoolTotal)
@@ -1363,10 +1351,11 @@ export default function ManageFeesPage() {
                                 const _schoolTotal = (_sAlreadyPaid || _isSCF) ? _sBase : (markPaidRecord.totalAmount || (_sBase + _sPrevDues));
 
                                 const _tBase = markPaidRecord.transportFeeAmount || 0;
-                                const _tPrevDues = markPaidRecord.transportPreviousDues || 0;
+                                // liveTransportDues is Firestore-scanned — overrides stale stored field
+                                const _tPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord.transportPreviousDues || 0);
                                 const _isTranspCF = markPaidRecord.transportStatus === "carried_forward";
                                 const _tAlreadyPaid = isTransportPaid(markPaidRecord);
-                                const _transportTotal = (_tAlreadyPaid || _isTranspCF) ? _tBase : (markPaidRecord.transportTotalAmount || (_tBase + _tPrevDues));
+                                const _transportTotal = (_tAlreadyPaid || _isTranspCF) ? _tBase : (_tBase + _tPrevDues);
 
                                 const _schoolDesc = _sAlreadyPaid
                                     ? `Already Paid`
