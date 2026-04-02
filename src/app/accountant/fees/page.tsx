@@ -1330,7 +1330,7 @@ export default function ManageFeesPage() {
                         <div className="px-6 py-5 space-y-3 md:flex-1 overflow-y-auto">
                             <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
 
-                            {((() => {
+                            {(() => {
                                 const _sBase = markPaidRecord.amount;
                                 const _sPrevDues = markPaidRecord.previousDues || 0;
                                 const _isSCF = markPaidRecord.status === "carried_forward";
@@ -1358,7 +1358,7 @@ export default function ManageFeesPage() {
                                 const _bothTotal = (_sAlreadyPaid ? 0 : _schoolTotal) + (_tAlreadyPaid ? 0 : _transportTotal);
                                 const _bothDesc = `₹${_bothTotal.toLocaleString()}`;
 
-                                return [
+                                const opts: { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[] = [
                                     ...(!markPaidRecord.isTransportOnly ? [
                                         { value: "school" as MarkPaidType, label: "School Fee Only", desc: _schoolDesc, icon: School, disabled: _sAlreadyPaid },
                                     ] : []),
@@ -1369,7 +1369,7 @@ export default function ManageFeesPage() {
                                         ] : []),
                                     ] : []),
                                 ];
-                            })() as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
+                                return opts.map(opt => (
                                 <label
                                     key={opt.value}
                                     className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${opt.disabled ? "opacity-40 cursor-not-allowed border-gray-100 bg-gray-50" : markPaidType === opt.value ? "border-emerald-400 bg-emerald-50" : "border-gray-100 hover:border-gray-300"}`}
@@ -1387,7 +1387,8 @@ export default function ManageFeesPage() {
                                         <p className="text-xs text-gray-400">{opt.desc}{opt.disabled ? " — Already paid" : ""}</p>
                                     </div>
                                 </label>
-                            ))}
+                            ));
+                            })()}
                             
                             <div className="pt-3 mt-3 border-t border-gray-100">
                                 <p className="text-sm font-semibold text-gray-700 mb-3">Payment Mode</p>
