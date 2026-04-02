@@ -1467,7 +1467,6 @@ export default function ManageFeesPage() {
                                     </div>
                                 );
                             })()}
-                        </div>
 
                         {/* Receipt Email — inside right column */}
                         <div className="px-6 pb-4 pt-3 border-t border-gray-100">
