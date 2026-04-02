@@ -157,6 +157,13 @@ export default function StudentResultsPage() {
         };
     };
 
+    // ── Helper: is this exam the Unit II (second Unit Test)? ──
+    const isUnitII = (er: ExamWithResult): boolean => {
+        if (er.exam.examType !== "Unit Test") return false;
+        const se = getSessionExams(er.exam.session || "");
+        return se.unit2?.id === er.exam.id;
+    };
+
     // ── Helper: get marks for an exam from examResults ──
     const getMarksForExam = (examId: string): Record<string, any> => {
         const er = examResults.find(e => e.exam.id === examId);
@@ -279,7 +286,7 @@ export default function StudentResultsPage() {
         openPrintWindow(html, 1000, 700);
     };
 
-    // ── Print: Unit Test Only Report ──
+    // ── Print: Unit I Test Only Report ──
     const printUnitTestReport = (er: ExamWithResult) => {
         const studentName = user?.displayName || studentInfo.name || "Student";
         const marks = er.result.marks || {};
@@ -309,6 +316,58 @@ export default function StudentResultsPage() {
             cls: studentInfo.className, sec: studentInfo.section,
         });
         openPrintWindow(html, 900, 700);
+    };
+
+    // ── Print: Unit II Cumulative Report (U1 + HY + U2 = /120) ──
+    const printUnitIIReport = (er: ExamWithResult) => {
+        const session = er.exam.session || "";
+        const se = getSessionExams(session);
+        const studentName = user?.displayName || studentInfo.name || "Student";
+
+        const u1Marks = se.unit1 ? getMarksForExam(se.unit1.id!) : {};
+        const hyMarks = se.hy    ? getMarksForExam(se.hy.id!)    : {};
+        const u2Marks = se.unit2 ? getMarksForExam(se.unit2.id!) : {};
+
+        let totalObt = 0;
+        const totalMax = subjects.length * 120;
+
+        const subjectRows = subjects.map(sub => {
+            const sid = sub.id || sub.name;
+            const u1 = u1Marks[sid] || {} as any;
+            const hy = hyMarks[sid] || {} as any;
+            const u2 = u2Marks[sid] || {} as any;
+
+            const u1PT = u1.perTest ?? 0, u1NB = u1.noteBook ?? 0, u1SEA = u1.sea ?? 0;
+            const u1Tot = u1PT + u1NB + u1SEA;
+            const hyObt = hy.obtained ?? 0;
+            const t1Tot = u1Tot + hyObt;
+
+            const u2PT = u2.perTest ?? 0, u2NB = u2.noteBook ?? 0, u2SEA = u2.sea ?? 0;
+            const u2Tot = u2PT + u2NB + u2SEA;
+
+            const cumulative = t1Tot + u2Tot;
+            totalObt += cumulative;
+            const grade = getGrade(cumulative > 0 ? (cumulative / 120) * 100 : 0);
+
+            return `<tr>
+                <td class="sn">${sub.name}</td>
+                <td class="c">${u1PT||"—"}</td><td class="c">${u1NB||"—"}</td><td class="c">${u1SEA||"—"}</td>
+                <td class="c b">${u1Tot}</td><td class="c">${hyObt||"—"}</td>
+                <td class="c b bdr-r">${t1Tot}</td>
+                <td class="c bdr-l">${u2PT||"—"}</td><td class="c">${u2NB||"—"}</td><td class="c">${u2SEA||"—"}</td>
+                <td class="c b">${u2Tot}</td>
+                <td class="c b grand">${cumulative}</td>
+                <td class="c gr">${grade}</td>
+            </tr>`;
+        }).join("");
+
+        const pct = totalMax > 0 ? (totalObt / totalMax * 100) : 0;
+
+        const html = buildUnitIIHTML({
+            studentName, session, subjectRows, totalObt, totalMax, pct,
+            grade: getGrade(pct), cls: studentInfo.className, sec: studentInfo.section,
+        });
+        openPrintWindow(html, 1100, 750);
     };
 
     // ── Print: Standard (legacy) Report ──
@@ -365,8 +424,8 @@ th:not(:first-child){text-align:right;}
     const handlePrint = (er: ExamWithResult) => {
         const examType = er.exam.examType || (er.result as any).examType || "";
         if (examType === "Annual Exam") return printFullYearReport(er);
-        if (examType === "Term Exam") return printTerm1Report(er);
-        if (examType === "Unit Test") return printUnitTestReport(er);
+        if (examType === "Term Exam")   return printTerm1Report(er);
+        if (examType === "Unit Test")   return isUnitII(er) ? printUnitIIReport(er) : printUnitTestReport(er);
         return printStandardReport(er);
     };
 
@@ -412,8 +471,9 @@ th:not(:first-child){text-align:right;}
                     <Button onClick={() => handlePrint(er)} className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
                         {examType === "Annual Exam" ? <LayoutTemplate className="h-4 w-4" /> : <Download className="h-4 w-4" />}
                         {examType === "Annual Exam" ? "Full Year Report Card" :
-                         examType === "Term Exam" ? "Term 1 Report Card" :
-                         examType === "Unit Test" ? "Unit Test Report" : "Download PDF"}
+                         examType === "Term Exam"   ? "Term 1 Report Card" :
+                         examType === "Unit Test" && isUnitII(er) ? "Unit II Cumulative Report (/120)" :
+                         examType === "Unit Test" ? "Unit I Test Report (/20)" : "Download PDF"}
                     </Button>
                 </div>
 
@@ -527,6 +587,16 @@ th:not(:first-child){text-align:right;}
                             </div>
 
                             {/* Info about combined report */}
+                            {examType === "Unit Test" && !isUnitII(er) && (
+                                <div className="mt-4 p-4 bg-violet-50 border border-violet-200 rounded-xl text-sm text-violet-800">
+                                    💡 <strong>Unit I Report:</strong> Shows PT/10 + NB/5 + SEA/5 = Total/20 per subject. Grade calculated out of 20.
+                                </div>
+                            )}
+                            {examType === "Unit Test" && isUnitII(er) && (
+                                <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-800">
+                                    💡 <strong>Unit II Cumulative Report:</strong> Shows all marks up to Unit II — Unit I (20) + Half Yearly (80) + Unit II (20) = <strong>120 marks</strong> per subject. Grade calculated out of 120.
+                                </div>
+                            )}
                             {examType === "Term Exam" && (
                                 <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
                                     💡 <strong>Tip:</strong> Click "Term 1 Report Card" above to generate a combined Term-1 marksheet showing Unit I + Half Yearly marks (/100 per subject).
@@ -743,6 +813,77 @@ th,td{border:1px solid #ccc;padding:4px 6px;}thead th{background:#1a2e4c;color:#
 </div>
 <div class="sigs">
 <div class="sigb"><div class="sigl"></div><div class="sign">Class Teacher</div></div>
+<div class="sigb"><div class="sigl"></div><div class="sign">Principal</div></div>
+<div class="sigb"><div class="sigl"></div><div class="sign">Parent / Guardian</div></div>
+</div></body></html>`;
+}
+
+function buildUnitIIHTML(p: {
+    studentName: string; session: string; subjectRows: string;
+    totalObt: number; totalMax: number; pct: number; grade: string;
+    cls: string; sec: string;
+}) {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Unit II Report - ${p.studentName}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;font-size:10px;}
+.hdr{text-align:center;border-bottom:2px solid #1a2e4c;padding-bottom:5px;margin-bottom:6px;}
+.school{font-size:18px;font-weight:900;color:#1a2e4c;}.title{font-size:10px;color:#555;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+.info{display:flex;gap:16px;flex-wrap:wrap;background:#f0f4f8;padding:5px 8px;border-radius:4px;margin-bottom:6px;}
+.ig{display:flex;flex-direction:column;min-width:100px;}.il{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;}.iv{font-size:11px;font-weight:700;color:#1a2e4c;}
+table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:8px;}
+th,td{border:1px solid #ccc;padding:2px 3px;vertical-align:middle;}
+thead th{background:#1a2e4c;color:#fff;text-align:center;font-size:8px;}
+.sn{text-align:left;padding-left:5px;font-size:9px;}.c{text-align:center;}.b{font-weight:bold;}
+.bdr-l{border-left:2px solid #1a2e4c!important;}.bdr-r{border-right:2px solid #1a2e4c!important;}
+.grand{background:#fff8e1;font-weight:bold;}.gr{background:#e8f5e9;color:#1a6b2e;font-weight:bold;}
+.sum{display:flex;gap:10px;margin-bottom:12px;}
+.sb{flex:1;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;}
+.sl{font-size:8px;font-weight:bold;text-transform:uppercase;color:#888;margin-bottom:3px;}
+.sv{font-size:24px;font-weight:900;color:#1a2e4c;}
+.sigs{display:flex;gap:15px;justify-content:space-around;padding-top:8px;border-top:1px solid #e5e7eb;}
+.sigb{text-align:center;flex:1;}.sigl{border-bottom:2px dashed #aaa;margin:0 auto 3px;height:20px;}
+.sign{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
+@page{size:A4 landscape;margin:6mm;}
+</style></head><body>
+<div class="hdr"><div class="school">International Access School</div>
+<div class="title">UNIT II CUMULATIVE REPORT — Session ${p.session || new Date().getFullYear()}</div></div>
+<div class="info">
+<div class="ig"><span class="il">Student Name</span><span class="iv">${p.studentName}</span></div>
+<div class="ig"><span class="il">Class</span><span class="iv">${p.cls}</span></div>
+<div class="ig"><span class="il">Section</span><span class="iv">${p.sec}</span></div>
+<div class="ig"><span class="il">Max Marks</span><span class="iv">${p.totalMax} (120/subject)</span></div>
+</div>
+<table>
+<thead>
+<tr>
+  <th rowspan="3" style="text-align:left;width:110px">Subjects</th>
+  <th colspan="6" style="border-left:2px solid #1a2e4c;border-right:2px solid #1a2e4c">TERM-1 (100 Marks)</th>
+  <th colspan="5" style="border-right:2px solid #1a2e4c">UNIT II TEST (20 Marks)</th>
+  <th rowspan="3" class="grand">Cumul.<br/>Total<br/>/120</th>
+  <th rowspan="3">Grd.</th>
+</tr>
+<tr>
+  <th colspan="4" style="border-left:2px solid #1a2e4c">Unit I Test (20)</th>
+  <th rowspan="2">Half<br/>Yearly<br/>/80</th>
+  <th rowspan="2" style="border-right:2px solid #1a2e4c">T-1<br/>Total<br/>/100</th>
+  <th colspan="4" style="border-left:2px solid #1a2e4c">Unit II Components</th>
+  <th rowspan="2" style="border-right:2px solid #1a2e4c">Total<br/>/20</th>
+</tr>
+<tr>
+  <th style="border-left:2px solid #1a2e4c">PT<br/>/10</th><th>NB<br/>/5</th><th>SEA<br/>/5</th><th>/20</th>
+  <th style="border-left:2px solid #1a2e4c">PT<br/>/10</th><th>NB<br/>/5</th><th>SEA<br/>/5</th><th>/20</th>
+</tr>
+</thead>
+<tbody>${p.subjectRows}</tbody>
+</table>
+<div class="sum">
+<div class="sb"><div class="sl">Cumulative Total</div><div class="sv">${p.totalObt} <span style="font-size:13px;color:#9ca3af">/ ${p.totalMax}</span></div></div>
+<div class="sb"><div class="sl">Percentage</div><div class="sv">${p.pct.toFixed(1)}%</div></div>
+<div class="sb"><div class="sl">Overall Grade</div><div class="sv" style="color:#1a6b2e">${p.grade}</div></div>
+</div>
+<div class="sigs">
+<div class="sigb"><div class="sigl"></div><div class="sign">Class Teacher</div></div>
+<div class="sigb"><div class="sigl"></div><div class="sign">Exam Controller</div></div>
 <div class="sigb"><div class="sigl"></div><div class="sign">Principal</div></div>
 <div class="sigb"><div class="sigl"></div><div class="sign">Parent / Guardian</div></div>
 </div></body></html>`;
