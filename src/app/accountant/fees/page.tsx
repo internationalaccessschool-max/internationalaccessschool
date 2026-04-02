@@ -258,7 +258,7 @@ export default function ManageFeesPage() {
                 // 2. Fetch Transport Arrears — ALWAYS scan (don't gate on transportPreviousDues
                 //    because that Firestore field can be stale/missing even when arrears exist)
                 if ((markPaidRecord.transportFeeAmount || 0) > 0) {
-                    let liveTransportDues = 0;
+                    let computedTransportDues = 0;
                     for (let offset = 1; offset <= 12; offset++) {
                         let prevMonth = feeMonth - offset;
                         let prevYear = feeYear;
@@ -269,15 +269,20 @@ export default function ManageFeesPage() {
                         );
                         if (!prevSnap.exists()) continue;
                         const prevData = prevSnap.data() as any;
-                        if (prevData.status === "carried_forward") {
+
+                        if (prevData.status === "paid") {
+                            break; // chain ends — fully paid, stop scanning
+                        }
+                        if (prevData.status === "carried_forward" ||
+                            prevData.status === "pending" ||
+                            prevData.status === "overdue") {
+                            // Any unpaid previous month = arrear
                             tMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
-                            liveTransportDues += prevData.totalAmount || prevData.amount || 0;
-                        } else if (prevData.status === "paid") {
-                            break; // chain ends at a paid record
+                            computedTransportDues += prevData.totalAmount || prevData.amount || 0;
                         }
                     }
                     // Store the live-computed dues in dedicated state for the dialog to render
-                    setLiveTransportDues(liveTransportDues);
+                    setLiveTransportDues(computedTransportDues);
                 }
 
                 setSchoolArrearMonths(sMonths);
