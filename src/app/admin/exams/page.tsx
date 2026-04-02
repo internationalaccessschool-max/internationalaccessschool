@@ -109,6 +109,16 @@ const colorMap: Record<string, { bg: string; border: string; icon: string; pill:
     emerald: { bg: "bg-emerald-50", border: "border-emerald-200", icon: "text-emerald-600", pill: "bg-emerald-100 text-emerald-700" },
 };
 
+// ─── Session exam matcher (pure — module level) ───────────────────────────────
+function getSessionExam(exams: Exam[], session: string, slot: Slot): Exam | undefined {
+    const sessionExams = exams.filter(e => e.session === session && e.examType === slot.examType);
+    if (slot.examType !== "Unit Test") return sessionExams[0];
+    if (slot.key === "unit1") {
+        return sessionExams.find(e => /unit\s+i(?!i)/i.test(e.name || "")) ?? sessionExams[0];
+    }
+    return sessionExams.find(e => /unit\s+ii/i.test(e.name || "")) ?? (sessionExams.length > 1 ? sessionExams[1] : undefined);
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminExamsPage() {
     const [exams, setExams] = useState<Exam[]>([]);
