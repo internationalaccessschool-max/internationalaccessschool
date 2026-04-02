@@ -90,8 +90,8 @@ function statusBadge(status: string) {
     }
     if (status === "Active") {
         return (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                <CheckCircle2 className="w-3 h-3" /> Active
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                <Circle className="w-3 h-3" /> Unpublished
             </span>
         );
     }
