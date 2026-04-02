@@ -132,10 +132,20 @@ export default function AdvancedAdmitCardManagerPage() {
             // Fetch all student profiles
             const snap = await getDocs(collectionGroup(db, "profiles"));
             let count = 0;
+            let skipped = 0;
             const applicable = exam.classesApplicable ?? [];
 
             for (const d of snap.docs) {
                 const data = d.data();
+
+                // ── Only generate for ACTIVE students ──────────────────────
+                const studentStatus = (data.status || "").toLowerCase();
+                if (studentStatus !== "active") {
+                    skipped++;
+                    continue;
+                }
+                // ───────────────────────────────────────────────────────────
+
                 const cls = normaliseClass(String(data.className || data.currentClass || ""));
 
                 if (!applicable.includes(cls)) continue;
@@ -188,7 +198,7 @@ export default function AdvancedAdmitCardManagerPage() {
 
                 count++;
             }
-            setGenerateMsg(`✅ Successfully generated ${count} detailed admit cards!`);
+            setGenerateMsg(`✅ Generated ${count} admit cards for active students.${skipped > 0 ? ` (${skipped} inactive/TC students skipped)` : ""}`);
         } catch (err: any) {
             console.error("Failed to generate:", err);
             setGenerateMsg(`❌ Generation failed: ${err.message}`);
