@@ -252,8 +252,10 @@ export default function ManageFeesPage() {
                     }
                 }
 
-                // 2. Fetch Transport Arrears
-                if ((markPaidRecord.transportPreviousDues || 0) > 0) {
+                // 2. Fetch Transport Arrears — ALWAYS scan (don't gate on transportPreviousDues
+                //    because that Firestore field can be stale/missing even when arrears exist)
+                if ((markPaidRecord.transportFeeAmount || 0) > 0) {
+                    let liveTransportDues = 0;
                     for (let offset = 1; offset <= 12; offset++) {
                         let prevMonth = feeMonth - offset;
                         let prevYear = feeYear;
@@ -262,9 +264,32 @@ export default function ManageFeesPage() {
                         const prevSnap = await getDoc(
                             doc(db, "transportFeeRecords", prevYear.toString(), "months", prevMonth.toString(), "students", studentId)
                         );
-                        if (prevSnap.exists() && prevSnap.data().status === "carried_forward") {
+                        if (!prevSnap.exists()) continue;
+                        const prevData = prevSnap.data() as any;
+                        if (prevData.status === "carried_forward") {
                             tMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
+                            liveTransportDues += prevData.totalAmount || prevData.amount || 0;
+                        } else if (prevData.status === "paid") {
+                            break; // chain ends at a paid record
                         }
+                    }
+                    // If we found real dues that differ from the stored field, patch markPaidRecord in local state
+                    if (liveTransportDues > 0 && liveTransportDues !== (markPaidRecord.transportPreviousDues || 0)) {
+                        setRecords(prev => prev.map(r =>
+                            (r.studentId || r.id) === studentId && r.month === feeMonth && r.year === feeYear
+                                ? {
+                                    ...r,
+                                    transportPreviousDues: liveTransportDues,
+                                    transportTotalAmount: (r.transportFeeAmount || 0) + liveTransportDues,
+                                }
+                                : r
+                        ));
+                        // Also patch markPaidRecord directly so the dialog re-renders with correct values
+                        setMarkPaidRecord(prev => prev ? {
+                            ...prev,
+                            transportPreviousDues: liveTransportDues,
+                            transportTotalAmount: (prev.transportFeeAmount || 0) + liveTransportDues,
+                        } : prev);
                     }
                 }
 
@@ -277,7 +302,7 @@ export default function ManageFeesPage() {
         };
 
         fetchArrearMonths();
-    }, [markPaidRecord]);
+    }, [markPaidRecord?.id, markPaidRecord?.month, markPaidRecord?.year]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
