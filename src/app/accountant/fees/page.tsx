@@ -1185,7 +1185,13 @@ export default function ManageFeesPage() {
                                                 <>
                                                     <div className="flex justify-between text-sm font-semibold text-navy mt-1">
                                                         <span className="flex items-center gap-1.5"><Bus className="w-4 h-4" /> Transport Fee (Current Month)</span>
-                                                        <span>₹{transportFee.toLocaleString()}</span>
+                                                        {transportAlreadyPaid ? (
+                                                            <span className="flex items-center gap-1 text-emerald-600 font-medium text-xs">
+                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Already Paid
+                                                            </span>
+                                                        ) : (
+                                                            <span>₹{transportFee.toLocaleString()}</span>
+                                                        )}
                                                     </div>
                                                     {!isTranspCF && transportPrevDues > 0 && (
                                                         <div className="flex justify-between text-sm">
@@ -1193,7 +1199,12 @@ export default function ManageFeesPage() {
                                                             <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
                                                         </div>
                                                     )}
-
+                                                    {isTranspCF && !isCF && (
+                                                        <div className="flex items-start gap-1.5 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mt-1">
+                                                            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                            <span>This is a transport arrear month — previous dues are already included in the current active bill. Paying here clears only this month&apos;s base transport fee.</span>
+                                                        </div>
+                                                    )}
                                                 </>
                                             )}
                                             <div className="flex justify-between font-bold text-navy border-t border-gray-200 pt-2 mt-1">
