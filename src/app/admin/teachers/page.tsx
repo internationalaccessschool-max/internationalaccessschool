@@ -575,10 +575,10 @@ export default function AdminTeachersPage() {
                                         <div>
                                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">1. Select Class</label>
                                             <div className="flex flex-wrap gap-2">
-                                                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"].map(cls => (
+                                                {["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"].map(cls => (
                                                     <button key={cls} type="button"
                                                         onClick={() => updatePeriodField(p, "className", cls)}
-                                                        className={`w-11 h-11 rounded-xl text-sm font-bold border transition-all ${entry.className === cls
+                                                        className={`px-3 h-11 rounded-xl text-sm font-bold border transition-all ${entry.className === cls
                                                             ? "bg-navy text-white border-navy"
                                                             : "bg-gray-50 text-gray-500 border-gray-200 hover:border-navy/30"
                                                             }`}>
