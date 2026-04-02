@@ -83,6 +83,11 @@ export default function ManageFeesPage() {
     const [notifEmail, setNotifEmail] = useState<string>("");
     const [isFetchingEmail, setIsFetchingEmail] = useState(false);
 
+    // Arrear Details Fetch for Mark Paid
+    const [arrearMonthsLoading, setArrearMonthsLoading] = useState(false);
+    const [schoolArrearMonths, setSchoolArrearMonths] = useState<string[]>([]);
+    const [transportArrearMonths, setTransportArrearMonths] = useState<string[]>([]);
+
     // Filters
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -209,6 +214,70 @@ export default function ManageFeesPage() {
             setLoading(false);
         }
     }, [filterMonth, filterYear]);
+
+    useEffect(() => {
+        if (!markPaidRecord) {
+            setSchoolArrearMonths([]);
+            setTransportArrearMonths([]);
+            return;
+        }
+
+        const fetchArrearMonths = async () => {
+            setArrearMonthsLoading(true);
+            try {
+                const sMonths: string[] = [];
+                const tMonths: string[] = [];
+                const studentId = markPaidRecord.studentId || markPaidRecord.id;
+                const feeMonth = markPaidRecord.month;
+                const feeYear = markPaidRecord.year;
+
+                // 1. Fetch School Arrears
+                if ((markPaidRecord.previousDues || 0) > 0 && markPaidRecord.path) {
+                    const parts = markPaidRecord.path.split("/");
+                    // Path format: feeRecords/{year}/months/{month}/classes/{classId}/records/{studentId}
+                    const classId = parts[6];
+                    if (classId) {
+                        for (let offset = 1; offset <= 12; offset++) {
+                            let prevMonth = feeMonth - offset;
+                            let prevYear = feeYear;
+                            if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+
+                            const prevSnap = await getDoc(
+                                doc(db, "feeRecords", prevYear.toString(), "months", prevMonth.toString(), "classes", classId, "records", studentId)
+                            );
+                            if (prevSnap.exists() && prevSnap.data().status === "carried_forward") {
+                                sMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
+                            }
+                        }
+                    }
+                }
+
+                // 2. Fetch Transport Arrears
+                if ((markPaidRecord.transportPreviousDues || 0) > 0) {
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevMonth = feeMonth - offset;
+                        let prevYear = feeYear;
+                        if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+
+                        const prevSnap = await getDoc(
+                            doc(db, "transportFeeRecords", prevYear.toString(), "months", prevMonth.toString(), "students", studentId)
+                        );
+                        if (prevSnap.exists() && prevSnap.data().status === "carried_forward") {
+                            tMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
+                        }
+                    }
+                }
+
+                setSchoolArrearMonths(sMonths);
+                setTransportArrearMonths(tMonths);
+            } catch (err) {
+                console.error("Error fetching arrear months:", err);
+            }
+            setArrearMonthsLoading(false);
+        };
+
+        fetchArrearMonths();
+    }, [markPaidRecord]);
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -1167,9 +1236,20 @@ export default function ManageFeesPage() {
                                                     )}
                                                     {/* Previous dues: hidden for CF records (dues already in next live bill) */}
                                                     {!isCF && schoolPrevDues > 0 && (
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues (Arrears)</span>
-                                                            <span className="font-semibold text-rose-600">₹{schoolPrevDues.toLocaleString()}</span>
+                                                        <div className="flex flex-col text-sm border-t border-dashed border-gray-200 mt-2 pt-2">
+                                                            <div className="flex justify-between">
+                                                                <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues (Arrears)</span>
+                                                                <span className="font-semibold text-rose-600">₹{schoolPrevDues.toLocaleString()}</span>
+                                                            </div>
+                                                            {arrearMonthsLoading ? (
+                                                                <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
+                                                                    <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
+                                                                </span>
+                                                            ) : schoolArrearMonths.length > 0 ? (
+                                                                <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
+                                                                    Clear pending bills for: <strong>{schoolArrearMonths.join(", ")}</strong>
+                                                                </span>
+                                                            ) : null}
                                                         </div>
                                                     )}
                                                     {/* CF notice: inform accountant this is an arrear-only payment */}
@@ -1194,9 +1274,20 @@ export default function ManageFeesPage() {
                                                         )}
                                                     </div>
                                                     {!isTranspCF && transportPrevDues > 0 && (
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous Transport Dues</span>
-                                                            <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
+                                                        <div className="flex flex-col text-sm border-t border-dashed border-gray-200 mt-2 pt-2">
+                                                            <div className="flex justify-between">
+                                                                <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous Transport Dues</span>
+                                                                <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
+                                                            </div>
+                                                            {arrearMonthsLoading ? (
+                                                                <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
+                                                                    <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
+                                                                </span>
+                                                            ) : transportArrearMonths.length > 0 ? (
+                                                                <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
+                                                                    Clear pending bills for: <strong>{transportArrearMonths.join(", ")}</strong>
+                                                                </span>
+                                                            ) : null}
                                                         </div>
                                                     )}
                                                     {isTranspCF && !isCF && (
