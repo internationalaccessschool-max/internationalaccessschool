@@ -1290,7 +1290,7 @@ export default function ManageFeesPage() {
                                                             ) : null}
                                                         </div>
                                                     )}
-                                                    {isTranspCF && !isCF && (
+                                                    {isTranspCF && (
                                                         <div className="flex items-start gap-1.5 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mt-1">
                                                             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                                                             <span>This is a transport arrear month — previous dues are already included in the current active bill. Paying here clears only this month&apos;s base transport fee.</span>
