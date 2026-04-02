@@ -278,10 +278,11 @@ export default function TransportAccountantPage() {
                             prevYear.toString(), "months", prevMonth.toString(), "students", studentId
                         );
                         const prevSnap = await getDoc(prevRef);
-                        if (!prevSnap.exists()) break;
+                        if (!prevSnap.exists()) continue;
 
                         const prevData = prevSnap.data() as any;
-                        if (prevData.status === "paid" || prevData.status === "carried_forward") break;
+                        if (prevData.status === "paid") continue;
+                        if (prevData.status === "carried_forward") break;
 
                         if (prevData.status === "pending" || prevData.status === "overdue") {
                             const prevTotal = prevData.totalAmount || prevData.amount || 0;
