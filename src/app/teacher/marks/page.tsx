@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import {
     Loader2, Save, ShieldAlert, BookOpen, CheckCircle2, AlertCircle,
+    Lock, PowerOff,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -454,6 +455,13 @@ export default function TeacherMarksPage() {
     const isUnit  = exam?.examType === "Unit Test";
     const isAnnual = exam?.examType === "Annual Exam";
 
+    // Permission guards:
+    // 1. Exam must be isActive (marks-entry open) — set by admin
+    // 2. Exam must NOT be Published — once published, only admin can edit
+    const isExamLocked  = exam?.status === "Published";  // published → teacher read-only
+    const isExamInactive = exam ? (exam.isActive === false || exam.isActive === undefined) : false;
+    const canEditMarks  = exam ? (!isExamLocked && !isExamInactive) : false;
+
     const tabs: { key: TabKey; label: string; term: string; color: string }[] = [
         { key: "unit1",      label: "Unit I Test",    term: "Term 1", color: "blue"    },
         { key: "halfYearly", label: "Half Yearly",    term: "Term 1", color: "indigo"  },
@@ -582,6 +590,32 @@ export default function TeacherMarksPage() {
                     {/* Marks Grid */}
                     {exam && (
                         <div className="space-y-5">
+
+                            {/* ── Permission banners ── */}
+                            {isExamLocked && (
+                                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
+                                    <Lock className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p className="font-semibold text-sm">Exam Published — Marks Locked</p>
+                                        <p className="text-xs mt-0.5 text-red-600">
+                                            This exam result has been published. Marks are now read-only for teachers.
+                                            Contact the admin to unlock it for corrections.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                            {!isExamLocked && isExamInactive && (
+                                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700">
+                                    <PowerOff className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p className="font-semibold text-sm">Marks Entry Disabled</p>
+                                        <p className="text-xs mt-0.5 text-amber-600">
+                                            This exam is currently inactive. The admin needs to activate it before you can enter or save marks.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Exam info strip */}
                             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/20 border border-border/50 flex-wrap">
                                 <div>
@@ -705,8 +739,9 @@ export default function TeacherMarksPage() {
                                                                             min={0}
                                                                             max={max}
                                                                             value={val}
+                                                                            disabled={!canEditMarks}
                                                                             onChange={e => setMarkVal(exam.id!, student.id, key, e.target.value)}
-                                                                            className={`w-10 h-8 text-center text-xs rounded border ${isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                            className={`w-10 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                         />
                                                                     );
                                                                 })}
@@ -727,8 +762,9 @@ export default function TeacherMarksPage() {
                                                                     min={0}
                                                                     max={max}
                                                                     value={val}
+                                                                    disabled={!canEditMarks}
                                                                     onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
-                                                                    className={`w-16 h-8 text-center text-xs rounded border ${isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                    className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                 />
                                                             </td>
                                                         );
@@ -799,8 +835,9 @@ export default function TeacherMarksPage() {
                                                                         <select
                                                                             key={term}
                                                                             value={coVal(student.id, cs.id, term)}
+                                                                            disabled={!canEditMarks}
                                                                             onChange={e => setCoVal(student.id, cs.id, term, e.target.value)}
-                                                                            className="w-16 h-8 text-center text-xs rounded border border-border/50 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white"
+                                                                            className={`w-16 h-8 text-center text-xs rounded border focus:outline-none focus:ring-1 focus:ring-emerald-400 ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : "bg-white border-border/50"}`}
                                                                         >
                                                                             <option value="">—</option>
                                                                             {CO_SCHO_GRADES.map(g => (
@@ -819,20 +856,27 @@ export default function TeacherMarksPage() {
                                 </div>
                             )}
 
-                            {/* Save Button */}
+                            {/* Save Button — only visible when teacher can edit */}
                             {!isLoadingMarks && students.length > 0 && (
                                 <div className="flex justify-end pt-2">
-                                    <Button
-                                        onClick={handleSave}
-                                        disabled={isSaving}
-                                        size="lg"
-                                        className="gap-2 min-w-[180px]"
-                                    >
-                                        {isSaving
-                                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                                            : <><Save className="h-4 w-4" /> Save {tabs.find(t => t.key === activeTab)?.label} Marks</>
-                                        }
-                                    </Button>
+                                    {canEditMarks ? (
+                                        <Button
+                                            onClick={handleSave}
+                                            disabled={isSaving}
+                                            size="lg"
+                                            className="gap-2 min-w-[180px]"
+                                        >
+                                            {isSaving
+                                                ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                                                : <><Save className="h-4 w-4" /> Save {tabs.find(t => t.key === activeTab)?.label} Marks</>
+                                            }
+                                        </Button>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground px-4 py-2 rounded-lg bg-muted/30 border">
+                                            <Lock className="h-4 w-4" />
+                                            {isExamLocked ? "Marks locked — exam is published" : "Activate exam to enable mark entry"}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
