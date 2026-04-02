@@ -1165,7 +1165,7 @@ export default function ManageFeesPage() {
             {/* ── Mark Paid Dialog ───────────────────────────────────────────── */}
             {markPaidRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[95vh] flex flex-col">
                         {/* Dialog Header */}
                         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                             <div>
@@ -1177,8 +1177,11 @@ export default function ManageFeesPage() {
                             </button>
                         </div>
 
-                        {/* Bill Summary */}
-                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                        {/* ── Two-column body ── */}
+                        <div className="flex flex-col md:flex-row overflow-y-auto flex-1 min-h-0">
+
+                        {/* LEFT: Bill Summary */}
+                        <div className="px-6 py-4 bg-gray-50 md:w-[48%] md:border-r border-b md:border-b-0 border-gray-100 overflow-y-auto">
                             <div className="space-y-1.5">
                                 {(() => {
                                     const bd = markPaidRecord.breakdown || {};
@@ -1321,10 +1324,10 @@ export default function ManageFeesPage() {
                                     );
                                 })()}
                             </div>
-                        </div>
+                        </div>{/* end left bill summary */}
 
-                        {/* Options */}
-                        <div className="px-6 py-5 space-y-3">
+                        {/* RIGHT: Options + Discount + Email */}
+                        <div className="px-6 py-5 space-y-3 md:flex-1 overflow-y-auto">
                             <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
 
                             {((() => {
@@ -1465,38 +1468,39 @@ export default function ManageFeesPage() {
                             })()}
                         </div>
 
-                        {/* ── Notification Email Section ── */}
-                        <div className="px-6 pb-2">
-                            <div className="pt-3 border-t border-gray-100">
-                                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                                    <Mail className="w-4 h-4 text-gray-400" /> Receipt Email
-                                    {isFetchingEmail && <Loader2 className="w-3 h-3 text-gray-400 animate-spin ml-1" />}
-                                </p>
-                                {notifEmail ? (
-                                    <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                                        <span className="text-sm text-emerald-700 font-medium flex-1 truncate">{notifEmail}</span>
+                        {/* Receipt Email — inside right column */}
+                        <div className="px-6 pb-4 pt-3 border-t border-gray-100">
+                            <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                                <Mail className="w-4 h-4 text-gray-400" /> Receipt Email
+                                {isFetchingEmail && <Loader2 className="w-3 h-3 text-gray-400 animate-spin ml-1" />}
+                            </p>
+                            {notifEmail ? (
+                                <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                    <span className="text-sm text-emerald-700 font-medium flex-1 truncate">{notifEmail}</span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                                        <span className="text-xs text-amber-600">No notification email — receipt will not be emailed</span>
                                     </div>
-                                ) : (
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl">
-                                            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                                            <span className="text-xs text-amber-600">No notification email — receipt will not be emailed</span>
-                                        </div>
-                                        <input
-                                            type="email"
-                                            value={notifEmail}
-                                            onChange={e => setNotifEmail(e.target.value)}
-                                            placeholder="Add parent/guardian email (optional)"
-                                            className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 bg-white placeholder-gray-300 mt-1.5"
-                                        />
-                                    </div>
-                                )}
-                            </div>
+                                    <input
+                                        type="email"
+                                        value={notifEmail}
+                                        onChange={e => setNotifEmail(e.target.value)}
+                                        placeholder="Add parent/guardian email (optional)"
+                                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 bg-white placeholder-gray-300 mt-1.5"
+                                    />
+                                </div>
+                            )}
                         </div>
 
-                        {/* Actions */}
-                        <div className="px-6 pb-6 flex gap-3 mt-3">
+                        </div>{/* end right column */}
+                        </div>{/* end two-column body */}
+
+                        {/* Actions — full width footer */}
+                        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
                             <button onClick={() => setMarkPaidRecord(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                                 Cancel
                             </button>
@@ -1508,7 +1512,7 @@ export default function ManageFeesPage() {
                                 {markPaidLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                                 Confirm Payment
                             </button>
-                        </div>
+                        </div>{/* end actions */}
 
                     </div>
                 </div>
