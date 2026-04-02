@@ -1426,8 +1426,19 @@ export default function ManageFeesPage() {
                             {/* ── Discount Section ── */}
                             {(() => {
                                 const baseTotal = (() => {
-                                    const s = markPaidRecord!.totalAmount || markPaidRecord!.amount;
-                                    const t = markPaidRecord!.transportTotalAmount || markPaidRecord!.transportFeeAmount || 0;
+                                    const sBase = markPaidRecord!.amount;
+                                    const sPrevDues = markPaidRecord!.previousDues || 0;
+                                    const isSCF = markPaidRecord!.status === "carried_forward";
+                                    const sAlreadyPaid = markPaidRecord!.status === "paid";
+                                    const s = (sAlreadyPaid || isSCF) ? sBase : (markPaidRecord!.totalAmount || (sBase + sPrevDues));
+
+                                    const tBase = markPaidRecord!.transportFeeAmount || 0;
+                                    // Use liveTransportDues (Firestore-scanned) — same as left column & right options
+                                    const tPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord!.transportPreviousDues || 0);
+                                    const isTranspCF = markPaidRecord!.transportStatus === "carried_forward";
+                                    const tAlreadyPaid = markPaidRecord!.transportStatus === "paid";
+                                    const t = (tAlreadyPaid || isTranspCF) ? tBase : (tBase + tPrevDues);
+
                                     if (markPaidType === "school") return s;
                                     if (markPaidType === "transport") return t;
                                     return s + t;
