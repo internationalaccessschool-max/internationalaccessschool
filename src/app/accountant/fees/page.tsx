@@ -1504,26 +1504,34 @@ export default function ManageFeesPage() {
                                 <Mail className="w-4 h-4 text-gray-400" /> Receipt Email
                                 {isFetchingEmail && <Loader2 className="w-3 h-3 text-gray-400 animate-spin ml-1" />}
                             </p>
-                            {notifEmail ? (
-                                <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                                    <span className="text-sm text-emerald-700 font-medium flex-1 truncate">{notifEmail}</span>
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl">
-                                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                                        <span className="text-xs text-amber-600">No notification email — receipt will not be emailed</span>
-                                    </div>
-                                    <input
-                                        type="email"
-                                        value={notifEmail}
-                                        onChange={e => setNotifEmail(e.target.value)}
-                                        placeholder="Add parent/guardian email (optional)"
-                                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 bg-white placeholder-gray-300 mt-1.5"
-                                    />
+                            {/* Status banner */}
+                            {!notifEmail && (
+                                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl mb-2">
+                                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                                    <span className="text-xs text-amber-600">No notification email — receipt will not be emailed</span>
                                 </div>
                             )}
+                            {/* Always-visible input */}
+                            <div className={`flex items-center gap-2 border-2 rounded-xl px-3 transition-colors ${notifEmail ? "border-emerald-400 bg-emerald-50" : "border-gray-200 bg-white"}`}>
+                                {notifEmail && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                                <input
+                                    type="email"
+                                    value={notifEmail}
+                                    onChange={e => setNotifEmail(e.target.value)}
+                                    placeholder="Add parent/guardian email (optional)"
+                                    className="flex-1 py-2.5 text-sm outline-none bg-transparent placeholder-gray-300"
+                                />
+                                {notifEmail && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setNotifEmail("")}
+                                        className="text-gray-400 hover:text-rose-500 transition-colors shrink-0"
+                                        title="Clear email"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         </div>{/* end right column */}
