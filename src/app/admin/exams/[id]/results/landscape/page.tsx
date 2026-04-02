@@ -138,40 +138,51 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
                 // If current exam IS the annual, we're fine. If not, set unit as current.
                 if (exam.examType === "Unit Test" && !unitI) setUnitExamId(examId);
 
-                // Load available classes from the current exam
-                const classesApplicable = exam.classesApplicable || [];
-                setAvailableClasses(classesApplicable);
-                if (classesApplicable.length === 1) setSelectedClass(classesApplicable[0]);
+                // Load available classes from the current exam, or fall back to all profile classes
+                let classesApplicable = exam.classesApplicable || [];
 
-                // Load sections from profiles
+                // Build class→sections map from profiles (always needed)
                 const profSnap = await getDocs(collectionGroup(db, "profiles"));
                 const classSecMap: Record<string, Set<string>> = {};
+
                 profSnap.docs.forEach(d => {
-                    const data = d.data();
-                    const cn = data.className || data.currentClass || "";
-                    const sec = data.section || "";
-                    if (cn && sec) {
-                        if (!classSecMap[cn]) classSecMap[cn] = new Set();
-                        classSecMap[cn].add(sec);
-                    }
-                });
-                // Section loading: scan profiles for section names matching accessible classes
-                const allSec = new Set<string>();
-                const classesApplicableNorms = classesApplicable.map(c => c.replace(/^class\s*/i, "").trim());
-                profSnap.docs.forEach(d => {
-                    // Try to get className from path parts first (most reliable)
                     const pathParts = d.ref.path.split("/");
                     const clsIdx = pathParts.indexOf("classes");
                     const secIdx = pathParts.indexOf("sections");
-                    let cn = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.data().className || d.data().currentClass || "");
-                    const sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.data().section || "");
+                    const cn = clsIdx >= 0
+                        ? pathParts[clsIdx + 1]
+                        : (d.data().className || d.data().currentClass || "");
+                    const sec = secIdx >= 0
+                        ? pathParts[secIdx + 1]
+                        : (d.data().section || "");
                     const normCn = cn.replace(/^class\s*/i, "").trim();
-                    if (sec && (classesApplicable.includes(cn) || classesApplicableNorms.includes(normCn)
-                        || classesApplicable.includes(`Class ${normCn}`) || classesApplicableNorms.includes(normCn))) {
-                        allSec.add(sec);
+                    if (normCn && sec) {
+                        if (!classSecMap[normCn]) classSecMap[normCn] = new Set();
+                        classSecMap[normCn].add(sec);
                     }
                 });
-                setAvailableSections(Array.from(allSec));
+
+                // If classesApplicable is empty, fall back to all classes found in profiles
+                if (classesApplicable.length === 0) {
+                    classesApplicable = Object.keys(classSecMap);
+                }
+
+                // Normalize: strip "Class " prefix for consistent keys
+                const normApplicable = classesApplicable.map(c => c.replace(/^class\s*/i, "").trim());
+
+                setAvailableClasses(normApplicable);
+                if (normApplicable.length === 1) setSelectedClass(normApplicable[0]!);
+
+                // Store full map so sections update when class is selected
+                // Flatten all sections for the applicable classes
+                const allSec = new Set<string>();
+                normApplicable.forEach(nc => {
+                    (classSecMap[nc] || new Set()).forEach(s => allSec.add(s));
+                });
+                setAvailableSections(Array.from(allSec).sort());
+                // Also store the map globally so we can re-filter when class changes
+                // We encode it into state via a ref-less trick: store all sections for now;
+                // class-specific filtering happens in the selectedClass useEffect below.
             } finally {
                 setIsLoadingMeta(false);
             }
