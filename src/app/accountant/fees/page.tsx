@@ -1263,6 +1263,7 @@ export default function ManageFeesPage() {
                                             )}
                                             {transportFee > 0 && (
                                                 <>
+                                                    {/* ── Transport Fee: Split into 2 parts ── */}
                                                     <div className="flex justify-between text-sm font-semibold text-navy mt-1">
                                                         <span className="flex items-center gap-1.5"><Bus className="w-4 h-4" /> Transport Fee (Current Month)</span>
                                                         {transportAlreadyPaid ? (
@@ -1273,21 +1274,35 @@ export default function ManageFeesPage() {
                                                             <span>₹{transportFee.toLocaleString()}</span>
                                                         )}
                                                     </div>
-                                                    {!isTranspCF && transportPrevDues > 0 && (
-                                                        <div className="flex flex-col text-sm border-t border-dashed border-gray-200 mt-2 pt-2">
-                                                            <div className="flex justify-between">
-                                                                <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous Transport Dues</span>
-                                                                <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
+                                                    {/* Part 2 — Transport Arrears (if any) */}
+                                                    {!isTranspCF && transportPrevDues > 0 && !transportAlreadyPaid && (
+                                                        <div className="border-t border-dashed border-gray-200 mt-2 pt-2 space-y-1">
+                                                            {/* Base transport fee line */}
+                                                            <div className="flex justify-between text-xs text-gray-500 ml-6">
+                                                                <span>Base (this month)</span>
+                                                                <span>₹{transportFee.toLocaleString()}</span>
                                                             </div>
-                                                            {arrearMonthsLoading ? (
-                                                                <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
-                                                                    <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
-                                                                </span>
-                                                            ) : transportArrearMonths.length > 0 ? (
-                                                                <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
-                                                                    Clear pending bills for: <strong>{transportArrearMonths.join(", ")}</strong>
-                                                                </span>
-                                                            ) : null}
+                                                            {/* Arrears line */}
+                                                            <div className="flex flex-col">
+                                                                <div className="flex justify-between text-sm">
+                                                                    <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Transport Arrears (Prev. Dues)</span>
+                                                                    <span className="font-semibold text-rose-600">₹{transportPrevDues.toLocaleString()}</span>
+                                                                </div>
+                                                                {arrearMonthsLoading ? (
+                                                                    <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
+                                                                        <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
+                                                                    </span>
+                                                                ) : transportArrearMonths.length > 0 ? (
+                                                                    <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
+                                                                        Clears pending: <strong>{transportArrearMonths.join(", ")}</strong>
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                            {/* Total transport payable */}
+                                                            <div className="flex justify-between text-sm font-semibold text-navy border-t border-gray-100 pt-1.5 mt-0.5">
+                                                                <span className="ml-6">Transport Total</span>
+                                                                <span>₹{transportTotal.toLocaleString()}</span>
+                                                            </div>
                                                         </div>
                                                     )}
                                                     {isTranspCF && (
@@ -1312,18 +1327,46 @@ export default function ManageFeesPage() {
                         <div className="px-6 py-5 space-y-3">
                             <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
 
-                            {([
-                                ...(!markPaidRecord.isTransportOnly ? [
-                                    { value: "school" as MarkPaidType, label: "School Fee Only", desc: `₹${markPaidRecord.amount.toLocaleString()}`, icon: School, disabled: isSchoolPaid(markPaidRecord) },
-                                ] : []),
-                                ...(hasTransportFee(markPaidRecord) ? [
-                                    { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: `₹${(markPaidRecord.transportFeeAmount || 0).toLocaleString()}`, icon: Bus, disabled: isTransportPaid(markPaidRecord) },
+                            {((() => {
+                                const _sBase = markPaidRecord.amount;
+                                const _sPrevDues = markPaidRecord.previousDues || 0;
+                                const _isSCF = markPaidRecord.status === "carried_forward";
+                                const _sAlreadyPaid = isSchoolPaid(markPaidRecord);
+                                const _schoolTotal = (_sAlreadyPaid || _isSCF) ? _sBase : (markPaidRecord.totalAmount || (_sBase + _sPrevDues));
+
+                                const _tBase = markPaidRecord.transportFeeAmount || 0;
+                                const _tPrevDues = markPaidRecord.transportPreviousDues || 0;
+                                const _isTranspCF = markPaidRecord.transportStatus === "carried_forward";
+                                const _tAlreadyPaid = isTransportPaid(markPaidRecord);
+                                const _transportTotal = (_tAlreadyPaid || _isTranspCF) ? _tBase : (markPaidRecord.transportTotalAmount || (_tBase + _tPrevDues));
+
+                                const _schoolDesc = _sAlreadyPaid
+                                    ? `Already Paid`
+                                    : _sPrevDues > 0 && !_isSCF
+                                        ? `₹${_sBase.toLocaleString()} + ₹${_sPrevDues.toLocaleString()} arrears = ₹${_schoolTotal.toLocaleString()}`
+                                        : `₹${_schoolTotal.toLocaleString()}`;
+
+                                const _transportDesc = _tAlreadyPaid
+                                    ? `Already Paid`
+                                    : _tPrevDues > 0 && !_isTranspCF
+                                        ? `₹${_tBase.toLocaleString()} + ₹${_tPrevDues.toLocaleString()} arrears = ₹${_transportTotal.toLocaleString()}`
+                                        : `₹${_transportTotal.toLocaleString()}`;
+
+                                const _bothTotal = (_sAlreadyPaid ? 0 : _schoolTotal) + (_tAlreadyPaid ? 0 : _transportTotal);
+                                const _bothDesc = `₹${_bothTotal.toLocaleString()}`;
+
+                                return [
                                     ...(!markPaidRecord.isTransportOnly ? [
-                                        // "Both" disabled when school already paid (can't re-charge paid fee)
-                                        { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: `₹${(markPaidRecord.amount + (markPaidRecord.transportFeeAmount || 0)).toLocaleString()}`, icon: CheckCircle2, disabled: isSchoolPaid(markPaidRecord) || isTransportPaid(markPaidRecord) },
+                                        { value: "school" as MarkPaidType, label: "School Fee Only", desc: _schoolDesc, icon: School, disabled: _sAlreadyPaid },
                                     ] : []),
-                                ] : []),
-                            ] as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
+                                    ...(hasTransportFee(markPaidRecord) ? [
+                                        { value: "transport" as MarkPaidType, label: "Transport Fee Only", desc: _transportDesc, icon: Bus, disabled: _tAlreadyPaid },
+                                        ...(!markPaidRecord.isTransportOnly ? [
+                                            { value: "both" as MarkPaidType, label: "Both (School + Transport)", desc: _bothDesc, icon: CheckCircle2, disabled: _sAlreadyPaid || _tAlreadyPaid },
+                                        ] : []),
+                                    ] : []),
+                                ];
+                            })() as { value: MarkPaidType; label: string; desc: string; icon: any; disabled: boolean }[]).map(opt => (
                                 <label
                                     key={opt.value}
                                     className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${opt.disabled ? "opacity-40 cursor-not-allowed border-gray-100 bg-gray-50" : markPaidType === opt.value ? "border-emerald-400 bg-emerald-50" : "border-gray-100 hover:border-gray-300"}`}
