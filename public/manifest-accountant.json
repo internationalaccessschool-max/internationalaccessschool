@@ -1,0 +1,23 @@
+{
+  "id": "/accountant/?source=pwa",
+  "name": "IAS Accountant Portal",
+  "short_name": "IAS Finance",
+  "description": "Accountant portal for International Access School.",
+  "start_url": "/accountant",
+  "scope": "/accountant/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-accountant.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education"]
+}
