@@ -1,0 +1,23 @@
+{
+  "id": "/student/?source=pwa",
+  "name": "IAS Student Portal",
+  "short_name": "IAS Student",
+  "description": "Student portal for International Access School.",
+  "start_url": "/student",
+  "scope": "/student/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-student.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education"]
+}
