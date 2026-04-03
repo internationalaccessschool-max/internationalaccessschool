@@ -31,7 +31,14 @@ export function middleware(request: NextRequest) {
     // Main Protection Logic
     if (!authCookie || !roleCookie) {
         // Not logged in
-        const loginUrl = new URL("/login", request.url);
+        let loginPath = "/login";
+        if (pathname.startsWith("/student")) loginPath = "/student/login";
+        else if (pathname.startsWith("/teacher")) loginPath = "/teacher/login";
+        else if (pathname.startsWith("/admin")) loginPath = "/admin/login";
+        else if (pathname.startsWith("/accountant")) loginPath = "/accountant/login";
+        else if (pathname.startsWith("/supervisor")) loginPath = "/supervisor/login";
+
+        const loginUrl = new URL(loginPath, request.url);
         loginUrl.searchParams.set("from", pathname);
         return NextResponse.redirect(loginUrl);
     }
@@ -40,25 +47,25 @@ export function middleware(request: NextRequest) {
     if (pathname.startsWith("/admin")) {
         // Strict Admin Check
         if (roleCookie !== "admin" || emailCookie !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return NextResponse.redirect(new URL("/admin/login", request.url));
         }
     } else if (pathname.startsWith("/teacher")) {
         // Strict Teacher Check
         if (roleCookie !== "teacher") {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return NextResponse.redirect(new URL("/teacher/login", request.url));
         }
     } else if (pathname.startsWith("/student")) {
         // Strict Student Check (allowing parents too if needed later, but enforcing student now)
         if (roleCookie !== "student" && roleCookie !== "parent") {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return NextResponse.redirect(new URL("/student/login", request.url));
         }
     } else if (pathname.startsWith("/supervisor")) {
         if (roleCookie !== "supervisor") {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return NextResponse.redirect(new URL("/supervisor/login", request.url));
         }
     } else if (pathname.startsWith("/accountant")) {
         if (roleCookie !== "accountant") {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return NextResponse.redirect(new URL("/accountant/login", request.url));
         }
     }
 
