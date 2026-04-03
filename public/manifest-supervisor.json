@@ -1,0 +1,23 @@
+{
+  "id": "/supervisor/?source=pwa",
+  "name": "IAS Supervisor Portal",
+  "short_name": "IAS Supervisor",
+  "description": "Supervisor portal for International Access School.",
+  "start_url": "/supervisor",
+  "scope": "/supervisor/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-supervisor.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education"]
+}
