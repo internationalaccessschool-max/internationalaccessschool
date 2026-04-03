@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     useEffect(() => {
         if (!loading && !isLoginPage) {
             if (!user || role !== "admin") {
-                router.push("/login");
+                router.push("/admin/login");
             }
         }
     }, [user, role, loading, router, isLoginPage]);
