@@ -1,0 +1,23 @@
+{
+  "id": "/teacher/?source=pwa",
+  "name": "IAS Teacher Portal",
+  "short_name": "IAS Teacher",
+  "description": "Teacher portal for International Access School.",
+  "start_url": "/teacher",
+  "scope": "/teacher/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-teacher.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education"]
+}
