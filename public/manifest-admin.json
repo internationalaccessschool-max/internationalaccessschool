@@ -1,0 +1,23 @@
+{
+  "id": "/admin/?source=pwa",
+  "name": "IAS Admin Console",
+  "short_name": "IAS Admin",
+  "description": "Administrator console for International Access School.",
+  "start_url": "/admin",
+  "scope": "/admin/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ef4444",
+  "orientation": "portrait",
+  "dir": "ltr",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-admin.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education"]
+}
