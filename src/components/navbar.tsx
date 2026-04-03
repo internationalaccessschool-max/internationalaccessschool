@@ -258,19 +258,55 @@ export function Navbar() {
                     <Link href="/tc" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">📄 View TC</Link>
                     <Link href="/contact" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Contact</Link>
                     
-                    {isInstallable && (
-                        <div className="mt-4 px-4 pb-4 border-t border-gray-100 pt-4">
-                            <button
-                                onClick={() => {
-                                    install();
-                                    setMobileOpen(false);
-                                }}
-                                className="w-full text-center px-5 py-3 rounded-xl bg-gold text-navy font-bold text-sm shadow-md hover:bg-gold-light transition-colors"
+                    <div className="mt-4 px-4 pb-4 border-t border-gray-100 pt-4">
+                        <div className="font-bold text-navy text-sm mb-3">Install Portals</div>
+                        <div className="grid grid-cols-1 gap-2">
+                            <Link
+                                href="/student/login"
+                                onClick={() => setMobileOpen(false)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm hover:bg-blue-100 transition-colors"
                             >
-                                Install App
-                            </button>
+                                Install Student App
+                                <span className="text-xs bg-blue-100 px-2 py-0.5 rounded-full">App</span>
+                            </Link>
+
+                            <Link
+                                href="/teacher/login"
+                                onClick={() => setMobileOpen(false)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 font-medium text-sm hover:bg-emerald-100 transition-colors"
+                            >
+                                Install Teacher App
+                                <span className="text-xs bg-emerald-100 px-2 py-0.5 rounded-full">App</span>
+                            </Link>
+
+                            <Link
+                                href="/admin/login"
+                                onClick={() => setMobileOpen(false)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-red-50 text-red-600 font-medium text-sm hover:bg-red-100 transition-colors"
+                            >
+                                Install Admin App
+                                <span className="text-xs bg-red-100 px-2 py-0.5 rounded-full">App</span>
+                            </Link>
+
+                            <Link
+                                href="/accountant/login"
+                                onClick={() => setMobileOpen(false)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-amber-50 text-amber-600 font-medium text-sm hover:bg-amber-100 transition-colors"
+                            >
+                                Install Finance App
+                                <span className="text-xs bg-amber-100 px-2 py-0.5 rounded-full">App</span>
+                            </Link>
+
+                            <Link
+                                href="/supervisor/login"
+                                onClick={() => setMobileOpen(false)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-purple-50 text-purple-600 font-medium text-sm hover:bg-purple-100 transition-colors"
+                            >
+                                Install Supervisor App
+                                <span className="text-xs bg-purple-100 px-2 py-0.5 rounded-full">App</span>
+                            </Link>
                         </div>
-                    )}
+                    </div>
                 </nav>
             </div>
         </>
