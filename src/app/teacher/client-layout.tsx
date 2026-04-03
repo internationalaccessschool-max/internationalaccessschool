@@ -19,7 +19,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     useEffect(() => {
         if (!loading && !isLoginPage) {
             if (!user || role !== "teacher") {
-                router.push("/login");
+                router.push("/teacher/login");
             }
         }
     }, [user, role, loading, router, isLoginPage]);
