@@ -67,7 +67,16 @@ export function Sidebar({ title, links }: SidebarProps) {
     const handleLogout = async () => {
         await signOut(auth);
         document.cookie = "auth=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT";
-        router.push("/login");
+        document.cookie = "role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT";
+        
+        let loginPath = "/login";
+        if (pathname.startsWith("/student")) loginPath = "/student/login";
+        else if (pathname.startsWith("/teacher")) loginPath = "/teacher/login";
+        else if (pathname.startsWith("/admin")) loginPath = "/admin/login";
+        else if (pathname.startsWith("/accountant")) loginPath = "/accountant/login";
+        else if (pathname.startsWith("/supervisor")) loginPath = "/supervisor/login";
+        
+        router.push(loginPath);
     };
 
     const grouped = isGrouped(links);
