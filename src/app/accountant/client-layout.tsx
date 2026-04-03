@@ -19,7 +19,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
     useEffect(() => {
         if (!loading && !isLoginPage) {
             if (!user || role !== "accountant") {
-                router.push("/login");
+                router.push("/accountant/login");
             }
         }
     }, [user, role, loading, router, isLoginPage]);
