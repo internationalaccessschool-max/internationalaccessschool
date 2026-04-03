@@ -115,10 +115,23 @@ export default function AdminStudentsPage() {
     const activeStudents = students.filter(s => (s.status || "").toUpperCase() !== "LEFT");
     const leftStudents = students.filter(s => (s.status || "").toUpperCase() === "LEFT");
 
-    const classes = ["All", ...Array.from(new Set(
+    const STANDARD_CLASSES = ["Preschool", "Nursery", "LKG", "UKG", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+
+    const dbClasses = Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
             .map(s => getClass(s)).filter(c => c != null && c !== "" && c !== "—")
-    )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+    ));
+
+    const allClassesList = Array.from(new Set([...STANDARD_CLASSES, ...dbClasses]));
+
+    const classes = ["All", ...allClassesList.sort((a, b) => {
+        const indexA = STANDARD_CLASSES.indexOf(a);
+        const indexB = STANDARD_CLASSES.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b, undefined, { numeric: true });
+    })];
 
     const sections = ["All", ...Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
