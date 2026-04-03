@@ -60,7 +60,12 @@ const getDisplayName = (s: Student) => {
 const getClass = (s: Student): string => {
     const cls = s.currentClass;
     if (cls === 0 || cls === "0") return "0";   // explicit check for class 0
-    return safeStr(cls) || "—";
+    const raw = safeStr(cls).trim();
+    if (!raw) return "—";
+    // Normalize LKG / UKG regardless of casing stored in Firestore
+    const upper = raw.toUpperCase();
+    if (upper === "LKG" || upper === "UKG") return upper;
+    return raw;
 };
 
 export default function AdminStudentsPage() {
@@ -118,7 +123,16 @@ export default function AdminStudentsPage() {
     const classes = ["All", ...Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
             .map(s => getClass(s)).filter(c => c != null && c !== "" && c !== "—")
-    )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+    )).sort((a, b) => {
+        // LKG and UKG always go first
+        const order: Record<string, number> = { LKG: -2, UKG: -1 };
+        const aKey = a.toUpperCase();
+        const bKey = b.toUpperCase();
+        if (order[aKey] !== undefined && order[bKey] !== undefined) return order[aKey] - order[bKey];
+        if (order[aKey] !== undefined) return -1;
+        if (order[bKey] !== undefined) return 1;
+        return a.localeCompare(b, undefined, { numeric: true });
+    })];
 
     const sections = ["All", ...Array.from(new Set(
         (activeTab === "active" ? activeStudents : leftStudents)
