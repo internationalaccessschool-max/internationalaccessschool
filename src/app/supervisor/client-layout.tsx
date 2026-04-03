@@ -72,7 +72,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
     useEffect(() => {
         if (!loading && !isLoginPage) {
             if (!user || role !== "supervisor") {
-                router.push("/login");
+                router.push("/supervisor/login");
             }
         }
     }, [user, role, loading, router, isLoginPage]);
