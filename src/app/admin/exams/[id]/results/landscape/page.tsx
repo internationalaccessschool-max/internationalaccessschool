@@ -310,7 +310,8 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
         }
       }
 
-      // 5. Attendance
+      // 5. Attendance — fetch from new hierarchical structure:
+      //    attendance/{year}/{cls}/{month}/{date}_{section}
       const sessionYear = currentExam?.session?.split("-")[0] ?? new Date().getFullYear().toString();
       const sessionStart = `${sessionYear}-04-01`;
 
@@ -320,19 +321,41 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
       const u2End  = getEnd(unit2Id);
       const annEnd = currentExam?.examType === "Annual Exam" ? (currentExam?.endDate ?? "") : getEnd(annualId);
 
-      const attSnap = await getDocs(collection(db, "attendance"));
+      // Build list of YYYY-MM months covering the full academic year
+      const academicMonths: string[] = [];
+      const syNum = Number(sessionYear);
+      for (let m = 4; m <= 12; m++) academicMonths.push(`${syNum}-${String(m).padStart(2, "0")}`);
+      for (let m = 1; m <= 3; m++) academicMonths.push(`${syNum + 1}-${String(m).padStart(2, "0")}`);
+
+      // Try both "Class N" and bare class name variants
+      const clsVariants = [selectedClass, normCls, `Class ${normCls}`];
+
       const attPerStudent: Record<string, { date: string; status: string }[]> = {};
-      attSnap.docs.forEach(d => {
-        const data = d.data();
-        const cls  = (data.cls || data.className || "").replace(/^class\s*/i, "").trim();
-        const sec  = data.section || "";
-        if (cls !== normCls || sec !== selectedSection) return;
-        const dateStr = data.date || "";
-        Object.entries(data.records || {}).forEach(([uid, st]: [string, any]) => {
-          if (!attPerStudent[uid]) attPerStudent[uid] = [];
-          attPerStudent[uid].push({ date: dateStr, status: st });
-        });
-      });
+
+      for (const clsVar of clsVariants) {
+        let found = false;
+        for (const monthStr of academicMonths) {
+          const monthYear = monthStr.slice(0, 4);
+          try {
+            const monthCol = collection(db, "attendance", monthYear, clsVar, monthStr);
+            const monthSnap = await getDocs(monthCol);
+            if (monthSnap.empty) continue;
+            found = true;
+            monthSnap.docs.forEach(d => {
+              const data = d.data();
+              const sec = data.section || "";
+              if (sec && sec !== selectedSection) return;
+              const dateStr = data.date || d.id.split("_")[0] || "";
+              if (!dateStr) return;
+              Object.entries(data.records || {}).forEach(([uid, st]: [string, any]) => {
+                if (!attPerStudent[uid]) attPerStudent[uid] = [];
+                attPerStudent[uid].push({ date: dateStr, status: st });
+              });
+            });
+          } catch { /* month not found */ }
+        }
+        if (found) break; // stop trying class name variants once data found
+      }
 
       // 6. Build results
       const results: StudentResult[] = profiles.map((p: any) => {
