@@ -172,14 +172,18 @@
             "collectionGroup": "records",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                { "fieldPath": "studentId", "order": "ASCENDING" }
+                { "fieldPath": "studentId", "order": "ASCENDING" },
+                { "fieldPath": "year", "order": "DESCENDING" },
+                { "fieldPath": "month", "order": "DESCENDING" }
             ]
         },
         {
             "collectionGroup": "records",
             "queryScope": "COLLECTION_GROUP",
             "fields": [
-                { "fieldPath": "rollNo", "order": "ASCENDING" }
+                { "fieldPath": "rollNo", "order": "ASCENDING" },
+                { "fieldPath": "year", "order": "DESCENDING" },
+                { "fieldPath": "month", "order": "DESCENDING" }
             ]
         }
     ],
