@@ -40,9 +40,12 @@ export function NewsTicker() {
 
     if (!isClient || !isVisible || notices.length === 0) return null;
 
-    // To create a seamless infinite scroll, we need enough content to fill the screen
-    // We'll map the notices twice, and use a dedicated marquee animation that translates -50%
-    const displayNotices = [...notices, ...notices, ...notices, ...notices]; // Quadruple to ensure it's wide enough for large screens
+    // Repeat enough times to ensure one half is wider than ultra-wide screens (e.g., at least 15 items)
+    const repetitions = Math.max(4, Math.ceil(15 / notices.length));
+    const halfNotices: Notice[] = [];
+    for (let i = 0; i < repetitions; i++) {
+        halfNotices.push(...notices);
+    }
 
     return (
         <div className="bg-navy text-white relative z-50 h-9 sm:h-10 flex items-center overflow-hidden">
@@ -61,14 +64,25 @@ export function NewsTicker() {
             {/* Scrolling track */}
             <div className="flex-1 overflow-hidden relative pl-[130px] sm:pl-[155px] group">
                 <div
-                    className="flex whitespace-nowrap will-change-transform group-hover:[animation-play-state:paused]"
+                    className="flex w-max whitespace-nowrap will-change-transform group-hover:[animation-play-state:paused]"
                     style={{
-                        animation: `marquee ${Math.max(20, notices.length * 8)}s linear infinite`,
+                        animation: `marquee ${halfNotices.length * 4}s linear infinite`,
                     }}
                 >
-                    <div className="flex shrink-0 items-center justify-around min-w-full gap-8 pr-8">
-                        {displayNotices.map((notice, idx) => (
-                            <div key={`${notice.id}-${idx}`} className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex shrink-0 items-center gap-8 pr-8">
+                        {halfNotices.map((notice, idx) => (
+                            <div key={`a-${notice.id}-${idx}`} className="flex items-center gap-1.5 shrink-0">
+                                {notice.type === 'urgent' && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                                {notice.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />}
+                                {notice.type === 'info' && <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                                <span className="text-xs sm:text-sm font-medium">{notice.content}</span>
+                                <span className="text-white/30 mx-2">•</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-8 pr-8" aria-hidden="true">
+                        {halfNotices.map((notice, idx) => (
+                            <div key={`b-${notice.id}-${idx}`} className="flex items-center gap-1.5 shrink-0">
                                 {notice.type === 'urgent' && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
                                 {notice.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />}
                                 {notice.type === 'info' && <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
