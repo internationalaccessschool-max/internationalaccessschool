@@ -145,14 +145,6 @@
             ]
         },
         {
-            "collectionGroup": "exams",
-            "queryScope": "COLLECTION",
-            "fields": [
-                { "fieldPath": "autoPublishAt", "order": "ASCENDING" }
-            ]
-        },
-        {
-
             "collectionGroup": "results",
             "queryScope": "COLLECTION",
             "fields": [
