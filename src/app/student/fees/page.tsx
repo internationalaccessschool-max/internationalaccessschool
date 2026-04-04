@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X } from "lucide-react";
@@ -62,18 +62,13 @@ export default function StudentFeesPage() {
             try {
                 const admNo = user.email?.split("@")[0] || "";
 
-                let studentClass = "";
-                let admissionNumber = admNo;
-                let sName = "";
-
+                // 1. Get student info from lookup (for name/rollNo display)
                 try {
                     const lookupDoc = await getDoc(doc(db, "studentLookup", user.uid));
                     if (lookupDoc.exists()) {
                         const data = lookupDoc.data();
-                        const rawCls = (data.className || data.currentClass || "").toString();
-                        studentClass = rawCls.replace(/^class\s*/i, "").trim();
-                        admissionNumber = data.admissionNumber || admNo;
-                        sName = data.studentName || data.name || "";
+                        const sName = data.studentName || data.name || "";
+                        const admissionNumber = data.admissionNumber || admNo;
                         setStudentName(sName);
                         setStudentRoll(admissionNumber);
                     }
@@ -81,60 +76,37 @@ export default function StudentFeesPage() {
                     console.warn("studentLookup failed:", e);
                 }
 
-                let classesToSearch: string[] = [];
-                if (studentClass) {
-                    classesToSearch = [studentClass];
-                } else {
-                    try {
-                        const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
-                        classesToSearch = classesSnap.docs.map(d => d.id);
-                    } catch (e) {
-                        console.warn("Could not fetch fee classes:", e);
-                    }
-                    if (classesToSearch.length === 0) {
-                        classesToSearch = Array.from({ length: 12 }, (_, i) => String(i + 1));
-                    }
-                }
+                // 2. Fetch ALL fee records for this student using collectionGroup
+                //    Works like transport fees — keyed by studentId, not class path
+                //    This correctly handles students who moved class (e.g. NUR → LKG):
+                //    their old NUR fee records will still appear alongside new LKG records
+                const q = query(
+                    collectionGroup(db, "records"),
+                    where("studentId", "==", user.uid)
+                );
+                const snap = await getDocs(q);
 
-                const currentYear = new Date().getFullYear();
-                const currentMonth = new Date().getMonth() + 1;
-                const months = Array.from({ length: 12 }, (_, i) => i + 1);
+                const allRecords: FeeRecord[] = snap.docs.map(d => ({
+                    id: d.id,
+                    path: d.ref.path,
+                    ...d.data()
+                } as FeeRecord));
 
-                const promises: Promise<{ docs: any[] }>[] = [];
-                for (const cls of classesToSearch) {
-                    for (const year of [currentYear - 1, currentYear]) {
-                        for (const month of months) {
-                            if (year === currentYear && month > currentMonth) continue;
-                            promises.push(
-                                getDocs(
-                                    collection(db, `feeRecords/${year}/months/${month}/classes/${cls}/records`)
-                                ).catch(() => ({ docs: [] }))
-                            );
-                        }
-                    }
-                }
+                // Fallback: also check by admissionNumber if no UID-matched records found
+                if (allRecords.length === 0 && admNo) {
+                    const q2 = query(
+                        collectionGroup(db, "records"),
+                        where("rollNo", "==", admNo)
+                    );
+                    const snap2 = await getDocs(q2);
+                    snap2.docs.forEach(d => {
+                        allRecords.push({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord);
+                    });
 
-                const snapshots = await Promise.all(promises);
-                const allRecords: FeeRecord[] = [];
-
-                for (const snap of snapshots) {
-                    for (const d of snap.docs) {
-                        const data = d.data();
-                        const isMatch =
-                            data.studentId === user.uid ||
-                            (admissionNumber && data.admissionNumber === admissionNumber) ||
-                            (admissionNumber && data.rollNo === admissionNumber) ||
-                            (admNo && admNo !== admissionNumber && data.admissionNumber === admNo) ||
-                            (admNo && admNo !== admissionNumber && data.rollNo === admNo) ||
-                            d.id.startsWith(`${user.uid}_`);
-
-                        if (isMatch) {
-                            allRecords.push({ id: d.id, path: d.ref.path, ...data } as FeeRecord);
-                            // Capture student name from first matching record if not found in lookup
-                            if (!sName && data.studentName) {
-                                setStudentName(data.studentName);
-                            }
-                        }
+                    // Update student name from records if still empty
+                    const firstWithName = snap2.docs.find(d => d.data().studentName);
+                    if (firstWithName && !studentName) {
+                        setStudentName(firstWithName.data().studentName);
                     }
                 }
 
@@ -143,7 +115,7 @@ export default function StudentFeesPage() {
                 setRecords(uniqueRecords);
 
                 if (uniqueRecords.length === 0) {
-                    setDebugInfo(`Class: ${studentClass || "scanning all"} | Adm#: ${admissionNumber} | Classes searched: ${classesToSearch.join(",")}`);
+                    setDebugInfo(`UID: ${user.uid} | Adm#: ${admNo} | No records found via collectionGroup`);
                 }
             } catch (e) {
                 console.error("Error fetching fees:", e);
@@ -155,6 +127,7 @@ export default function StudentFeesPage() {
 
         fetchFees();
     }, [user]);
+
 
     const totalPaid = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
     const totalDue = records.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
