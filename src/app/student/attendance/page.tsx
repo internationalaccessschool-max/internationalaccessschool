@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from "lucide-react";
 
@@ -43,51 +43,81 @@ export default function StudentAttendancePage() {
 
         const fetchAttendance = async () => {
             try {
-                // Step 1: Get student's class and section
-                const studentDoc = await getDoc(doc(db, "students", user.uid));
-                if (!studentDoc.exists()) {
-                    setLoading(false);
-                    return;
+                // Step 1: Get student's class and section via studentLookup
+                const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
+                let cls = "";
+                let sec = "";
+
+                if (lookupSnap.exists()) {
+                    cls = lookupSnap.data().class || lookupSnap.data().cls || "";
+                    sec = lookupSnap.data().section || "";
+                } else {
+                    // Fallback to students collection
+                    const studentDoc = await getDoc(doc(db, "students", user.uid));
+                    if (!studentDoc.exists()) { setLoading(false); return; }
+                    const sd = studentDoc.data();
+                    cls = sd.class || sd.className || "";
+                    sec = sd.section || "";
                 }
 
-                const sd = studentDoc.data();
-                const cls = sd.class || "";
-                const sec = sd.section || "";
+                if (!cls || !sec) { setLoading(false); return; }
                 setStudentClass(cls);
                 setStudentSection(sec);
 
-                // Step 2: Get all attendance docs for this class-section
-                const attendanceSnap = await getDocs(
-                    query(
-                        collection(db, "attendance"),
-                        where("cls", "==", cls),
-                        where("section", "==", sec)
-                    )
-                );
+                // Step 2: Fetch attendance from new hierarchical structure
+                // attendance/{year}/{cls}/{month}/{date}_{section}
+                // We need to scan by year — get current academic year range
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                // Academic year: April to March, so if month < 4, we look at previous year too
+                const yearsToCheck = now.getMonth() < 3
+                    ? [String(currentYear - 1), String(currentYear)]
+                    : [String(currentYear), String(currentYear + 1)];
 
-                // Step 3: Extract this student's status from each doc
                 const studentRecords: AttendanceRecord[] = [];
 
-                attendanceSnap.docs.forEach(d => {
-                    const data = d.data();
-                    const statusMap = data.records || {};
-                    const myStatus = statusMap[user.uid];
+                for (const year of yearsToCheck) {
+                    // Get all months for this class under this year
+                    const yearClsRef = collection(db, "attendance", year, cls);
+                    try {
+                        const monthSnaps = await getDocs(yearClsRef);
+                        // monthSnaps contains month-level collections — but getDocs on a collection
+                        // returns documents, not subcollections. We need to enumerate months.
+                        // Since Firestore doesn't list subcollections from client, we use known month pattern.
+                        // Better: fetch each month as a subcollection directly by iterating months
+                        const months = generateAcademicMonths(year);
+                        for (const monthStr of months) {
+                            try {
+                                const monthCol = collection(db, "attendance", year, cls, monthStr);
+                                const docsSnap = await getDocs(monthCol);
+                                docsSnap.docs.forEach(d => {
+                                    const data = d.data();
+                                    // Check if this doc is for the right section
+                                    if (data.section !== sec) return;
+                                    const statusMap = data.records || {};
+                                    const myStatus = statusMap[user.uid];
+                                    if (!myStatus) return;
 
-                    if (myStatus) {
-                        const dateStr: string = data.date || "";
-                        const monthStr = data.month || dateStr.slice(0, 7);
-                        const yearStr = data.year || dateStr.slice(0, 4);
-                        const dateObj = new Date(dateStr + "T00:00:00");
+                                    const dateStr: string = data.date || d.id.split("_")[0] || "";
+                                    if (!dateStr) return;
+                                    const dateObj = new Date(dateStr + "T00:00:00");
 
-                        studentRecords.push({
-                            date: dateStr,
-                            status: myStatus as "present" | "absent" | "late",
-                            day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
-                            month: monthStr,
-                            year: yearStr,
-                        });
+                                    studentRecords.push({
+                                        date: dateStr,
+                                        status: myStatus as "present" | "absent" | "late",
+                                        day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
+                                        month: monthStr,
+                                        year,
+                                    });
+                                });
+                            } catch {
+                                // Month may not exist yet — skip
+                            }
+                        }
+                    } catch {
+                        // Year/class path may not exist
                     }
-                });
+                }
 
                 // Sort by date descending
                 studentRecords.sort((a, b) => b.date.localeCompare(a.date));
@@ -95,8 +125,8 @@ export default function StudentAttendancePage() {
 
                 // Default filter to current month if data exists for it
                 const curMonth = (() => {
-                    const now = new Date();
-                    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                    const n = new Date();
+                    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
                 })();
                 const hasCurMonth = studentRecords.some(r => (r.month || r.date?.slice(0, 7)) === curMonth);
                 setFilterMonth(hasCurMonth ? curMonth : "all");
@@ -314,4 +344,20 @@ export default function StudentAttendancePage() {
             </div>
         </div>
     );
+}
+
+// ─── Helper: Generate all YYYY-MM strings for an academic year ────────────────
+// Academic year starts April, ends March next year
+function generateAcademicMonths(year: string): string[] {
+    const y = Number(year);
+    const months: string[] = [];
+    // Apr–Dec of given year
+    for (let m = 4; m <= 12; m++) {
+        months.push(`${y}-${String(m).padStart(2, "0")}`);
+    }
+    // Jan–Mar of next year
+    for (let m = 1; m <= 3; m++) {
+        months.push(`${y + 1}-${String(m).padStart(2, "0")}`);
+    }
+    return months;
 }
