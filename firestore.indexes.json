@@ -175,6 +175,20 @@
                 { "fieldPath": "email", "order": "ASCENDING" },
                 { "fieldPath": "createdAt", "order": "DESCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "records",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "studentId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "records",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "rollNo", "order": "ASCENDING" }
+            ]
         }
     ],
     "fieldOverrides": []
