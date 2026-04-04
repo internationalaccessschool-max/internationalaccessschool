@@ -60,9 +60,8 @@ interface FeeStructure {
 interface MonthFeeRow {
     month: number;   // 1–12
     year: number;
-    // School fee breakdown — each editable
+    // School fee breakdown — each editable (Annual Fee excluded — handled via Annual Fees module)
     tuitionFee: number;
-    annualFee: number;
     admissionFee: number;
     registrationFee: number;
     sportsFee: number;
@@ -333,7 +332,6 @@ export default function AdvanceFeePage() {
                         month,
                         year,
                         tuitionFee:      feeStructure.tuitionFee      || 0,
-                        annualFee:       feeStructure.annualFee        || 0,
                         admissionFee:    feeStructure.admissionFee     || 0,
                         registrationFee: feeStructure.registrationFee  || 0,
                         sportsFee:       feeStructure.sportsFee        || 0,
@@ -345,7 +343,7 @@ export default function AdvanceFeePage() {
                         transportAlreadyPaid,
                     };
 
-                    row.schoolTotal = row.tuitionFee + row.annualFee + row.admissionFee +
+                    row.schoolTotal = row.tuitionFee + row.admissionFee +
                         row.registrationFee + row.sportsFee + row.miscFee;
                     row.grandTotal  = row.schoolTotal + row.transportFee;
 
@@ -363,13 +361,13 @@ export default function AdvanceFeePage() {
     // ─── Auto-recalculate totals when a row field changes ─────────────────
     const updateRowField = (
         idx: number,
-        field: keyof Pick<MonthFeeRow, "tuitionFee" | "annualFee" | "admissionFee" | "registrationFee" | "sportsFee" | "miscFee" | "transportFee">,
+        field: keyof Pick<MonthFeeRow, "tuitionFee" | "admissionFee" | "registrationFee" | "sportsFee" | "miscFee" | "transportFee">,
         value: number
     ) => {
         setMonthRows(prev => {
             const rows = [...prev];
             const row = { ...rows[idx], [field]: value };
-            row.schoolTotal = row.tuitionFee + row.annualFee + row.admissionFee +
+            row.schoolTotal = row.tuitionFee + row.admissionFee +
                 row.registrationFee + row.sportsFee + row.miscFee;
             row.grandTotal  = row.schoolTotal + row.transportFee;
             rows[idx] = row;
@@ -425,7 +423,6 @@ export default function AdvanceFeePage() {
                         amount:      row.schoolTotal,
                         breakdown: {
                             tuitionFee:      row.tuitionFee,
-                            annualFee:       row.annualFee,
                             admissionFee:    row.admissionFee,
                             registrationFee: row.registrationFee,
                             sportsFee:       row.sportsFee,
@@ -959,7 +956,6 @@ export default function AdvanceFeePage() {
                                                     </div>
                                                     {([
                                                         { field: "tuitionFee" as const,      label: "Tuition Fee" },
-                                                        { field: "annualFee" as const,        label: "Annual Fee" },
                                                         { field: "admissionFee" as const,     label: "Admission Fee" },
                                                         { field: "registrationFee" as const,  label: "Registration Fee" },
                                                         { field: "sportsFee" as const,        label: "Sports Fee" },
