@@ -174,12 +174,36 @@ export async function POST(request: NextRequest) {
                 const sectionRef = classRef.collection(resolvedSection).doc("students");
                 const profileRef = sectionRef.collection("profiles").doc(uid);
 
-                // Ensure parent stubs exist
+                // ── CRITICAL: Delete old profile if class/section has changed ──
+                // If the student already exists in a different class/section, remove the old
+                // document so they don't appear under multiple classes in the DB.
+                try {
+                    const lookupSnap = await adminDb.collection("studentLookup").doc(uid).get();
+                    if (lookupSnap.exists) {
+                        const oldData = lookupSnap.data()!;
+                        const oldClass = String(oldData.className || "").trim();
+                        const oldSection = String(oldData.section || "").trim();
+                        if (oldClass && (oldClass !== resolvedClass || oldSection !== resolvedSection)) {
+                            // Delete the stale profile at the old location
+                            const oldProfileRef = adminDb
+                                .collection("users").doc("classes")
+                                .collection(oldClass).doc("sections")
+                                .collection(oldSection).doc("students")
+                                .collection("profiles").doc(uid);
+                            await oldProfileRef.delete();
+                        }
+                    }
+                } catch (lookupErr) {
+                    // Non-fatal: log and continue — we still write to the new location
+                    console.warn(`Could not clean up old profile for uid=${uid}:`, lookupErr);
+                }
+
+                // Ensure parent stubs exist at the new location
                 await rootRef.set({ updatedAt: new Date() }, { merge: true });
                 await classRef.set({ class: resolvedClass, updatedAt: new Date() }, { merge: true });
                 await sectionRef.set({ section: resolvedSection, class: resolvedClass, updatedAt: new Date() }, { merge: true });
 
-                // Save student
+                // Save student at new (or unchanged) location
                 await profileRef.set(studentData, { merge: true });
 
                 // Also save a lightweight lookup doc
