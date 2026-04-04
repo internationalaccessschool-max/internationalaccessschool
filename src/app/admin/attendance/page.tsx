@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, doc, getDocs, setDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from "lucide-react";
 
@@ -10,7 +10,30 @@ type AttendanceStatus = "present" | "late" | "absent";
 const CLASSES = Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`);
 const SECTIONS = ["A", "B", "C", "D"];
 
-// Generate list of year-months from Jan 2024 to today + 2 months
+// ─── Path helpers ─────────────────────────────────────────────────────────────
+// New hierarchical structure: attendance/{year}/{cls}/{month}/{date}_{section}
+function attDocRef(cls: string, section: string, date: string) {
+    const year = date.slice(0, 4);
+    const month = date.slice(0, 7);
+    const docId = `${date}_${section}`;
+    return doc(db, "attendance", year, cls, month, docId);
+}
+
+function attMonthColRef(cls: string, date: string, month: string) {
+    const year = date.slice(0, 4);
+    return collection(db, "attendance", year, cls, month);
+}
+
+// Generate all YYYY-MM strings for an academic year (Apr to Mar)
+function academicMonths(year: string): string[] {
+    const y = Number(year);
+    const months: string[] = [];
+    for (let m = 4; m <= 12; m++) months.push(`${y}-${String(m).padStart(2, "0")}`);
+    for (let m = 1; m <= 3; m++) months.push(`${y + 1}-${String(m).padStart(2, "0")}`);
+    return months;
+}
+
+// Generate list of year-months from Jan 2024 to today
 function generateMonthOptions(): { label: string; value: string }[] {
     const options: { label: string; value: string }[] = [];
     const now = new Date();
@@ -22,7 +45,7 @@ function generateMonthOptions(): { label: string; value: string }[] {
         const m = String(cur.getMonth() + 1).padStart(2, "0");
         const value = `${y}-${m}`;
         const label = cur.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-        options.unshift({ label, value }); // newest first
+        options.unshift({ label, value });
         cur = new Date(y, cur.getMonth() + 1, 1);
     }
     return options;
@@ -30,9 +53,7 @@ function generateMonthOptions(): { label: string; value: string }[] {
 
 function generateYearOptions(): string[] {
     const years: string[] = [];
-    for (let y = 2050; y >= 2020; y--) {
-        years.push(String(y));
-    }
+    for (let y = 2050; y >= 2020; y--) years.push(String(y));
     return years;
 }
 
@@ -57,7 +78,6 @@ export default function AdminAttendancePage() {
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
 
-    // Year/month filter for summary view
     const currentYearMonth = (() => {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -86,7 +106,6 @@ export default function AdminAttendancePage() {
                 const directSnap = await getDocs(
                     collection(db, "users", "classes", selectedClass, "sections", selectedSection, "students", "profiles")
                 );
-
                 let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 if (allProfiles.length === 0) {
@@ -94,16 +113,6 @@ export default function AdminAttendancePage() {
                         collection(db, "users", "classes", classNum, "sections", selectedSection, "students", "profiles")
                     );
                     allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                }
-
-                if (allProfiles.length === 0) {
-                    const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                    allProfiles = usersSnap.docs
-                        .map((d): any => ({ id: d.id, ...d.data() }))
-                        .filter((d: any) => {
-                            const cls = d.className || d.currentClass || "";
-                            return (cls === selectedClass || cls === classNum) && d.section === selectedSection;
-                        });
                 }
 
                 const seenIds = new Set<string>();
@@ -118,7 +127,6 @@ export default function AdminAttendancePage() {
                         status: "present" as AttendanceStatus,
                     });
                 }
-
                 list.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
                 setStudents(list);
             } catch (err) {
@@ -129,170 +137,99 @@ export default function AdminAttendancePage() {
         fetchStudents();
     }, [selectedClass, selectedSection]);
 
-    // Derive selected date's year-month for targeted fetching
-    const selectedDateMonth = selectedDate.slice(0, 7); // "YYYY-MM"
-    const selectedDateYear = selectedDate.slice(0, 4);  // "YYYY"
-
-    // Fetch attendance data — query by month for day view, by year for summary view
+    // ─── Fetch attendance data using new hierarchical structure ───────────────
     useEffect(() => {
         const fetchAttendance = async () => {
             setLoading(true);
+            setSingleDayRecords({});
+            setExistingDocId(null);
+            setMarkedBy(null);
+
             try {
-                let q;
                 if (viewMode === "date") {
-                    // Day view: fetching only the selected month's data
-                    try {
-                        q = query(
-                            collection(db, "attendance"),
-                            where("cls", "==", selectedClass),
-                            where("section", "==", selectedSection),
-                            where("month", "==", selectedDateMonth)
-                        );
-                        const snap = await getDocs(q);
-                        const docs: AttendanceDoc[] = snap.docs.map(d => ({
-                            date: d.data().date,
-                            month: d.data().month || selectedDateMonth,
-                            year: d.data().year || selectedDateYear,
+                    // Day view: fetch all docs in the selected month's subcollection
+                    const month = selectedDate.slice(0, 7);
+                    const year = selectedDate.slice(0, 4);
+                    const monthCol = collection(db, "attendance", year, selectedClass, month);
+                    const snap = await getDocs(monthCol);
+
+                    const docs: AttendanceDoc[] = snap.docs
+                        .filter(d => {
+                            const sec = d.data().section;
+                            return !sec || sec === selectedSection; // filter by section
+                        })
+                        .map(d => ({
+                            date: d.data().date || d.id.split("_")[0],
+                            month: d.data().month || month,
+                            year: d.data().year || year,
                             records: d.data().records || {},
                             markedByName: d.data().markedByName,
                         }));
 
-                        // Fallback: if no month-indexed docs found, try without month filter (old data)
-                        if (docs.length === 0) {
-                            const fallbackQ = query(
-                                collection(db, "attendance"),
-                                where("cls", "==", selectedClass),
-                                where("section", "==", selectedSection)
-                            );
-                            const fallbackSnap = await getDocs(fallbackQ);
-                            const allDocs: AttendanceDoc[] = fallbackSnap.docs
-                                .filter(d => (d.data().date || "").startsWith(selectedDateMonth))
-                                .map(d => ({
-                                    date: d.data().date,
-                                    month: d.data().month || d.data().date?.slice(0, 7) || selectedDateMonth,
-                                    year: d.data().year || d.data().date?.slice(0, 4) || selectedDateYear,
-                                    records: d.data().records || {},
-                                    markedByName: d.data().markedByName,
-                                }));
-                            processAttendanceDocs(allDocs);
-                            return;
-                        }
+                    docs.sort((a, b) => b.date.localeCompare(a.date));
+                    setAttendanceDocs(docs);
 
-                        processAttendanceDocs(docs);
-                    } catch {
-                        // If month index doesn't exist yet, fall back to unfiltered query
-                        const fallbackQ = query(
-                            collection(db, "attendance"),
-                            where("cls", "==", selectedClass),
-                            where("section", "==", selectedSection)
-                        );
-                        const fallbackSnap = await getDocs(fallbackQ);
-                        const allDocs: AttendanceDoc[] = fallbackSnap.docs
-                            .filter(d => (d.data().date || "").startsWith(selectedDateMonth))
-                            .map(d => ({
-                                date: d.data().date,
-                                month: d.data().month || d.data().date?.slice(0, 7) || selectedDateMonth,
-                                year: d.data().year || d.data().date?.slice(0, 4) || selectedDateYear,
-                                records: d.data().records || {},
-                                markedByName: d.data().markedByName,
-                            }));
-                        processAttendanceDocs(allDocs);
-                    }
+                    const dayDoc = docs.find(d => d.date === selectedDate);
+                    setSingleDayRecords(dayDoc?.records || {});
+                    setMarkedBy(dayDoc?.markedByName || null);
+                    setExistingDocId(dayDoc ? `${selectedDate}_${selectedSection}` : null);
+
                 } else {
-                    // Summary view: fetch by year for full summary
-                    try {
-                        q = query(
-                            collection(db, "attendance"),
-                            where("cls", "==", selectedClass),
-                            where("section", "==", selectedSection),
-                            where("year", "==", filterYear)
-                        );
-                        const snap = await getDocs(q);
-                        const docs: AttendanceDoc[] = snap.docs.map(d => ({
-                            date: d.data().date,
-                            month: d.data().month || d.data().date?.slice(0, 7) || "",
-                            year: d.data().year || d.data().date?.slice(0, 4) || filterYear,
-                            records: d.data().records || {},
-                            markedByName: d.data().markedByName,
-                        }));
+                    // Summary view: fetch all months for the selected year
+                    const months = academicMonths(filterYear);
+                    const allDocs: AttendanceDoc[] = [];
 
-                        if (docs.length === 0) {
-                            // fallback: no year field yet
-                            const fallbackQ = query(
-                                collection(db, "attendance"),
-                                where("cls", "==", selectedClass),
-                                where("section", "==", selectedSection)
-                            );
-                            const fallbackSnap = await getDocs(fallbackQ);
-                            const allDocs: AttendanceDoc[] = fallbackSnap.docs
-                                .filter(d => (d.data().date || "").startsWith(filterYear))
-                                .map(d => ({
-                                    date: d.data().date,
-                                    month: d.data().month || d.data().date?.slice(0, 7) || "",
-                                    year: d.data().year || d.data().date?.slice(0, 4) || filterYear,
-                                    records: d.data().records || {},
-                                    markedByName: d.data().markedByName,
-                                }));
-                            setAttendanceDocs(allDocs.sort((a, b) => b.date.localeCompare(a.date)));
-                            return;
+                    for (const monthStr of months) {
+                        // Only include if month year matches filterYear (approximate)
+                        const monthYear = monthStr.slice(0, 4);
+                        if (monthYear !== filterYear && !(filterYear === monthStr.slice(0, 4))) {
+                            // For academic year: April of filterYear to March of filterYear+1
                         }
-
-                        setAttendanceDocs(docs.sort((a, b) => b.date.localeCompare(a.date)));
-                    } catch {
-                        const fallbackQ = query(
-                            collection(db, "attendance"),
-                            where("cls", "==", selectedClass),
-                            where("section", "==", selectedSection)
-                        );
-                        const fallbackSnap = await getDocs(fallbackQ);
-                        const allDocs: AttendanceDoc[] = fallbackSnap.docs
-                            .filter(d => (d.data().date || "").startsWith(filterYear))
-                            .map(d => ({
-                                date: d.data().date,
-                                month: d.data().month || d.data().date?.slice(0, 7) || "",
-                                year: d.data().year || d.data().date?.slice(0, 4) || filterYear,
-                                records: d.data().records || {},
-                                markedByName: d.data().markedByName,
-                            }));
-                        setAttendanceDocs(allDocs.sort((a, b) => b.date.localeCompare(a.date)));
+                        try {
+                            const monthCol = collection(db, "attendance", filterYear, selectedClass, monthStr);
+                            const snap = await getDocs(monthCol);
+                            snap.docs
+                                .filter(d => {
+                                    const sec = d.data().section;
+                                    return !sec || sec === selectedSection;
+                                })
+                                .forEach(d => {
+                                    allDocs.push({
+                                        date: d.data().date || d.id.split("_")[0],
+                                        month: d.data().month || monthStr,
+                                        year: d.data().year || filterYear,
+                                        records: d.data().records || {},
+                                        markedByName: d.data().markedByName,
+                                    });
+                                });
+                        } catch {
+                            // Month subcollection may not exist
+                        }
                     }
+
+                    allDocs.sort((a, b) => b.date.localeCompare(a.date));
+                    setAttendanceDocs(allDocs);
                 }
             } catch (err) {
                 console.error("Error fetching attendance:", err);
                 setAttendanceDocs([]);
-                setSingleDayRecords({});
-                setExistingDocId(null);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchAttendance();
-    }, [selectedClass, selectedSection, selectedDate, selectedDateMonth, selectedDateYear, viewMode, filterYear, filterMonth]);
+    }, [selectedClass, selectedSection, selectedDate, viewMode, filterYear]);
 
-    function processAttendanceDocs(docs: AttendanceDoc[]) {
-        docs.sort((a, b) => b.date.localeCompare(a.date));
-        setAttendanceDocs(docs);
-
-        const dayDoc = docs.find(d => d.date === selectedDate);
-        setSingleDayRecords(dayDoc?.records || {});
-        setMarkedBy(dayDoc?.markedByName || null);
-
-        const docIdMatch = `${selectedClass}-${selectedSection}_${selectedDate}`.replace(/ /g, "_");
-        setExistingDocId(dayDoc ? docIdMatch : null);
-    }
-
-    // Apply fetched attendance statuses
+    // Apply fetched attendance statuses to student list
     useEffect(() => {
         if (students.length > 0) {
-            setStudents(prev => prev.map(s => {
-                const fetchedStatus = singleDayRecords[s.id];
-                return {
-                    ...s,
-                    status: (fetchedStatus as AttendanceStatus) || "present"
-                };
-            }));
+            setStudents(prev => prev.map(s => ({
+                ...s,
+                status: (singleDayRecords[s.id] as AttendanceStatus) || "present",
+            })));
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [singleDayRecords]);
 
     const setStatus = (studentId: string, status: AttendanceStatus) => {
@@ -308,23 +245,22 @@ export default function AdminAttendancePage() {
     const handleSave = async () => {
         setSaving(true);
         setSaved(false);
-
         try {
-            const docId = `${selectedClass}-${selectedSection}_${selectedDate}`.replace(/ /g, "_");
+            const year = selectedDate.slice(0, 4);
+            const month = selectedDate.slice(0, 7);
             const records: Record<string, string> = {};
             students.forEach(s => { records[s.id] = s.status; });
 
-            // Parse year and month from the selected date
-            const [year, month] = selectedDate.split("-");
-            const yearMonth = `${year}-${month}`;
-
             const currentUser = auth.currentUser;
-            await setDoc(doc(db, "attendance", docId), {
+
+            // Save to new hierarchical path: attendance/{year}/{cls}/{month}/{date}_{section}
+            const ref = attDocRef(selectedClass, selectedSection, selectedDate);
+            await setDoc(ref, {
                 cls: selectedClass,
                 section: selectedSection,
                 date: selectedDate,
                 year,
-                month: yearMonth,
+                month,
                 records,
                 markedBy: currentUser?.uid || "admin",
                 markedByName: currentUser?.displayName || "Admin/Supervisor",
@@ -332,8 +268,19 @@ export default function AdminAttendancePage() {
             });
 
             setSingleDayRecords(records);
-            setExistingDocId(docId);
+            setExistingDocId(`${selectedDate}_${selectedSection}`);
             setMarkedBy(currentUser?.displayName || "Admin/Supervisor");
+
+            // Update local attendanceDocs list
+            setAttendanceDocs(prev => {
+                const existing = prev.find(d => d.date === selectedDate);
+                if (existing) {
+                    return prev.map(d => d.date === selectedDate ? { ...d, records } : d);
+                }
+                return [...prev, { date: selectedDate, month, year, records, markedByName: currentUser?.displayName || "Admin/Supervisor" }]
+                    .sort((a, b) => b.date.localeCompare(a.date));
+            });
+
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (err) {
@@ -344,7 +291,7 @@ export default function AdminAttendancePage() {
         }
     };
 
-    // Summary stats filtered by chosen month in summary view
+    // Summary stats filtered by chosen month
     const summaryDocs = viewMode === "summary" && filterMonth !== "all"
         ? attendanceDocs.filter(d => d.month === filterMonth || d.date?.startsWith(filterMonth))
         : attendanceDocs;
@@ -353,11 +300,11 @@ export default function AdminAttendancePage() {
 
     const getStudentSummary = (studentId: string) => {
         let present = 0, late = 0, absent = 0, total = 0;
-        summaryDocs.forEach(doc => {
-            if (doc.records[studentId]) {
+        summaryDocs.forEach(d => {
+            if (d.records[studentId]) {
                 total++;
-                if (doc.records[studentId] === "present") present++;
-                else if (doc.records[studentId] === "late") late++;
+                if (d.records[studentId] === "present") present++;
+                else if (d.records[studentId] === "late") late++;
                 else absent++;
             }
         });
@@ -384,7 +331,7 @@ export default function AdminAttendancePage() {
                 <div className="relative z-10">
                     <p className="text-white/50 text-sm font-medium">Admin Panel</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">📋 Attendance Reports</h1>
-                    <p className="text-white/40 text-sm mt-1">View and monitor class-wise attendance by year / month / date</p>
+                    <p className="text-white/40 text-sm mt-1">View and manage class-wise attendance — organized by Year → Class → Month → Date</p>
                 </div>
             </div>
 
@@ -433,7 +380,7 @@ export default function AdminAttendancePage() {
                     </div>
                 )}
 
-                {/* Year filter — only in Summary View */}
+                {/* Year + Month filter — only in Summary View */}
                 {viewMode === "summary" && (
                     <>
                         <div>
@@ -514,6 +461,11 @@ export default function AdminAttendancePage() {
                     <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-navy">{dateDisplay}</p>
                         {markedBy && <p className="text-xs text-amber-600 font-medium">⚡ Last marked by: {markedBy}</p>}
+                    </div>
+
+                    {/* DB Path info badge */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-navy/5 rounded-lg text-xs text-navy/60 font-mono w-fit">
+                        📁 attendance / {selectedDate.slice(0, 4)} / {selectedClass} / {selectedDate.slice(0, 7)} / {selectedDate}_{selectedSection}
                     </div>
 
                     {/* Quick actions */}
@@ -601,7 +553,6 @@ export default function AdminAttendancePage() {
             ) : (
                 /* Summary View */
                 <>
-                    {/* Month-wise day count */}
                     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="font-bold text-navy">
@@ -615,7 +566,6 @@ export default function AdminAttendancePage() {
                             <span className="text-xs text-gray-400">{totalDays} days recorded</span>
                         </div>
 
-                        {/* Mini calendar — list of dates recorded this month */}
                         {totalDays > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                                 {summaryDocs.map(d => (
@@ -635,7 +585,6 @@ export default function AdminAttendancePage() {
                         <div className="text-center py-10 text-gray-400 text-sm">No students found.</div>
                     ) : (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                            {/* Table Header */}
                             <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
                                 <span>Student</span>
                                 <span className="text-center">Present</span>
