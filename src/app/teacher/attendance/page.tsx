@@ -17,6 +17,22 @@ interface Student {
     status: AttendanceStatus;
 }
 
+// ─── Path helpers ─────────────────────────────────────────────────────────────
+// New structure: attendance/{year}/{cls}/{month}/{date}_{section}
+// cls is stored as-is (e.g. "Class 1") — Firestore handles spaces in path segments
+function attPath(cls: string, section: string, date: string) {
+    const year = date.slice(0, 4);           // "2026"
+    const month = date.slice(0, 7);          // "2026-04"
+    const docId = `${date}_${section}`;      // "2026-04-03_A"
+    return doc(db, "attendance", year, cls, month, docId);
+}
+
+function attMonthCol(cls: string, section: string, date: string) {
+    const year = date.slice(0, 4);
+    const month = date.slice(0, 7);
+    return collection(db, "attendance", year, cls, month);
+}
+
 export default function TeacherAttendancePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -32,9 +48,9 @@ export default function TeacherAttendancePage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [selectedDate, setSelectedDate] = useState(() => {
         const d = new Date();
-        return d.toISOString().split("T")[0]; // "2026-02-22"
+        return d.toISOString().split("T")[0]; // "2026-04-03"
     });
-    const [existingDocId, setExistingDocId] = useState<string | null>(null);
+    const [existingDoc, setExistingDoc] = useState(false);
 
     // Step 1: Find the teacher's assigned class from teacher doc
     useEffect(() => {
@@ -167,20 +183,19 @@ export default function TeacherAttendancePage() {
         if (!assignedClass || !assignedSection || !selectedDate || students.length === 0) return;
 
         const checkExisting = async () => {
-            const docId = `${assignedClass}-${assignedSection}_${selectedDate}`.replace(/ /g, "_");
             try {
-                const existingDoc = await getDoc(doc(db, "attendance", docId));
-                if (existingDoc.exists()) {
-                    const data = existingDoc.data();
+                const ref = attPath(assignedClass, assignedSection, selectedDate);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
                     const records = data.records || {};
-                    setExistingDocId(docId);
-
+                    setExistingDoc(true);
                     setStudents(prev => prev.map(s => ({
                         ...s,
                         status: (records[s.id] as AttendanceStatus) || "present",
                     })));
                 } else {
-                    setExistingDocId(null);
+                    setExistingDoc(false);
                     setStudents(prev => prev.map(s => ({ ...s, status: "present" as AttendanceStatus })));
                 }
             } catch (err) {
@@ -207,28 +222,28 @@ export default function TeacherAttendancePage() {
         setSaved(false);
 
         try {
-            const docId = `${assignedClass}-${assignedSection}_${selectedDate}`.replace(/ /g, "_");
+            const year = selectedDate.slice(0, 4);
+            const month = selectedDate.slice(0, 7);
             const records: Record<string, string> = {};
             students.forEach(s => { records[s.id] = s.status; });
 
-            // Parse year and month from date string (YYYY-MM-DD)
-            const [year, month] = selectedDate.split("-");
-            const yearMonth = `${year}-${month}`; // e.g. "2026-03"
-
             const currentUser = auth.currentUser;
-            await setDoc(doc(db, "attendance", docId), {
+
+            // New hierarchical path: attendance/{year}/{cls}/{month}/{date}_{section}
+            const ref = attPath(assignedClass, assignedSection, selectedDate);
+            await setDoc(ref, {
                 cls: assignedClass,
                 section: assignedSection,
                 date: selectedDate,
-                year,            // "2026"
-                month: yearMonth, // "2026-03"
+                year,
+                month,
                 records,
                 markedBy: currentUser?.uid || "unknown",
                 markedByName: currentUser?.displayName || "Teacher",
                 createdAt: serverTimestamp(),
             });
 
-            setExistingDocId(docId);
+            setExistingDoc(true);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (err) {
@@ -323,7 +338,7 @@ export default function TeacherAttendancePage() {
                             className="px-4 py-2 rounded-xl text-sm border-0 bg-white/10 text-white backdrop-blur-sm focus:ring-2 focus:ring-gold/30 outline-none"
                         />
                         <span className="text-white/40 text-xs">
-                            {selectedDate.split("-")[0]} / {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { month: "long" })}
+                            {selectedDate.slice(0, 4)} / {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { month: "long" })}
                         </span>
                     </div>
                 </div>
@@ -333,7 +348,7 @@ export default function TeacherAttendancePage() {
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div>
                     <p className="text-sm font-semibold text-navy">{dateDisplay}</p>
-                    {existingDocId && (
+                    {existingDoc && (
                         <p className="text-xs text-amber-600 font-medium mt-1">⚡ Attendance already marked — editing mode</p>
                     )}
                 </div>
@@ -463,7 +478,7 @@ export default function TeacherAttendancePage() {
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : saved ? (
                             "✓ Attendance Saved!"
-                        ) : existingDocId ? (
+                        ) : existingDoc ? (
                             "Update Attendance"
                         ) : (
                             "Save Attendance"
