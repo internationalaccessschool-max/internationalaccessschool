@@ -208,7 +208,7 @@ export default function AdvanceFeePage() {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return s.studentName.toLowerCase().includes(q) || 
-               s.rollNo.toLowerCase().includes(q) || 
+               s.rollNo.toLowerCase().includes(q) ||          // rollNo = admission number
                s.class.includes(q) ||
                (s.busNumber || "").toLowerCase().includes(q);
     });
@@ -642,7 +642,7 @@ export default function AdvanceFeePage() {
                             <input
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Search by name, roll no, class, or bus…"
+                                placeholder="Search by name or admission number…"
                                 className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-navy focus:ring-1 focus:ring-navy outline-none"
                             />
                         </div>
