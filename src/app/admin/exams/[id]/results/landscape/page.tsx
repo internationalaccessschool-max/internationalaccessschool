@@ -70,7 +70,8 @@ const MAX_PER_SUBJECT: Record<ReportType, number> = {
 // ─── Attendance counter ───────────────────────────────────────────────────────
 function countAtt(
   records: { date: string; status: string }[],
-  from: string, to: string
+  from: string, to: string,
+  fromExclusive = false
 ): { wd: number; p: number } {
   if (!from || !to) return { wd: 0, p: 0 };
   const f = new Date(from).getTime();
@@ -78,7 +79,8 @@ function countAtt(
   let wd = 0, p = 0;
   for (const r of records) {
     const d = new Date(r.date).getTime();
-    if (d >= f && d <= t) { wd++; if (r.status === "present") p++; }
+    const startOk = fromExclusive ? d > f : d >= f;
+    if (startOk && d <= t) { wd++; if (r.status === "present") p++; }
   }
   return { wd, p };
 }
@@ -362,9 +364,9 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
         const uid  = p.id;
         const recs = attPerStudent[uid] ?? [];
         const t1  = countAtt(recs, sessionStart, u1End);
-        const hy  = countAtt(recs, u1End, hyEnd);
-        const t2  = countAtt(recs, hyEnd, u2End);
-        const yrl = countAtt(recs, u2End, annEnd);
+        const hy  = countAtt(recs, u1End, hyEnd, true);
+        const t2  = countAtt(recs, hyEnd, u2End, true);
+        const yrl = countAtt(recs, u2End, annEnd, true);
 
         const examMarks: Record<string, Record<string, MarksEntry>> = {};
         for (const eId of examIdsToFetch.filter(Boolean)) {
