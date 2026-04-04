@@ -20,6 +20,7 @@ interface FeeRecord {
     studentId?: string;
     studentName: string;
     rollNo: string;
+    admissionNumber?: string;  // may be stored separately from rollNo
     class: string;
     section: string;
     parentEmail: string;
@@ -841,8 +842,13 @@ export default function ManageFeesPage() {
     const filtered = records.filter(r => {
         if (filterStatus !== "all" && r.status !== filterStatus) return false;
         if (filterClass !== "all" && r.class !== filterClass) return false;
-        if (search && !r.studentName?.toLowerCase().includes(search.toLowerCase()) &&
-            !r.rollNo?.toLowerCase().includes(search.toLowerCase())) return false;
+        if (search) {
+            const q = search.toLowerCase();
+            const matchName = r.studentName?.toLowerCase().includes(q);
+            const matchRoll = r.rollNo?.toLowerCase().includes(q);
+            const matchAdm  = r.admissionNumber?.toLowerCase().includes(q);
+            if (!matchName && !matchRoll && !matchAdm) return false;
+        }
         return true;
     });
 
@@ -919,7 +925,7 @@ export default function ManageFeesPage() {
                     <div className="flex-1 min-w-[160px] relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input value={search} onChange={e => setSearch(e.target.value)}
-                            placeholder="Search student..."
+                            placeholder="Search by name or admission number..."
                             className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-gold outline-none" />
                     </div>
                     <button onClick={fetchRecords}
