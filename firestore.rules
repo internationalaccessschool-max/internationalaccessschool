@@ -58,10 +58,10 @@ service cloud.firestore {
       allow write: if isAccountantOrAdmin();
     }
 
-    // Notices — public read
+    // Notices — public read, only teachers/admin can write
     match /notices/{document=**} {
       allow read: if true;
-      allow write: if isAuth();
+      allow write: if isTeacherOrAdmin();
     }
 
     // Settings
@@ -130,10 +130,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Admissions — authenticated users can submit, only admin can modify
+    // Admissions — only accountant/admin can modify
     match /admissions/{document=**} {
       allow read: if isAuth();
-      allow write: if isAuth();
+      allow write: if isAccountantOrAdmin();
     }
 
     // Admission Requests — public can submit (from website form), admin reads/writes
