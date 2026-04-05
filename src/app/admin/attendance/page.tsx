@@ -11,17 +11,20 @@ const CLASSES = Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`);
 const SECTIONS = ["A", "B", "C", "D"];
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
-// New hierarchical structure: attendance/{year}/{cls}/{month}/{date}_{section}
+// Structure: attendance/{year}/{cls}/months/{month}/{date}_{section}
+// Firestore rules: collection = odd segments, document = even segments
+// attendance(1)/year(2)/cls(3)/months(4)/month(5) = 5 = odd ✅ (collection)
+// attendance(1)/year(2)/cls(3)/months(4)/month(5)/docId(6) = 6 = even ✅ (document)
 function attDocRef(cls: string, section: string, date: string) {
     const year = date.slice(0, 4);
     const month = date.slice(0, 7);
     const docId = `${date}_${section}`;
-    return doc(db, "attendance", year, cls, month, docId);
+    return doc(db, "attendance", year, cls, "months", month, docId);
 }
 
 function attMonthColRef(cls: string, date: string, month: string) {
     const year = date.slice(0, 4);
-    return collection(db, "attendance", year, cls, month);
+    return collection(db, "attendance", year, cls, "months", month);
 }
 
 // Generate all YYYY-MM strings for an academic year (Apr to Mar)
@@ -150,7 +153,7 @@ export default function AdminAttendancePage() {
                     // Day view: fetch all docs in the selected month's subcollection
                     const month = selectedDate.slice(0, 7);
                     const year = selectedDate.slice(0, 4);
-                    const monthCol = collection(db, "attendance", year, selectedClass, month);
+                    const monthCol = collection(db, "attendance", year, selectedClass, "months", month);
                     const snap = await getDocs(monthCol);
 
                     const docs: AttendanceDoc[] = snap.docs
@@ -186,7 +189,7 @@ export default function AdminAttendancePage() {
                             // For academic year: April of filterYear to March of filterYear+1
                         }
                         try {
-                            const monthCol = collection(db, "attendance", filterYear, selectedClass, monthStr);
+                            const monthCol = collection(db, "attendance", filterYear, selectedClass, "months", monthStr);
                             const snap = await getDocs(monthCol);
                             snap.docs
                                 .filter(d => {
