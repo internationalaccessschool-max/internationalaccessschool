@@ -80,7 +80,7 @@ function countAtt(
   for (const r of records) {
     const d = new Date(r.date).getTime();
     const startOk = fromExclusive ? d > f : d >= f;
-    if (startOk && d <= t) { wd++; if (r.status === "present") p++; }
+    if (startOk && d <= t) { wd++; if (r.status === "present" || r.status === "late") p++; }
   }
   return { wd, p };
 }
