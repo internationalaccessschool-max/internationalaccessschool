@@ -88,7 +88,7 @@ export default function StudentAttendancePage() {
                         const months = generateAcademicMonths(year);
                         for (const monthStr of months) {
                             try {
-                                const monthCol = collection(db, "attendance", year, cls, monthStr);
+                                const monthCol = collection(db, "attendance", year, cls, "months", monthStr);
                                 const docsSnap = await getDocs(monthCol);
                                 docsSnap.docs.forEach(d => {
                                     const data = d.data();
