@@ -18,19 +18,21 @@ interface Student {
 }
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
-// New structure: attendance/{year}/{cls}/{month}/{date}_{section}
-// cls is stored as-is (e.g. "Class 1") — Firestore handles spaces in path segments
+// Structure: attendance/{year}/{cls}/months/{month}/{date}_{section}
+// Firestore rules: collection = odd segments, document = even segments
+// attendance(1)/year(2)/cls(3)/months(4)/month(5) = 5 = odd ✅ (collection)
+// attendance(1)/year(2)/cls(3)/months(4)/month(5)/docId(6) = 6 = even ✅ (document)
 function attPath(cls: string, section: string, date: string) {
     const year = date.slice(0, 4);           // "2026"
     const month = date.slice(0, 7);          // "2026-04"
     const docId = `${date}_${section}`;      // "2026-04-03_A"
-    return doc(db, "attendance", year, cls, month, docId);
+    return doc(db, "attendance", year, cls, "months", month, docId);
 }
 
 function attMonthCol(cls: string, section: string, date: string) {
     const year = date.slice(0, 4);
     const month = date.slice(0, 7);
-    return collection(db, "attendance", year, cls, month);
+    return collection(db, "attendance", year, cls, "months", month);
 }
 
 export default function TeacherAttendancePage() {
