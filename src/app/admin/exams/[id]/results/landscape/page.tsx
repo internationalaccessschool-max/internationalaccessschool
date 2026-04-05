@@ -339,7 +339,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
         for (const monthStr of academicMonths) {
           const monthYear = monthStr.slice(0, 4);
           try {
-            const monthCol = collection(db, "attendance", monthYear, clsVar, monthStr);
+            const monthCol = collection(db, "attendance", monthYear, clsVar, "months", monthStr);
             const monthSnap = await getDocs(monthCol);
             if (monthSnap.empty) continue;
             found = true;
