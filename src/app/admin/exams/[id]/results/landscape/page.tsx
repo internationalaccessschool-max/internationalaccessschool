@@ -317,11 +317,19 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
       const sessionYear = currentExam?.session?.split("-")[0] ?? new Date().getFullYear().toString();
       const sessionStart = `${sessionYear}-04-01`;
 
-      const getEnd = (eId: string) => allSessionExams.find(e => e.id === eId)?.endDate ?? "";
+      // getEnd: returns endDate, falls back to startDate, then empty string
+      const getEnd = (eId: string) => {
+        const ex = allSessionExams.find(e => e.id === eId);
+        return ex?.endDate || ex?.startDate || "";
+      };
       const u1End  = getEnd(unit1Id);
       const hyEnd  = getEnd(hyId);
       const u2End  = getEnd(unit2Id);
-      const annEnd = currentExam?.examType === "Annual Exam" ? (currentExam?.endDate ?? "") : getEnd(annualId);
+      // For current exam, also allow today as fallback if endDate missing
+      const todayStr = new Date().toISOString().split("T")[0];
+      const annEnd = currentExam?.examType === "Annual Exam"
+        ? (currentExam?.endDate || currentExam?.startDate || todayStr)
+        : getEnd(annualId);
 
       // Build list of YYYY-MM months covering the full academic year
       const academicMonths: string[] = [];
