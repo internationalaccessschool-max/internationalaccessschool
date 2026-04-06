@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { useRouter } from "next/navigation";
 
 interface NavItem {
@@ -110,13 +111,16 @@ export function MobileSidebar({ title, links }: MobileSidebarProps) {
                     </div>
                     <span className="text-white font-semibold flex-1 truncate">{title}</span>
                 </div>
-                <button
-                    onClick={() => setIsOpen(true)}
-                    className="p-2 -mr-2 text-white/80 hover:text-white focus:outline-none"
-                    aria-label="Open menu"
-                >
-                    <Menu className="w-6 h-6" />
-                </button>
+                <div className="flex items-center gap-1">
+                    <NotificationBell theme="dark" />
+                    <button
+                        onClick={() => setIsOpen(true)}
+                        className="p-2 -mr-2 text-white/80 hover:text-white focus:outline-none"
+                        aria-label="Open menu"
+                    >
+                        <Menu className="w-6 h-6" />
+                    </button>
+                </div>
             </div>
 
             {/* Backdrop Overlay */}
