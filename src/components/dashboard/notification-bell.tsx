@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Bell, Check, Loader2 } from "lucide-react";
 import { requestForToken, setupOnMessageListener } from "@/lib/firebase/messaging";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -16,7 +17,11 @@ type NotificationItem = {
     read: boolean;
 };
 
-export function NotificationBell() {
+interface NotificationBellProps {
+    theme?: "light" | "dark";
+}
+
+export function NotificationBell({ theme = "light" }: NotificationBellProps) {
     const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [permissionStatus, setPermissionStatus] = useState<string>("default");
@@ -89,9 +94,14 @@ export function NotificationBell() {
         <div className="relative z-50">
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 text-gray-600 hover:text-navy hover:bg-gray-100 rounded-full transition-colors focus:outline-none"
+                className={cn(
+                    "relative p-2 rounded-full transition-colors focus:outline-none flex items-center justify-center",
+                    theme === "light" 
+                        ? "text-gray-600 hover:text-navy hover:bg-gray-100" 
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                )}
             >
-                <Bell className="w-6 h-6" />
+                <Bell className="w-5 h-5 md:w-6 md:h-6" />
                 {unreadCount > 0 && (
                     <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-off-white" />
                 )}
