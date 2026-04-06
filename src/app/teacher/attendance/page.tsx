@@ -245,6 +245,16 @@ export default function TeacherAttendancePage() {
                 createdAt: serverTimestamp(),
             });
 
+            // Trigger push notifications asynchronously
+            fetch("/api/notifications/attendance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    date: selectedDate,
+                    students: students
+                })
+            }).catch(e => console.error("Push Notification failed", e));
+
             setExistingDoc(true);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
