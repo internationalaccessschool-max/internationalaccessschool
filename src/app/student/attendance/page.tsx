@@ -52,11 +52,11 @@ export default function StudentAttendancePage() {
                     cls = lookupSnap.data().class || lookupSnap.data().cls || "";
                     sec = lookupSnap.data().section || "";
                 } else {
-                    // Fallback to students collection
-                    const studentDoc = await getDoc(doc(db, "students", user.uid));
+                    // Fallback to users collection
+                    const studentDoc = await getDoc(doc(db, "users", user.uid));
                     if (!studentDoc.exists()) { setLoading(false); return; }
                     const sd = studentDoc.data();
-                    cls = sd.class || sd.className || "";
+                    cls = sd.className || sd.currentClass || sd.class || "";
                     sec = sd.section || "";
                 }
 
@@ -75,20 +75,14 @@ export default function StudentAttendancePage() {
                     : [String(currentYear), String(currentYear + 1)];
 
                 const studentRecords: AttendanceRecord[] = [];
+                const classesToCheck = Array.from(new Set([cls, `class ${cls}`, `Class ${cls}`, cls.replace(/^class\s*/i, "").trim()])).filter(Boolean);
 
-                for (const year of yearsToCheck) {
-                    // Get all months for this class under this year
-                    const yearClsRef = collection(db, "attendance", year, cls);
-                    try {
-                        const monthSnaps = await getDocs(yearClsRef);
-                        // monthSnaps contains month-level collections — but getDocs on a collection
-                        // returns documents, not subcollections. We need to enumerate months.
-                        // Since Firestore doesn't list subcollections from client, we use known month pattern.
-                        // Better: fetch each month as a subcollection directly by iterating months
+                for (const testCls of classesToCheck) {
+                    for (const year of yearsToCheck) {
                         const months = generateAcademicMonths(year);
                         for (const monthStr of months) {
                             try {
-                                const monthCol = collection(db, "attendance", year, cls, "months", monthStr);
+                                const monthCol = collection(db, "attendance", year, testCls, "months", monthStr);
                                 const docsSnap = await getDocs(monthCol);
                                 docsSnap.docs.forEach(d => {
                                     const data = d.data();
@@ -114,21 +108,24 @@ export default function StudentAttendancePage() {
                                 // Month may not exist yet — skip
                             }
                         }
-                    } catch {
-                        // Year/class path may not exist
                     }
                 }
 
+                // Remove duplicates by date if multiple classes match somehow
+                const uniqueRecordsMap = new Map<string, AttendanceRecord>();
+                studentRecords.forEach(r => uniqueRecordsMap.set(r.date, r));
+                const finalRecords = Array.from(uniqueRecordsMap.values());
+
                 // Sort by date descending
-                studentRecords.sort((a, b) => b.date.localeCompare(a.date));
-                setRecords(studentRecords);
+                finalRecords.sort((a, b) => b.date.localeCompare(a.date));
+                setRecords(finalRecords);
 
                 // Default filter to current month if data exists for it
                 const curMonth = (() => {
                     const n = new Date();
                     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
                 })();
-                const hasCurMonth = studentRecords.some(r => (r.month || r.date?.slice(0, 7)) === curMonth);
+                const hasCurMonth = finalRecords.some(r => (r.month || r.date?.slice(0, 7)) === curMonth);
                 setFilterMonth(hasCurMonth ? curMonth : "all");
             } catch (err) {
                 console.error("Error fetching attendance:", err);
