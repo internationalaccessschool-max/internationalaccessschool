@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus } from "lucide-react";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -69,7 +70,10 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <div className="print:hidden">
                 <MobileSidebar title="Student Portal" links={links} />
             </div>
-            <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8 print:p-0 print:m-0 print:overflow-visible">
+            <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8 print:p-0 print:m-0 print:overflow-visible relative">
+                <div className="absolute top-4 right-4 md:top-8 md:right-8 print:hidden z-40">
+                    <NotificationBell />
+                </div>
                 <div className="max-w-7xl mx-auto print:max-w-none">
                     {children}
                 </div>
