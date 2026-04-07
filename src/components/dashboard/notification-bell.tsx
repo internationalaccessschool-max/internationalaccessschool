@@ -5,7 +5,7 @@ import { Bell, Check, Loader2 } from "lucide-react";
 import { requestForToken, setupOnMessageListener } from "@/lib/firebase/messaging";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import toast from "react-hot-toast";
 
@@ -66,13 +66,37 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
         try {
             const token = await requestForToken();
             if (token && user) {
-                // Update Firestore with the new token
+                // Use setDoc with merge so it works even if the user doc doesn't exist in the top-level users collection
                 const userRef = doc(db, "users", user.uid);
-                await updateDoc(userRef, { fcmToken: token });
+                
+                // Try to get existing user data for additional fields
+                let extraFields: Record<string, any> = {};
+                try {
+                    const snap = await getDoc(userRef);
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        extraFields = {
+                            name: d.name || `${d.firstName || ""} ${d.lastName || ""}`.trim() || user.displayName || "",
+                            admissionNumber: d.admissionNumber || d.regNo || "",
+                        };
+                    } else {
+                        extraFields = { name: user.displayName || "" };
+                    }
+                } catch (_) {
+                    extraFields = { name: user.displayName || "" };
+                }
+                
+                await setDoc(userRef, { 
+                    fcmToken: token,
+                    fcmUpdatedAt: new Date().toISOString(),
+                    ...extraFields
+                }, { merge: true });
+                
                 setPermissionStatus("granted");
                 toast.success("Notifications Enabled!");
+                console.log("[FCM] Token saved to users/" + user.uid);
             } else {
-                toast.error("Failed to enable notifications.");
+                toast.error("Failed to enable notifications. Please allow browser notifications.");
             }
         } catch (error) {
             console.error("Error enabling notifications:", error);
