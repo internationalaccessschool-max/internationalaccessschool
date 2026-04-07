@@ -16,15 +16,19 @@ export const requestForToken = async () => {
 
         const messaging = getMessaging(app);
         
-        // Register our service worker explicitly before requesting the token
-        let swReg: ServiceWorkerRegistration | undefined;
+        // Register SW and wait for the ACTIVE registration (which has pushManager)
+        let activeReg: ServiceWorkerRegistration | undefined;
         if ("serviceWorker" in navigator) {
             try {
-                swReg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
-                await navigator.serviceWorker.ready;
-                console.log("[FCM] Service worker registered:", swReg.scope);
+                // Step 1: Register the SW
+                await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
+                // Step 2: Wait for an ACTIVE SW — this is the registration with pushManager
+                activeReg = await navigator.serviceWorker.ready;
+                console.log("[FCM] Service worker active:", activeReg.scope);
             } catch (swErr) {
                 console.warn("[FCM] SW registration failed (will use existing):", swErr);
+                // Fallback: try to use whatever is ready
+                try { activeReg = await navigator.serviceWorker.ready; } catch {}
             }
         }
 
@@ -37,7 +41,7 @@ export const requestForToken = async () => {
         console.log("[FCM] Requesting token with VAPID key:", VAPID_KEY.slice(0, 10) + "...");
         const currentToken = await getToken(messaging, { 
             vapidKey: VAPID_KEY,
-            ...(swReg ? { serviceWorkerRegistration: swReg } : {})
+            ...(activeReg ? { serviceWorkerRegistration: activeReg } : {})
         });
 
         if (currentToken) {
