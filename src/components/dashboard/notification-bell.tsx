@@ -66,24 +66,35 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
         try {
             const token = await requestForToken();
             if (token && user) {
-                // Use setDoc with merge so it works even if the user doc doesn't exist in the top-level users collection
                 const userRef = doc(db, "users", user.uid);
-                
-                // Try to get existing user data for additional fields
-                let extraFields: Record<string, any> = {};
+
+                // admissionNumber = email prefix (e.g. "234" from "234@ias.edu")
+                // This is the reliable key for the notification API's Strategy 2 lookup
+                const admissionNumberFromEmail = user.email?.split("@")[0] || "";
+
+                // Try to get extra fields (name, class, section) from existing user doc
+                let extraFields: Record<string, any> = {
+                    admissionNumber: admissionNumberFromEmail, // guaranteed fallback
+                };
                 try {
                     const snap = await getDoc(userRef);
                     if (snap.exists()) {
                         const d = snap.data();
                         extraFields = {
+                            admissionNumber: d.admissionNumber || d.regNo || admissionNumberFromEmail,
                             name: d.name || `${d.firstName || ""} ${d.lastName || ""}`.trim() || user.displayName || "",
-                            admissionNumber: d.admissionNumber || d.regNo || "",
                         };
                     } else {
-                        extraFields = { name: user.displayName || "" };
+                        extraFields = {
+                            admissionNumber: admissionNumberFromEmail,
+                            name: user.displayName || "",
+                        };
                     }
                 } catch (_) {
-                    extraFields = { name: user.displayName || "" };
+                    extraFields = {
+                        admissionNumber: admissionNumberFromEmail,
+                        name: user.displayName || "",
+                    };
                 }
                 
                 await setDoc(userRef, { 
@@ -94,7 +105,7 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                 
                 setPermissionStatus("granted");
                 toast.success("Notifications Enabled!");
-                console.log("[FCM] Token saved to users/" + user.uid);
+                console.log(`[FCM] Token saved for uid=${user.uid}, admNo=${extraFields.admissionNumber}`);
             } else {
                 toast.error("Failed to enable notifications. Please allow browser notifications.");
             }
