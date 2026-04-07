@@ -1,5 +1,8 @@
-importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
+/* eslint-disable no-undef */
+// Firebase Messaging Service Worker
+// IMPORTANT: Use same major version as client SDK (12.x)
+importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
   apiKey: "AIzaSyBnardmc017DwxLkGSj-NopIRp94Ho41BQ",
