@@ -2,8 +2,7 @@ import { getMessaging, getToken, onMessage, isSupported } from "firebase/messagi
 import { getInstallations, getId } from "firebase/installations";
 import { app } from "../firebase";
 
-const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY 
-    || "BKgKYGhqP9QZkxQATvU4y1VEjnu2boGCV3DyubyoPwtE4Qx_LN4KF9Qy0ldZd4yLuxDghAQbq_84RCEXMYBBFvl";
+const VAPID_KEY = "BKgKYGhqP9QZkxQATvU4y1VEjnu2boGCV3DyubyoPwtE4Qx_LN4KF9Qy0ldZd4yLuxDghAQbq_84RCEXMYBBFvl";
 
 export const requestForToken = async () => {
     try {
@@ -114,8 +113,7 @@ export const requestForToken = async () => {
         console.log("[FCM] Requesting token with VAPID:", VAPID_KEY.slice(0, 15) + "...");
 
         const currentToken = await getToken(messaging, { 
-            vapidKey: VAPID_KEY,
-            serviceWorkerRegistration: readyReg
+            vapidKey: VAPID_KEY
         });
 
         if (currentToken) {
