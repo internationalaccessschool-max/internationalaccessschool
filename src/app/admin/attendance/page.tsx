@@ -270,6 +270,16 @@ export default function AdminAttendancePage() {
                 createdAt: serverTimestamp(),
             });
 
+            // Trigger push notifications for absent/late students
+            fetch("/api/notifications/attendance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    date: selectedDate,
+                    students: students.map(s => ({ id: s.id, name: s.name, regNo: s.regNo, status: s.status }))
+                })
+            }).catch(e => console.error("Push Notification failed:", e));
+
             setSingleDayRecords(records);
             setExistingDocId(`${selectedDate}_${selectedSection}`);
             setMarkedBy(currentUser?.displayName || "Admin/Supervisor");
