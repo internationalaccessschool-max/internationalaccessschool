@@ -3,7 +3,7 @@
   "name": "IAS Admin Console",
   "short_name": "IAS Admin",
   "description": "Administrator console for International Access School.",
-  "start_url": "/admin",
+  "start_url": "/admin/login",
   "scope": "/admin/",
   "display": "standalone",
   "background_color": "#ffffff",
