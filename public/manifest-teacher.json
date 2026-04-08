@@ -3,7 +3,7 @@
   "name": "IAS Teacher Portal",
   "short_name": "IAS Teacher",
   "description": "Teacher portal for International Access School.",
-  "start_url": "/teacher",
+  "start_url": "/teacher/login",
   "scope": "/teacher/",
   "display": "standalone",
   "background_color": "#ffffff",
