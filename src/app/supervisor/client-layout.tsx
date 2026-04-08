@@ -16,6 +16,7 @@ import {
     ChevronRight, LogOut,
 } from "lucide-react";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
+import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 
 // Master list — maps supervisor route → icon + label
 const ALL_NAV = [
@@ -94,7 +95,14 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
         router.push("/login");
     };
 
-    if (isLoginPage) return <>{children}</>;
+    if (isLoginPage) {
+        return (
+            <>
+                {children}
+                <PWAInstallTrigger appName="Supervisor Portal" themeColor="#8b5cf6" icon="💼" />
+            </>
+        );
+    }
 
     if (loading || loadingPerms || !user || role !== "supervisor") {
         return (
@@ -188,6 +196,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                     {children}
                 </div>
             </main>
+            <PWAInstallTrigger appName="Supervisor Portal" themeColor="#8b5cf6" icon="💼" />
         </div>
     );
 }
