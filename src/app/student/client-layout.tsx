@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus } from "lucide-react";
+import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
@@ -50,7 +51,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     ];
 
     if (isLoginPage) {
-        return <>{children}</>;
+        return (
+            <>
+                {children}
+                <PWAInstallTrigger appName="Student Portal" themeColor="#3b82f6" icon="🎓" />
+            </>
+        );
     }
 
     if (loading || !user || (role !== "student" && role !== "parent")) {
@@ -74,6 +80,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                     {children}
                 </div>
             </main>
+            <PWAInstallTrigger appName="Student Portal" themeColor="#3b82f6" icon="🎓" />
         </div>
     );
 }
