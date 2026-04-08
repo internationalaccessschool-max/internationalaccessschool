@@ -6,6 +6,7 @@ import {
     LayoutDashboard, Users, CheckSquare, GraduationCap,
     BookOpen, User, Settings, Loader2, Clock
 } from "lucide-react";
+import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -51,7 +52,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     ];
 
     if (isLoginPage) {
-        return <>{children}</>;
+        return (
+            <>
+                {children}
+                <PWAInstallTrigger appName="Teacher Portal" themeColor="#10b981" icon="📚" />
+            </>
+        );
     }
 
     if (loading || !user || role !== "teacher") {
@@ -73,6 +79,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     {children}
                 </div>
             </main>
+            <PWAInstallTrigger appName="Teacher Portal" themeColor="#10b981" icon="📚" />
         </div>
     );
 }
