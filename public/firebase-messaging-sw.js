@@ -13,6 +13,15 @@ firebase.initializeApp({
   appId: "1:891809929028:web:422f555289880bb021a911"
 });
 
+// CRITICAL: Force SW to activate immediately and take control of the page
+// Without these, pushManager.subscribe() fails with "no active Service Worker"
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
