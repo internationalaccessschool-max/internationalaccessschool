@@ -3,7 +3,7 @@
   "name": "IAS Supervisor Portal",
   "short_name": "IAS Supervisor",
   "description": "Supervisor portal for International Access School.",
-  "start_url": "/supervisor",
+  "start_url": "/supervisor/login",
   "scope": "/supervisor/",
   "display": "standalone",
   "background_color": "#ffffff",
