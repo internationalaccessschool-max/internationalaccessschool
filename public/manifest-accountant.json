@@ -3,7 +3,7 @@
   "name": "IAS Accountant Portal",
   "short_name": "IAS Finance",
   "description": "Accountant portal for International Access School.",
-  "start_url": "/accountant",
+  "start_url": "/accountant/login",
   "scope": "/accountant/",
   "display": "standalone",
   "background_color": "#ffffff",
