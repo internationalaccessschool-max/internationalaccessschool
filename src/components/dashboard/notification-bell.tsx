@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Bell, Check, Loader2 } from "lucide-react";
-import { requestForToken, setupOnMessageListener } from "@/lib/firebase/messaging";
+import { subscribeToNotifications } from "@/lib/onesignal";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import toast from "react-hot-toast";
 
@@ -31,7 +31,6 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
     useEffect(() => {
         if (typeof window !== "undefined" && "Notification" in window) {
             setPermissionStatus(Notification.permission);
-            // Load local storage notifications
             const stored = localStorage.getItem("student_notifications");
             if (stored) {
                 try {
@@ -43,12 +42,15 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
         }
     }, []);
 
+    // Listen for OneSignal foreground notifications
     useEffect(() => {
-        setupOnMessageListener((payload: any) => {
+        if (typeof window === "undefined") return;
+        const handler = (event: any) => {
+            const payload = event.detail?.notification || {};
             const newNotif: NotificationItem = {
                 id: Date.now().toString(),
-                title: payload.notification?.title || "New Notification",
-                body: payload.notification?.body || "",
+                title: payload.title || "New Notification",
+                body: payload.body || "",
                 date: Date.now(),
                 read: false,
             };
@@ -58,54 +60,31 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                 return updated;
             });
             toast.success(newNotif.title, { icon: "🔔" });
-        });
+        };
+        window.addEventListener("OneSignalNotificationReceived", handler);
+        return () => window.removeEventListener("OneSignalNotificationReceived", handler);
     }, []);
 
     const handleEnableClick = async () => {
         setIsLoading(true);
         try {
-            const token = await requestForToken();
-            if (token && user) {
-                const userRef = doc(db, "users", user.uid);
-
-                // admissionNumber = email prefix (e.g. "234" from "234@ias.edu")
-                // This is the reliable key for the notification API's Strategy 2 lookup
-                const admissionNumberFromEmail = user.email?.split("@")[0] || "";
-
-                // Try to get extra fields (name, class, section) from existing user doc
-                let extraFields: Record<string, any> = {
-                    admissionNumber: admissionNumberFromEmail, // guaranteed fallback
-                };
-                try {
-                    const snap = await getDoc(userRef);
+            // Get user's admission number for targeting
+            let admissionNumber = user?.email?.split("@")[0] || "";
+            try {
+                if (user) {
+                    const snap = await getDoc(doc(db, "users", user.uid));
                     if (snap.exists()) {
                         const d = snap.data();
-                        extraFields = {
-                            admissionNumber: d.admissionNumber || d.regNo || admissionNumberFromEmail,
-                            name: d.name || `${d.firstName || ""} ${d.lastName || ""}`.trim() || user.displayName || "",
-                        };
-                    } else {
-                        extraFields = {
-                            admissionNumber: admissionNumberFromEmail,
-                            name: user.displayName || "",
-                        };
+                        admissionNumber = d.admissionNumber || d.regNo || admissionNumber;
                     }
-                } catch (_) {
-                    extraFields = {
-                        admissionNumber: admissionNumberFromEmail,
-                        name: user.displayName || "",
-                    };
                 }
-                
-                await setDoc(userRef, { 
-                    fcmToken: token,
-                    fcmUpdatedAt: new Date().toISOString(),
-                    ...extraFields
-                }, { merge: true });
-                
+            } catch (_) { /* use email prefix fallback */ }
+
+            const success = await subscribeToNotifications(admissionNumber);
+            if (success) {
                 setPermissionStatus("granted");
-                toast.success("Notifications Enabled!");
-                console.log(`[FCM] Token saved for uid=${user.uid}, admNo=${extraFields.admissionNumber}`);
+                toast.success("Notifications Enabled! ✅");
+                console.log(`[OneSignal] Subscribed for admNo=${admissionNumber}`);
             } else {
                 toast.error("Failed to enable notifications. Please allow browser notifications.");
             }
