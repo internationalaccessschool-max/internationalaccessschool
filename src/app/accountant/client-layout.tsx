@@ -5,7 +5,7 @@ import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Banknote, Settings2, ClipboardList, PlusCircle, Loader2, Bus, CreditCard, CalendarClock
 } from "lucide-react";
-
+import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -44,7 +44,14 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
         },
     ];
 
-    if (isLoginPage) return <>{children}</>;
+    if (isLoginPage) {
+        return (
+            <>
+                {children}
+                <PWAInstallTrigger appName="Finance Portal" themeColor="#f59e0b" icon="💰" />
+            </>
+        );
+    }
 
     if (loading || !user || role !== "accountant") {
         return (
@@ -65,6 +72,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
                     {children}
                 </div>
             </main>
+            <PWAInstallTrigger appName="Finance Portal" themeColor="#f59e0b" icon="💰" />
         </div>
     );
 }
