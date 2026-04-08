@@ -6,6 +6,7 @@ import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
     Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays
 } from "lucide-react";
+import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -87,7 +88,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     ];
 
     if (isLoginPage) {
-        return <>{children}</>;
+        return (
+            <>
+                {children}
+                <PWAInstallTrigger appName="Admin Console" themeColor="#ef4444" icon="🛡️" />
+            </>
+        );
     }
 
     if (loading || !user || role !== "admin") {
@@ -109,6 +115,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     {children}
                 </div>
             </main>
+            <PWAInstallTrigger appName="Admin Console" themeColor="#ef4444" icon="🛡️" />
         </div>
     );
 }
