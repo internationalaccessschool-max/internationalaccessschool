@@ -69,7 +69,9 @@ export default function TeacherHomeworkPage() {
             setLoadingSubjects(true);
             try {
                 const { doc: fsDoc, getDoc: fsGetDoc } = await import("firebase/firestore");
-                const snap = await fsGetDoc(fsDoc(db, "classSubjects", formData.className));
+                // Admin stores with key "1","2"... so strip "Class " prefix
+                const classKey = formData.className.replace(/^Class\s*/i, "").trim();
+                const snap = await fsGetDoc(fsDoc(db, "classSubjects", classKey));
                 if (snap.exists()) {
                     const subs = (snap.data().subjects || []) as Array<{ name: string } | string>;
                     const names = subs
