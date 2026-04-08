@@ -34,28 +34,84 @@ export default function TeacherClassesPage() {
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
 
-            // Get teacher's assignment — supports both old flat format and new classSections format
-            const teacherSnap = await getDocs(query(collection(db, "teachers"), where("uid", "==", user.uid)));
             let classSections: Record<string, string[]> = {};
-            if (!teacherSnap.empty) {
-                const data = teacherSnap.docs[0].data();
-                const a = data.assignment;
-                if (a?.classSections) {
-                    // New format
-                    classSections = a.classSections;
-                } else if (a?.classes?.length) {
-                    // Old flat format — migrate on-the-fly
-                    (a.classes as string[]).forEach((c: string) => { classSections[c] = a.sections || []; });
+
+            // Method 1: Direct doc lookup by UID (most reliable, matches homework page)
+            try {
+                const { doc: fsDoc, getDoc: fsGetDoc } = await import("firebase/firestore");
+                const teacherDoc = await fsGetDoc(fsDoc(db, "teachers", user.uid));
+                if (teacherDoc.exists()) {
+                    const data = teacherDoc.data();
+
+                    // Try periodSchedule first (timetable-based assignment)
+                    const periodSchedule = data?.periodSchedule || {};
+                    Object.values(periodSchedule).forEach((period: any) => {
+                        if (period.className && period.section) {
+                            const clsName = period.className.startsWith("Class")
+                                ? period.className
+                                : `Class ${period.className}`;
+                            if (!classSections[clsName]) classSections[clsName] = [];
+                            if (!classSections[clsName].includes(period.section)) {
+                                classSections[clsName].push(period.section);
+                            }
+                        }
+                    });
+
+                    // Fallback: assignment.classSections
+                    if (Object.keys(classSections).length === 0) {
+                        const a = data?.assignment;
+                        if (a?.classSections && Object.keys(a.classSections).length > 0) {
+                            classSections = a.classSections;
+                        } else if (a?.classes?.length) {
+                            (a.classes as string[]).forEach((c: string) => {
+                                classSections[c] = a.sections || [];
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[Teacher] direct doc lookup failed:", err);
+            }
+
+            // Method 2: Fallback — where("uid", "==") query
+            if (Object.keys(classSections).length === 0) {
+                try {
+                    const teacherSnap = await getDocs(query(collection(db, "teachers"), where("uid", "==", user.uid)));
+                    if (!teacherSnap.empty) {
+                        const data = teacherSnap.docs[0].data();
+                        const a = data.assignment;
+                        if (a?.classSections) classSections = a.classSections;
+                        else if (a?.classes?.length) {
+                            (a.classes as string[]).forEach((c: string) => {
+                                classSections[c] = a.sections || [];
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error("[Teacher] where lookup failed:", err);
                 }
             }
+
             setTeacherAssignment({ classSections });
 
-            // ✅ Optimised: fetch each assigned class-section directly — no whole-db scan
+            // ── Fetch students ─────────────────────────────────────────────
             try {
                 const assignedClasses = Object.keys(classSections);
 
                 if (assignedClasses.length === 0) {
-                    setStudents([]);
+                    // No class assigned — show all students as fallback
+                    let allStudents: Student[] = [];
+                    try {
+                        const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+                        allStudents = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                    } catch { /* ignore */ }
+                    if (allStudents.length === 0) {
+                        try {
+                            const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
+                            allStudents = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                        } catch { /* ignore */ }
+                    }
+                    setStudents(allStudents);
                 } else {
                     const fetchTasks: Promise<Student[]>[] = [];
 
