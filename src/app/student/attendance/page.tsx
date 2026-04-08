@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, collectionGroup, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from "lucide-react";
 
@@ -30,6 +30,21 @@ function generateMonthOptions(records: AttendanceRecord[]): { label: string; val
         });
 }
 
+// Generate all YYYY-MM strings for an academic year (Apr–Mar)
+// Returns array of { monthStr, year } where year is the correct Firestore year key
+function generateAcademicMonthsWithYear(sessionYear: number): { monthStr: string; year: string }[] {
+    const result: { monthStr: string; year: string }[] = [];
+    // Apr–Dec of sessionYear → stored under sessionYear
+    for (let m = 4; m <= 12; m++) {
+        result.push({ monthStr: `${sessionYear}-${String(m).padStart(2, "0")}`, year: String(sessionYear) });
+    }
+    // Jan–Mar of next year → stored under next year
+    for (let m = 1; m <= 3; m++) {
+        result.push({ monthStr: `${sessionYear + 1}-${String(m).padStart(2, "0")}`, year: String(sessionYear + 1) });
+    }
+    return result;
+}
+
 export default function StudentAttendancePage() {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -43,53 +58,119 @@ export default function StudentAttendancePage() {
 
         const fetchAttendance = async () => {
             try {
-                // Step 1: Get student's class and section via studentLookup
-                const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
                 let cls = "";
                 let sec = "";
+                let studentDocId = user.uid; // default key used in attendance records
 
+                // ── Step 1: Get student's class and section ────────────────────
+                // Try 1: studentLookup collection
+                const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
                 if (lookupSnap.exists()) {
-                    cls = lookupSnap.data().class || lookupSnap.data().cls || "";
-                    sec = lookupSnap.data().section || "";
-                } else {
-                    // Fallback to users collection
-                    const studentDoc = await getDoc(doc(db, "users", user.uid));
-                    if (!studentDoc.exists()) { setLoading(false); return; }
-                    const sd = studentDoc.data();
-                    cls = sd.className || sd.currentClass || sd.class || "";
-                    sec = sd.section || "";
+                    const d = lookupSnap.data();
+                    cls = d.class || d.cls || d.className || "";
+                    sec = d.section || "";
+                }
+
+                // Try 2: users/{uid} document
+                if (!cls || !sec) {
+                    const userSnap = await getDoc(doc(db, "users", user.uid));
+                    if (userSnap.exists()) {
+                        const d = userSnap.data();
+                        cls = d.className || d.currentClass || d.class || cls || "";
+                        sec = d.section || sec || "";
+                        studentDocId = d.admissionNumber || user.uid;
+                    }
+                }
+
+                // Try 3: collectionGroup("profiles") — search by uid or email
+                if (!cls || !sec) {
+                    try {
+                        const profileQ = query(collectionGroup(db, "profiles"), where("uid", "==", user.uid));
+                        const profileSnap = await getDocs(profileQ);
+                        if (!profileSnap.empty) {
+                            const d = profileSnap.docs[0].data();
+                            const pathParts = profileSnap.docs[0].ref.path.split("/");
+                            const clsIdx = pathParts.indexOf("classes");
+                            const secIdx = pathParts.indexOf("sections");
+                            cls = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.className || d.currentClass || cls || "");
+                            sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.section || sec || "");
+                            studentDocId = d.admissionNumber || profileSnap.docs[0].id || user.uid;
+                        }
+                    } catch { /* ignore */ }
+                }
+
+                // Try 4: collectionGroup by email
+                if ((!cls || !sec) && user.email) {
+                    try {
+                        const emailQ = query(collectionGroup(db, "profiles"), where("email", "==", user.email));
+                        const emailSnap = await getDocs(emailQ);
+                        if (!emailSnap.empty) {
+                            const d = emailSnap.docs[0].data();
+                            const pathParts = emailSnap.docs[0].ref.path.split("/");
+                            const clsIdx = pathParts.indexOf("classes");
+                            const secIdx = pathParts.indexOf("sections");
+                            cls = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.className || d.currentClass || cls || "");
+                            sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.section || sec || "");
+                            studentDocId = d.admissionNumber || emailSnap.docs[0].id || user.uid;
+                        }
+                    } catch { /* ignore */ }
                 }
 
                 if (!cls || !sec) { setLoading(false); return; }
-                setStudentClass(cls);
+
+                // Normalize class name: strip "Class " prefix
+                const normCls = cls.replace(/^class\s*/i, "").trim();
+                setStudentClass(normCls);
                 setStudentSection(sec);
 
-                // Step 2: Fetch attendance from new hierarchical structure
-                // attendance/{year}/{cls}/{month}/{date}_{section}
-                // We need to scan by year — get current academic year range
+                // ── Step 2: Determine academic session years to check ──────────
                 const now = new Date();
                 const currentYear = now.getFullYear();
-                // Academic year: April to March, so if month < 4, we look at previous year too
-                const yearsToCheck = now.getMonth() < 3
-                    ? [String(currentYear - 1), String(currentYear)]
-                    : [String(currentYear), String(currentYear + 1)];
+                // If Jan–Mar, also check the previous academic session
+                const sessionYears = now.getMonth() < 3
+                    ? [currentYear - 1, currentYear]
+                    : [currentYear];
 
+                // All class name variants to try
+                const clsVariants = Array.from(new Set([
+                    normCls,
+                    cls,
+                    `Class ${normCls}`,
+                    `class ${normCls}`,
+                ])).filter(Boolean);
+
+                // Keys to check in attendance records (uid, admissionNumber, doc id)
+                const keysToCheck = Array.from(new Set([user.uid, studentDocId].filter(Boolean)));
+
+                // ── Step 3: Fetch attendance records ──────────────────────────
                 const studentRecords: AttendanceRecord[] = [];
-                const classesToCheck = Array.from(new Set([cls, `class ${cls}`, `Class ${cls}`, cls.replace(/^class\s*/i, "").trim()])).filter(Boolean);
 
-                for (const testCls of classesToCheck) {
-                    for (const year of yearsToCheck) {
-                        const months = generateAcademicMonths(year);
-                        for (const monthStr of months) {
+                for (const sessionYear of sessionYears) {
+                    const monthList = generateAcademicMonthsWithYear(sessionYear);
+                    let foundCls = false;
+
+                    for (const clsVar of clsVariants) {
+                        let foundAnyMonth = false;
+
+                        for (const { monthStr, year } of monthList) {
                             try {
-                                const monthCol = collection(db, "attendance", year, testCls, "months", monthStr);
+                                // CRITICAL FIX: use 'year' derived from monthStr, NOT sessionYear
+                                const monthCol = collection(db, "attendance", year, clsVar, "months", monthStr);
                                 const docsSnap = await getDocs(monthCol);
+                                if (docsSnap.empty) continue;
+
+                                foundAnyMonth = true;
                                 docsSnap.docs.forEach(d => {
                                     const data = d.data();
-                                    // Check if this doc is for the right section
-                                    if (data.section !== sec) return;
+                                    // Check section match
+                                    if (data.section && data.section !== sec) return;
                                     const statusMap = data.records || {};
-                                    const myStatus = statusMap[user.uid];
+
+                                    // Try multiple keys to find this student's status
+                                    let myStatus: string | undefined;
+                                    for (const key of keysToCheck) {
+                                        if (statusMap[key]) { myStatus = statusMap[key]; break; }
+                                    }
                                     if (!myStatus) return;
 
                                     const dateStr: string = data.date || d.id.split("_")[0] || "";
@@ -105,28 +186,28 @@ export default function StudentAttendancePage() {
                                     });
                                 });
                             } catch {
-                                // Month may not exist yet — skip
+                                // Month not found — skip
                             }
                         }
+
+                        if (foundAnyMonth) { foundCls = true; break; } // stop trying class variants
                     }
+
+                    if (foundCls) break; // stop trying session years once data found
                 }
 
-                // Remove duplicates by date if multiple classes match somehow
-                const uniqueRecordsMap = new Map<string, AttendanceRecord>();
-                studentRecords.forEach(r => uniqueRecordsMap.set(r.date, r));
-                const finalRecords = Array.from(uniqueRecordsMap.values());
-
-                // Sort by date descending
+                // Deduplicate by date
+                const uniqueMap = new Map<string, AttendanceRecord>();
+                studentRecords.forEach(r => uniqueMap.set(r.date, r));
+                const finalRecords = Array.from(uniqueMap.values());
                 finalRecords.sort((a, b) => b.date.localeCompare(a.date));
                 setRecords(finalRecords);
 
-                // Default filter to current month if data exists for it
-                const curMonth = (() => {
-                    const n = new Date();
-                    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
-                })();
+                // Default filter to current month
+                const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
                 const hasCurMonth = finalRecords.some(r => (r.month || r.date?.slice(0, 7)) === curMonth);
                 setFilterMonth(hasCurMonth ? curMonth : "all");
+
             } catch (err) {
                 console.error("Error fetching attendance:", err);
             } finally {
@@ -143,14 +224,12 @@ export default function StudentAttendancePage() {
         ? records
         : records.filter(r => (r.month || r.date?.slice(0, 7)) === filterMonth);
 
-    // Stats from filtered records
     const totalDays = filteredRecords.length;
     const presentDays = filteredRecords.filter(r => r.status === "present").length;
     const lateDays = filteredRecords.filter(r => r.status === "late").length;
     const absentDays = filteredRecords.filter(r => r.status === "absent").length;
     const percentage = totalDays > 0 ? Math.round(((presentDays + lateDays) / totalDays) * 100) : 0;
 
-    // Overall stats (all time)
     const allTotal = records.length;
     const allPresent = records.filter(r => r.status === "present").length;
     const allLate = records.filter(r => r.status === "late").length;
@@ -183,10 +262,9 @@ export default function StudentAttendancePage() {
                         <p className="text-white/50 text-sm font-medium">Student Portal</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">📋 My Attendance</h1>
                         <p className="text-white/40 text-sm mt-1">
-                            {studentClass} — Section {studentSection}
+                            {studentClass ? `Class ${studentClass}` : "Loading..."} {studentSection ? `— Section ${studentSection}` : ""}
                         </p>
                     </div>
-                    {/* Overall badge */}
                     <div className={`self-start sm:self-auto px-4 py-3 rounded-2xl text-center min-w-[90px] ${allPct >= 75 ? "bg-emerald-500/20 border border-emerald-400/30" : allPct >= 50 ? "bg-amber-500/20 border border-amber-400/30" : "bg-red-500/20 border border-red-400/30"}`}>
                         <div className={`text-2xl font-bold ${allPct >= 75 ? "text-emerald-300" : allPct >= 50 ? "text-amber-300" : "text-red-300"}`}>{allPct}%</div>
                         <div className="text-white/50 text-xs mt-0.5">Overall</div>
@@ -217,7 +295,6 @@ export default function StudentAttendancePage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {/* Percentage */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
                     <div className={`w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 ${percentage >= 75 ? "bg-emerald-100" : percentage >= 50 ? "bg-amber-100" : "bg-red-100"}`}>
                         <TrendingUp className={`w-6 h-6 ${percentage >= 75 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"}`} />
@@ -228,7 +305,6 @@ export default function StudentAttendancePage() {
                     <div className="text-xs text-gray-400 mt-1">Attendance</div>
                 </div>
 
-                {/* Present */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
                     <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 bg-emerald-100">
                         <Check className="w-6 h-6 text-emerald-600" />
@@ -237,7 +313,6 @@ export default function StudentAttendancePage() {
                     <div className="text-xs text-gray-400 mt-1">Present</div>
                 </div>
 
-                {/* Late */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
                     <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 bg-amber-100">
                         <Clock className="w-6 h-6 text-amber-600" />
@@ -246,7 +321,6 @@ export default function StudentAttendancePage() {
                     <div className="text-xs text-gray-400 mt-1">Late</div>
                 </div>
 
-                {/* Absent */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
                     <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center mb-3 bg-red-100">
                         <X className="w-6 h-6 text-red-600" />
@@ -256,7 +330,7 @@ export default function StudentAttendancePage() {
                 </div>
             </div>
 
-            {/* Attendance Progress Bar */}
+            {/* Progress Bar */}
             {totalDays > 0 && (
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-3">
@@ -264,26 +338,14 @@ export default function StudentAttendancePage() {
                         <span className="text-xs text-gray-400">{totalDays} total days · {selectedMonthLabel}</span>
                     </div>
                     <div className="w-full h-4 rounded-full bg-gray-100 overflow-hidden flex">
-                        {presentDays > 0 && (
-                            <div className="bg-emerald-500 h-full transition-all" style={{ width: `${(presentDays / totalDays) * 100}%` }} />
-                        )}
-                        {lateDays > 0 && (
-                            <div className="bg-amber-400 h-full transition-all" style={{ width: `${(lateDays / totalDays) * 100}%` }} />
-                        )}
-                        {absentDays > 0 && (
-                            <div className="bg-red-400 h-full transition-all" style={{ width: `${(absentDays / totalDays) * 100}%` }} />
-                        )}
+                        {presentDays > 0 && <div className="bg-emerald-500 h-full transition-all" style={{ width: `${(presentDays / totalDays) * 100}%` }} />}
+                        {lateDays > 0 && <div className="bg-amber-400 h-full transition-all" style={{ width: `${(lateDays / totalDays) * 100}%` }} />}
+                        {absentDays > 0 && <div className="bg-red-400 h-full transition-all" style={{ width: `${(absentDays / totalDays) * 100}%` }} />}
                     </div>
                     <div className="flex gap-4 mt-2">
-                        <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Present ({presentDays})
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-amber-400" /> Late ({lateDays})
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-red-400" /> Absent ({absentDays})
-                        </span>
+                        <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Present ({presentDays})</span>
+                        <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-400" /> Late ({lateDays})</span>
+                        <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400" /> Absent ({absentDays})</span>
                     </div>
                 </div>
             )}
@@ -292,9 +354,7 @@ export default function StudentAttendancePage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-5 border-b border-gray-100">
                     <h2 className="font-bold text-navy">Date-wise Attendance</h2>
-                    {filterMonth !== "all" && (
-                        <p className="text-xs text-gray-400 mt-1">{selectedMonthLabel}</p>
-                    )}
+                    {filterMonth !== "all" && <p className="text-xs text-gray-400 mt-1">{selectedMonthLabel}</p>}
                 </div>
 
                 {filteredRecords.length === 0 ? (
@@ -308,29 +368,23 @@ export default function StudentAttendancePage() {
                         {filteredRecords.map((record, i) => {
                             const dateObj = new Date(record.date + "T00:00:00");
                             const formatted = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-
                             return (
                                 <div key={i} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-navy/5 flex flex-col items-center justify-center">
-                                            <span className="text-xs font-bold text-navy leading-tight">
-                                                {dateObj.getDate()}
-                                            </span>
-                                            <span className="text-[9px] text-navy/50">
-                                                {dateObj.toLocaleDateString("en-IN", { month: "short" })}
-                                            </span>
+                                            <span className="text-xs font-bold text-navy leading-tight">{dateObj.getDate()}</span>
+                                            <span className="text-[9px] text-navy/50">{dateObj.toLocaleDateString("en-IN", { month: "short" })}</span>
                                         </div>
                                         <div>
                                             <p className="text-sm font-medium text-navy">{record.day}</p>
                                             <p className="text-xs text-gray-400">{formatted}</p>
                                         </div>
                                     </div>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${record.status === "present"
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : record.status === "late"
-                                            ? "bg-amber-100 text-amber-700"
-                                            : "bg-red-100 text-red-700"
-                                        }`}>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                        record.status === "present" ? "bg-emerald-100 text-emerald-700"
+                                        : record.status === "late" ? "bg-amber-100 text-amber-700"
+                                        : "bg-red-100 text-red-700"
+                                    }`}>
                                         {record.status === "present" ? "✓ Present" : record.status === "late" ? "⏰ Late" : "✗ Absent"}
                                     </span>
                                 </div>
@@ -341,20 +395,4 @@ export default function StudentAttendancePage() {
             </div>
         </div>
     );
-}
-
-// ─── Helper: Generate all YYYY-MM strings for an academic year ────────────────
-// Academic year starts April, ends March next year
-function generateAcademicMonths(year: string): string[] {
-    const y = Number(year);
-    const months: string[] = [];
-    // Apr–Dec of given year
-    for (let m = 4; m <= 12; m++) {
-        months.push(`${y}-${String(m).padStart(2, "0")}`);
-    }
-    // Jan–Mar of next year
-    for (let m = 1; m <= 3; m++) {
-        months.push(`${y + 1}-${String(m).padStart(2, "0")}`);
-    }
-    return months;
 }
