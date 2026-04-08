@@ -5,7 +5,7 @@
   "description": "Accountant portal for International Access School.",
   "start_url": "/accountant/login",
   "scope": "/accountant/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#ffffff",
   "theme_color": "#f59e0b",
   "orientation": "portrait",
