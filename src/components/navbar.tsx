@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { NewsTicker } from "@/components/news-ticker";
@@ -19,7 +19,14 @@ export function Navbar() {
     const { isInstallable, install } = usePWAInstall();
 
     const pathname = usePathname();
+    const router = useRouter();
     const isHome = pathname === "/";
+
+    // Navigate to portal with ?install=true — the PWAInstallTrigger on that page handles the prompt
+    const handlePortalInstall = (path: string) => {
+        setMobileOpen(false);
+        router.push(`${path}?install=true`);
+    };
 
     // Fallback data if DB is empty
     const STATIC_ACADEMIC_LINKS = [
@@ -259,40 +266,34 @@ export function Navbar() {
                     <Link href="/contact" className="px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Contact</Link>
                     
                     <div className="mt-4 px-4 pb-4 border-t border-gray-100 pt-4">
-                        <div className="font-bold text-navy text-sm mb-1">Install App</div>
-                        <p className="text-xs text-gray-400 mb-3">Add this school app to your home screen for quick access.</p>
-                        <button
-                            onClick={() => { install(); setMobileOpen(false); }}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-navy text-white font-semibold text-sm hover:bg-navy-light transition-colors shadow-sm"
-                        >
-                            📲 Install App on Device
-                        </button>
-                        <div className="mt-3 grid grid-cols-1 gap-2">
-                            <Link href="/student/login" onClick={() => setMobileOpen(false)}
+                        <div className="font-bold text-navy text-sm mb-1">Install Portals</div>
+                        <p className="text-xs text-gray-400 mb-3">Click to install the app for your role.</p>
+                        <div className="grid grid-cols-1 gap-2">
+                            <button onClick={() => handlePortalInstall("/student/login")}
                                 className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm hover:bg-blue-100 transition-colors">
-                                Student Portal Login
-                                <span className="text-xs bg-blue-100 px-2 py-0.5 rounded-full">Open</span>
-                            </Link>
-                            <Link href="/teacher/login" onClick={() => setMobileOpen(false)}
+                                📲 Install Student App
+                                <span className="text-xs bg-blue-100 px-2 py-0.5 rounded-full">App</span>
+                            </button>
+                            <button onClick={() => handlePortalInstall("/teacher/login")}
                                 className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 font-medium text-sm hover:bg-emerald-100 transition-colors">
-                                Teacher Portal Login
-                                <span className="text-xs bg-emerald-100 px-2 py-0.5 rounded-full">Open</span>
-                            </Link>
-                            <Link href="/admin/login" onClick={() => setMobileOpen(false)}
+                                📲 Install Teacher App
+                                <span className="text-xs bg-emerald-100 px-2 py-0.5 rounded-full">App</span>
+                            </button>
+                            <button onClick={() => handlePortalInstall("/admin/login")}
                                 className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-red-50 text-red-600 font-medium text-sm hover:bg-red-100 transition-colors">
-                                Admin Portal Login
-                                <span className="text-xs bg-red-100 px-2 py-0.5 rounded-full">Open</span>
-                            </Link>
-                            <Link href="/accountant/login" onClick={() => setMobileOpen(false)}
+                                📲 Install Admin App
+                                <span className="text-xs bg-red-100 px-2 py-0.5 rounded-full">App</span>
+                            </button>
+                            <button onClick={() => handlePortalInstall("/accountant/login")}
                                 className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-amber-50 text-amber-600 font-medium text-sm hover:bg-amber-100 transition-colors">
-                                Finance Portal Login
-                                <span className="text-xs bg-amber-100 px-2 py-0.5 rounded-full">Open</span>
-                            </Link>
-                            <Link href="/supervisor/login" onClick={() => setMobileOpen(false)}
+                                📲 Install Finance App
+                                <span className="text-xs bg-amber-100 px-2 py-0.5 rounded-full">App</span>
+                            </button>
+                            <button onClick={() => handlePortalInstall("/supervisor/login")}
                                 className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-purple-50 text-purple-600 font-medium text-sm hover:bg-purple-100 transition-colors">
-                                Supervisor Portal Login
-                                <span className="text-xs bg-purple-100 px-2 py-0.5 rounded-full">Open</span>
-                            </Link>
+                                📲 Install Supervisor App
+                                <span className="text-xs bg-purple-100 px-2 py-0.5 rounded-full">App</span>
+                            </button>
                         </div>
                     </div>
                 </nav>
