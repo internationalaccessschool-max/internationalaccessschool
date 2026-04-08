@@ -5,7 +5,7 @@
   "description": "Teacher portal for International Access School.",
   "start_url": "/teacher/login",
   "scope": "/teacher/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#ffffff",
   "theme_color": "#10b981",
   "orientation": "portrait",
