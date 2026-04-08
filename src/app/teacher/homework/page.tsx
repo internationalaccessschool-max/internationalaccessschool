@@ -10,7 +10,8 @@ import { Plus, BookOpen, ChevronDown, Loader2 } from "lucide-react";
 import { FileViewerTrigger } from "@/components/ui/file-viewer";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const SUBJECTS = [
+// Fallback subjects if class has no subjects configured in DB
+const FALLBACK_SUBJECTS = [
     "Mathematics", "Science", "English", "Hindi", "Social Science",
     "Computer Science", "Physics", "Chemistry", "Biology",
     "History", "Geography", "Economics", "Accountancy",
@@ -53,6 +54,43 @@ export default function TeacherHomeworkPage() {
     });
     const [submitted, setSubmitted] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // ── Class-specific subjects from Firestore ────────────────────────────────
+    const [classSubjects, setClassSubjects] = useState<string[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+    useEffect(() => {
+        if (!formData.className) {
+            setClassSubjects([]);
+            setFormData(prev => ({ ...prev, subject: "" }));
+            return;
+        }
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const { doc: fsDoc, getDoc: fsGetDoc } = await import("firebase/firestore");
+                const snap = await fsGetDoc(fsDoc(db, "classSubjects", formData.className));
+                if (snap.exists()) {
+                    const subs = (snap.data().subjects || []) as Array<{ name: string } | string>;
+                    const names = subs
+                        .map(s => (typeof s === "string" ? s : s?.name))
+                        .filter(Boolean) as string[];
+                    setClassSubjects(names);
+                } else {
+                    setClassSubjects([]);
+                }
+            } catch {
+                setClassSubjects([]);
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+        fetchSubjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.className]);
+
+    // Subjects to show = class-specific (from DB) OR fallback list
+    const subjectsToShow = classSubjects.length > 0 ? classSubjects : FALLBACK_SUBJECTS;
 
     // ── Assigned classes/sections from Firestore ──────────────────────────────
     const [assignedClassSections, setAssignedClassSections] = useState<Record<string, string[]>>({});
@@ -253,17 +291,32 @@ export default function TeacherHomeworkPage() {
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-1">Subject *</label>
                             <div className="relative">
-                                <select
-                                    value={formData.subject}
-                                    onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white pr-8 text-sm"
-                                >
-                                    <option value="">Select Subject</option>
-                                    {SUBJECTS.map(sub => (
-                                        <option key={sub} value={sub}>{sub}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                                {!formData.className ? (
+                                    <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-400">
+                                        Select a class first
+                                    </div>
+                                ) : loadingSubjects ? (
+                                    <div className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm text-gray-400 flex items-center gap-2">
+                                        <Loader2 className="w-3 h-3 animate-spin" /> Loading subjects...
+                                    </div>
+                                ) : (
+                                    <>
+                                        <select
+                                            value={formData.subject}
+                                            onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white pr-8 text-sm"
+                                        >
+                                            <option value="">Select Subject</option>
+                                            {subjectsToShow.map(sub => (
+                                                <option key={sub} value={sub}>{sub}</option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                                        {classSubjects.length === 0 && formData.className && (
+                                            <p className="text-xs text-amber-600 mt-1">⚠️ No subjects configured for {formData.className}. Ask admin to set class subjects.</p>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         </div>
 
