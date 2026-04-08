@@ -5,7 +5,7 @@
   "description": "Supervisor portal for International Access School.",
   "start_url": "/supervisor/login",
   "scope": "/supervisor/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#ffffff",
   "theme_color": "#8b5cf6",
   "orientation": "portrait",
