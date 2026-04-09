@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
@@ -74,6 +74,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
                 { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
                 { href: "/admin/transport", label: "Transport", icon: Bus },
+            ],
+        },
+        {
+            section: "Certificates",
+            items: [
+                { href: "/admin/certificates/tc", label: "Transfer Certificate", icon: FileText },
+                { href: "/admin/certificates/character", label: "Character Certificate", icon: BadgeCheck },
             ],
         },
         {
