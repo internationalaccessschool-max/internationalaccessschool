@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { collectionGroup, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw, ShieldCheck } from "lucide-react";
@@ -13,10 +13,7 @@ function safeStr(v: any): string {
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
-  if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
-    const [dd, mm, yyyy] = dateStr.split("-");
-    return `${dd}-${mm}-${yyyy}`;
-  }
+  if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     const [yyyy, mm, dd] = dateStr.split("-");
     return `${dd}-${mm}-${yyyy}`;
@@ -41,9 +38,6 @@ interface Student {
   gender?: string;
   dob?: string;
   dateOfAdmission?: string;
-  category?: string;
-  nationality?: string;
-  religion?: string;
   serialNumber?: string;
   session?: string;
   [key: string]: any;
@@ -54,7 +48,7 @@ interface CCData {
   studentName: string;
   fatherName: string;
   motherName: string;
-  class: string;
+  classField: string;
   section: string;
   admissionNo: string;
   session: string;
@@ -66,8 +60,6 @@ interface CCData {
   issueDate: string;
   classTeacher: string;
   principalName: string;
-  schoolName: string;
-  schoolAddress: string;
 }
 
 const defaultCC = (): CCData => ({
@@ -75,10 +67,10 @@ const defaultCC = (): CCData => ({
   studentName: "",
   fatherName: "",
   motherName: "",
-  class: "",
+  classField: "",
   section: "",
   admissionNo: "",
-  session: new Date().getFullYear() + "-" + (new Date().getFullYear() + 1),
+  session: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
   dob: "",
   gender: "Male",
   conduct: "Good",
@@ -87,9 +79,129 @@ const defaultCC = (): CCData => ({
   issueDate: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
   classTeacher: "",
   principalName: "Principal",
-  schoolName: "International Access School",
-  schoolAddress: "Harhan, Siwan, Bihar – 841227",
 });
+
+// ─── Build fully self-contained print HTML ────────────────────────────────────
+
+function buildCCHtml(cc: CCData, logoUrl: string): string {
+  const pronoun = cc.gender.toLowerCase().startsWith("f") ? "she" : "he";
+  const pronounCap = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
+  const possessive = cc.gender.toLowerCase().startsWith("f") ? "her" : "his";
+  const relation = cc.gender.toLowerCase().startsWith("f") ? "daughter" : "son";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Character Certificate – ${cc.studentName}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:"Times New Roman",Times,serif;background:#fff;color:#000}
+    @page{size:A4 portrait;margin:15mm 18mm}
+    @media print{
+      body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
+    .page{width:100%;max-width:178mm;margin:0 auto}
+    table{border-collapse:collapse;width:100%}
+    .outer-border{border:6px double #1a1a5e;padding:24px;min-height:240mm}
+  </style>
+</head>
+<body>
+<div class="page">
+<div class="outer-border">
+
+  <!-- School Header -->
+  <table style="width:100%;margin-bottom:6px">
+    <tr>
+      <td style="width:70px;text-align:center;vertical-align:middle;padding-right:8px">
+        <img src="${logoUrl}" alt="IAS Logo" style="width:65px;height:65px;object-fit:contain"/>
+      </td>
+      <td style="text-align:center;vertical-align:middle">
+        <div style="font-size:20px;font-weight:bold;color:#1a1a5e;letter-spacing:1px">INTERNATIONAL ACCESS SCHOOL</div>
+        <div style="font-size:9px;color:#444;margin-top:2px">Managed by: International Board of Educational Research Trust (IBERT)</div>
+        <div style="font-size:9px;color:#444">Affiliated to CBSE(II) New Delhi &nbsp;Aff. No.: 330691 &nbsp;|&nbsp; School Code: 65688</div>
+        <div style="font-size:9px;color:#444">Harhan, Siwan, Bihar – 841227 &nbsp;&nbsp;Ph: +91-9934776670</div>
+        <div style="font-size:9px;color:#444">Email: info@aschool.edu.in &nbsp;|&nbsp; Web: www.iaschool.edu.in</div>
+      </td>
+      <td style="width:70px;text-align:right;vertical-align:top;font-size:8px;color:#666">
+        <div style="border:1px solid #aaa;padding:2px 5px;display:inline-block;margin-bottom:3px">ISO 9001·2005</div><br/>
+        <div style="border:1px solid #aaa;padding:2px 5px;display:inline-block">CBSE</div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="border-top:2px solid #1a1a5e;margin-bottom:12px"></div>
+
+  <!-- Certificate Title -->
+  <div style="text-align:center;font-size:17px;font-weight:bold;letter-spacing:3px;text-decoration:underline;color:#1a1a5e;margin-bottom:16px">
+    CHARACTER CERTIFICATE
+  </div>
+
+  <!-- Cert No & Date -->
+  <table style="width:100%;margin-bottom:20px">
+    <tr>
+      <td style="font-size:11px">Cert. No.: <b>${cc.certNo || "______"}</b></td>
+      <td style="font-size:11px;text-align:right">Date: <b>${cc.issueDate}</b></td>
+    </tr>
+  </table>
+
+  <!-- Body Text -->
+  <div style="font-size:13px;line-height:2.0;text-align:justify">
+    <p style="margin-bottom:16px">
+      This is to certify that <b><u>${cc.studentName || "_______________"}</u></b> ${relation} of&nbsp;
+      <b>${cc.fatherName || "_______________"}</b> and&nbsp;
+      <b>${cc.motherName || "_______________"}</b> bearing
+      Admission No. <b>${cc.admissionNo}</b> is / was a bonafide student of this school in
+      <b>Class ${cc.classField}${cc.section ? ` &ldquo;${cc.section}&rdquo;` : ""}</b> during the session
+      <b>${cc.session}</b>.
+    </p>
+
+    <p style="margin-bottom:16px">
+      ${pronounCap} was born on <b>${cc.dob || "_______________"}</b> as per the school records.
+    </p>
+
+    <p style="margin-bottom:16px">
+      During ${possessive} stay in this school, ${pronoun} has shown <b>${cc.conduct}</b> conduct and
+      ${possessive} behaviour has been <b>${cc.behaviour}</b>.
+      ${pronounCap} has never been involved in any indiscipline or misconduct.
+    </p>
+
+    <p style="margin-bottom:16px">
+      This certificate is being issued to ${pronoun} on ${possessive} request for the purpose of
+      <b>${cc.purpose}</b>.
+    </p>
+
+    <p>We wish ${pronoun} all the best for ${possessive} future endeavours.</p>
+  </div>
+
+  <!-- Signatures -->
+  <table style="width:100%;margin-top:64px">
+    <tr>
+      <td style="text-align:center;width:50%">
+        <div style="border-top:1px solid #000;width:150px;margin:0 auto;padding-top:5px;font-size:11px">
+          ${cc.classTeacher || "Class Teacher"}
+        </div>
+      </td>
+      <td style="text-align:center;width:50%">
+        <div style="border-top:1px solid #000;width:170px;margin:0 auto;padding-top:5px;font-size:11px;font-weight:bold">
+          ${cc.principalName}<br/>
+          <span style="font-weight:normal;font-size:9.5px">International Access School</span><br/>
+          <span style="font-weight:normal;font-size:9.5px">Harhan, Siwan, Bihar</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Stamp area -->
+  <div style="text-align:center;margin-top:28px;font-size:9px;color:#bbb">[ School Seal / Stamp ]</div>
+
+</div>
+</div>
+</body>
+</html>`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CharacterCertificatePage() {
   const [enr, setEnr] = useState("");
@@ -97,31 +209,27 @@ export default function CharacterCertificatePage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [ccData, setCcData] = useState<CCData>(defaultCC());
   const [notFound, setNotFound] = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
 
   const handleSearch = async () => {
     const trimmed = enr.trim();
-    if (!trimmed) { toast.error("Please enter an Admission Number"); return; }
-    setIsSearching(true);
-    setNotFound(false);
-    setStudent(null);
+    if (!trimmed) { toast.error("Enter an Admission Number"); return; }
+    setIsSearching(true); setNotFound(false); setStudent(null);
     try {
       const snap = await getDocs(collectionGroup(db, "profiles"));
       const found = snap.docs.find(d => safeStr(d.data().admissionNumber) === trimmed);
       if (!found) { setNotFound(true); return; }
       const s = { id: found.id, ...found.data() } as Student;
       setStudent(s);
-
-      const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
-      const fullName = `${safeStr(s.firstName)} ${safeStr(s.lastName)}`.trim();
       const currentYear = new Date().getFullYear();
+      const fullName = `${safeStr(s.firstName)} ${safeStr(s.lastName)}`.trim();
+      const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
 
       setCcData({
         certNo: safeStr(s.serialNumber),
         studentName: toTitleCase(fullName),
         fatherName: toTitleCase(safeStr(s.fatherName || s.guardianName)),
         motherName: toTitleCase(safeStr(s.motherName)),
-        class: safeStr(s.currentClass),
+        classField: safeStr(s.currentClass),
         section: safeStr(s.section),
         admissionNo: safeStr(s.admissionNumber),
         session: safeStr(s.session) || `${currentYear}-${currentYear + 1}`,
@@ -133,66 +241,47 @@ export default function CharacterCertificatePage() {
         issueDate: today,
         classTeacher: "",
         principalName: "Principal",
-        schoolName: "International Access School",
-        schoolAddress: "Harhan, Siwan, Bihar – 841227",
       });
 
-      toast.success("Student found! Review the certificate below.");
+      toast.success("Student found! Customize fields then print.");
     } catch (err: any) {
-      toast.error("Error fetching student: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setIsSearching(false);
     }
   };
 
   const handlePrint = () => {
-    const content = printRef.current?.innerHTML;
-    if (!content) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Character Certificate - ${ccData.studentName}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Times, serif; background: white; color: #000; }
-    @page { size: A4; margin: 18mm 20mm; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-  </style>
-</head>
-<body>
-${content}
-</body>
-</html>`);
+    if (!student) return;
+    const logoUrl = `${window.location.origin}/LOGO.png`;
+    const html = buildCCHtml(ccData, logoUrl);
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) { toast.error("Pop-up blocked — please allow pop-ups."); return; }
+    win.document.open();
+    win.document.write(html);
     win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
+    win.onload = () => { win.focus(); win.print(); };
+    setTimeout(() => { try { win.focus(); win.print(); } catch { /* already printed */ } }, 1200);
   };
 
-  const f = (key: keyof CCData, label: string, multiline?: boolean) => (
+  const field = (key: keyof CCData, label: string, multiline?: boolean) => (
     <div className="mb-1.5">
       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-0.5">{label}</label>
       {multiline ? (
-        <textarea
-          value={ccData[key]}
-          onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
-          rows={2}
-          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20 resize-none"
-        />
+        <textarea value={ccData[key]} onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
+          rows={2} className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20 resize-none" />
       ) : (
-        <input
-          value={ccData[key]}
-          onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
-          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20"
-        />
+        <input value={ccData[key]} onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
+          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20" />
       )}
     </div>
   );
 
-  // Pronoun helper
+  // Live text preview helpers
   const pronoun = ccData.gender?.toLowerCase().startsWith("f") ? "she" : "he";
   const pronounCap = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
   const possessive = ccData.gender?.toLowerCase().startsWith("f") ? "her" : "his";
+  const relation = ccData.gender?.toLowerCase().startsWith("f") ? "daughter" : "son";
 
   return (
     <div className="space-y-6">
@@ -202,7 +291,7 @@ ${content}
         <div className="relative z-10">
           <p className="text-white/50 text-sm font-medium">Admin Console</p>
           <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Character Certificate</h1>
-          <p className="text-white/50 text-sm mt-1">Search by Admission Number (ENR) · Customize · Print</p>
+          <p className="text-white/50 text-sm mt-1">Search by Admission No. (ENR) · Customize · Print</p>
         </div>
       </div>
 
@@ -213,36 +302,26 @@ ${content}
             <label className="text-xs font-bold text-slate-600 mb-1.5 block">Admission Number (ENR)</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                value={enr}
-                onChange={e => setEnr(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSearch()}
-                placeholder="e.g. IAS-12662 or 12662"
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
-              />
+              <input value={enr} onChange={e => setEnr(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()}
+                placeholder="e.g. IAS - 12662  or  12662"
+                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10" />
             </div>
           </div>
-          <button
-            onClick={handleSearch}
-            disabled={isSearching}
-            className="flex items-center gap-2 px-5 py-2.5 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 transition-colors disabled:opacity-60 shadow-md shadow-navy/20"
-          >
+          <button onClick={handleSearch} disabled={isSearching}
+            className="flex items-center gap-2 px-5 py-2.5 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 disabled:opacity-60 shadow-md shadow-navy/20 transition-colors">
             {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            {isSearching ? "Searching..." : "Search Student"}
+            {isSearching ? "Searching…" : "Search"}
           </button>
           {student && (
-            <button
-              onClick={() => { setStudent(null); setEnr(""); setCcData(defaultCC()); setNotFound(false); }}
-              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors"
-            >
+            <button onClick={() => { setStudent(null); setEnr(""); setCcData(defaultCC()); setNotFound(false); }}
+              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors">
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
           )}
         </div>
         {notFound && (
           <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium flex items-center gap-2">
-            <UserCircle2 className="w-5 h-5" />
-            No student found with admission number <strong>{enr}</strong>.
+            <UserCircle2 className="w-5 h-5" /> No student found with ENR <strong>{enr}</strong>.
           </div>
         )}
         {student && (
@@ -252,176 +331,151 @@ ${content}
             </div>
             <div>
               <p className="font-bold text-emerald-900">{ccData.studentName}</p>
-              <p className="text-sm text-emerald-700">ENR: {student.admissionNumber} · Class: {ccData.class} {ccData.section}</p>
+              <p className="text-sm text-emerald-700">ENR: {student.admissionNumber} · Class: {ccData.classField} {ccData.section}</p>
             </div>
           </div>
         )}
       </div>
 
-      {student && (
+      {student ? (
         <div className="grid xl:grid-cols-5 gap-6">
-          {/* ── Edit Form ── */}
-          <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 space-y-2">
+          {/* Edit Form */}
+          <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 space-y-1">
             <div className="flex items-center gap-2 mb-3">
               <Edit3 className="w-4 h-4 text-navy" />
               <h2 className="font-bold text-navy text-sm">Customize Certificate Fields</h2>
             </div>
-
-            {f("certNo", "Certificate / Sl. No.")}
-            {f("studentName", "Student Full Name")}
-            {f("fatherName", "Father's Name")}
-            {f("motherName", "Mother's Name")}
+            {field("certNo", "Certificate / Sl. No.")}
+            {field("studentName", "Student Full Name")}
+            {field("fatherName", "Father's Name")}
+            {field("motherName", "Mother's Name")}
             <div className="grid grid-cols-2 gap-2">
-              {f("class", "Class")}
-              {f("section", "Section")}
+              {field("classField", "Class")}
+              {field("section", "Section")}
             </div>
-            {f("admissionNo", "Admission No.")}
-            {f("session", "Academic Session")}
-            {f("dob", "Date of Birth")}
-            {f("gender", "Gender (Male/Female)")}
-            {f("conduct", "Conduct (e.g. Good / Excellent)")}
-            {f("behaviour", "Behaviour Description", true)}
-            {f("purpose", "Purpose of Certificate")}
-            {f("issueDate", "Issue Date")}
-            {f("classTeacher", "Class Teacher Name")}
-            {f("principalName", "Principal / Signatory")}
-            {f("schoolName", "School Name")}
-            {f("schoolAddress", "School Address")}
+            {field("admissionNo", "Admission No.")}
+            {field("session", "Academic Session")}
+            {field("dob", "Date of Birth")}
+            {field("gender", "Gender (Male / Female)")}
+            {field("conduct", "Conduct (e.g. Good / Excellent)")}
+            {field("behaviour", "Behaviour Description", true)}
+            {field("purpose", "Purpose of Certificate")}
+            {field("issueDate", "Issue Date")}
+            {field("classTeacher", "Class Teacher Name")}
+            {field("principalName", "Principal / Signatory")}
 
-            <button
-              onClick={handlePrint}
-              className="w-full mt-4 flex items-center justify-center gap-2 px-5 py-3 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 transition-colors shadow-md shadow-navy/20"
-            >
+            <button onClick={handlePrint}
+              className="w-full mt-4 flex items-center justify-center gap-2 px-5 py-3 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 transition-colors shadow-md shadow-navy/20">
               <Printer className="w-4 h-4" /> Print Character Certificate
             </button>
           </div>
 
-          {/* ── Preview ── */}
+          {/* On-screen Preview */}
           <div className="xl:col-span-3">
             <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 mb-3 flex items-center justify-between">
               <h2 className="font-bold text-navy text-sm flex items-center gap-2"><Printer className="w-4 h-4" /> Print Preview</h2>
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 px-4 py-2 bg-navy text-white rounded-xl font-bold text-xs hover:bg-navy/90 transition-colors"
-              >
+              <button onClick={handlePrint}
+                className="flex items-center gap-1.5 px-4 py-2 bg-navy text-white rounded-xl font-bold text-xs hover:bg-navy/90 transition-colors">
                 <Printer className="w-3.5 h-3.5" /> Print
               </button>
             </div>
 
-            <div
-              ref={printRef}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
-            >
-              <div
-                className="p-10 max-w-[680px] mx-auto"
-                style={{ fontFamily: "'Times New Roman', Times, serif", minHeight: "297mm" }}
-              >
-                {/* Decorative border */}
-                <div style={{ border: "6px double #1a1a5e", padding: "24px", minHeight: "260mm" }}>
+            {/* Preview uses identical inline styles as the print HTML */}
+            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 overflow-auto"
+              style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              <div style={{ border: "6px double #1a1a5e", margin: "24px", padding: "24px" }}>
 
-                  {/* Header */}
-                  <div className="text-center mb-5">
-                    <div style={{ fontSize: "20px", fontWeight: "bold", color: "#1a1a5e", letterSpacing: "1px" }}>
-                      INTERNATIONAL ACCESS SCHOOL
-                    </div>
-                    <div style={{ fontSize: "9px", color: "#555", marginTop: "2px" }}>
-                      Managed by: International Board of Educational Research Trust (IBERT)
-                    </div>
-                    <div style={{ fontSize: "9px", color: "#555" }}>
-                      Affiliated to CBSE(II) New Delhi Aff. No.: 330691 | School Code: 65688
-                    </div>
-                    <div style={{ fontSize: "9px", color: "#555" }}>
-                      Harhan, Siwan, Bihar – 841227 | Ph: +91-9934776670
-                    </div>
-                    <div style={{ fontSize: "9px", color: "#555" }}>
-                      Email: info@aschool.edu.in | Web: www.iaschool.edu.in
-                    </div>
+                {/* Header */}
+                <table style={{ width: "100%", marginBottom: "6px", borderCollapse: "collapse" }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ width: "65px", textAlign: "center", verticalAlign: "middle", paddingRight: "8px" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/LOGO.png" alt="IAS Logo" style={{ width: "60px", height: "60px", objectFit: "contain" }} />
+                      </td>
+                      <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                        <div style={{ fontSize: "18px", fontWeight: "bold", color: "#1a1a5e", letterSpacing: "1px" }}>INTERNATIONAL ACCESS SCHOOL</div>
+                        <div style={{ fontSize: "8px", color: "#555", marginTop: "2px" }}>Managed by: International Board of Educational Research Trust (IBERT)</div>
+                        <div style={{ fontSize: "8px", color: "#555" }}>Affiliated to CBSE(II) New Delhi Aff. No.: 330691 | School Code: 65688</div>
+                        <div style={{ fontSize: "8px", color: "#555" }}>Harhan, Siwan, Bihar – 841227  Ph: +91-9934776670</div>
+                        <div style={{ fontSize: "8px", color: "#555" }}>Email: info@aschool.edu.in | Web: www.iaschool.edu.in</div>
+                      </td>
+                      <td style={{ width: "60px", textAlign: "right", verticalAlign: "top", fontSize: "7px", color: "#888" }}>
+                        <div style={{ border: "1px solid #ccc", padding: "2px 4px", display: "inline-block", marginBottom: "3px" }}>ISO 9001·2005</div><br />
+                        <div style={{ border: "1px solid #ccc", padding: "2px 4px", display: "inline-block" }}>CBSE</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
 
-                    <div style={{ borderTop: "2px solid #1a1a5e", marginTop: "12px", paddingTop: "10px" }}>
-                      <div style={{ fontSize: "17px", fontWeight: "bold", letterSpacing: "3px", textDecoration: "underline", color: "#1a1a5e" }}>
-                        CHARACTER CERTIFICATE
-                      </div>
-                    </div>
-                  </div>
+                <div style={{ borderTop: "2px solid #1a1a5e", marginBottom: "10px" }} />
 
-                  {/* Cert No and Date */}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "20px" }}>
-                    <span>Cert. No.: <strong>{ccData.certNo || "______"}</strong></span>
-                    <span>Date: <strong>{ccData.issueDate}</strong></span>
-                  </div>
-
-                  {/* Certificate Body */}
-                  <div style={{ fontSize: "13px", lineHeight: "2.0", textAlign: "justify" }}>
-                    <p style={{ marginBottom: "16px" }}>
-                      This is to certify that <strong><u>{ccData.studentName || "_______________"}</u></strong> {pronoun === "he" ? "son" : "daughter"} of{" "}
-                      <strong>{ccData.fatherName || "_______________"}</strong> and{" "}
-                      <strong>{ccData.motherName || "_______________"}</strong> bearing{" "}
-                      Admission No. <strong>{ccData.admissionNo}</strong> is/was a bonafide student of this school in{" "}
-                      <strong>Class {ccData.class} {ccData.section ? `"${ccData.section}"` : ""}</strong> during the session{" "}
-                      <strong>{ccData.session}</strong>.
-                    </p>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      {pronounCap} was born on <strong>{ccData.dob || "_______________"}</strong> as per the school records.
-                    </p>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      During {possessive} stay in this school, {pronoun} has shown <strong>{ccData.conduct}</strong> conduct and{" "}
-                      {possessive} behaviour has been <strong>{ccData.behaviour}</strong>. {pronounCap} has never been involved{" "}
-                      in any indiscipline or misconduct.
-                    </p>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      This certificate is being issued to {pronoun} on {possessive} request for the purpose of{" "}
-                      <strong>{ccData.purpose}</strong>.
-                    </p>
-
-                    <p>
-                      We wish {pronoun} all the best for {possessive} future endeavours.
-                    </p>
-                  </div>
-
-                  {/* Signatures */}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "60px", fontSize: "11px" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ borderTop: "1px solid #000", width: "140px", paddingTop: "4px" }}>
-                        {ccData.classTeacher || "Class Teacher"}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ borderTop: "1px solid #000", width: "170px", paddingTop: "4px", fontWeight: "bold" }}>
-                        {ccData.principalName}
-                        <div style={{ fontWeight: "normal", fontSize: "9px" }}>
-                          {ccData.schoolName}
-                        </div>
-                        <div style={{ fontWeight: "normal", fontSize: "9px" }}>
-                          {ccData.schoolAddress}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* School Stamp placeholder */}
-                  <div style={{ marginTop: "20px", textAlign: "center", fontSize: "9px", color: "#aaa" }}>
-                    [ School Seal / Stamp ]
-                  </div>
+                <div style={{ textAlign: "center", fontSize: "15px", fontWeight: "bold", letterSpacing: "3px", textDecoration: "underline", color: "#1a1a5e", marginBottom: "12px" }}>
+                  CHARACTER CERTIFICATE
                 </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "14px" }}>
+                  <span>Cert. No.: <b>{ccData.certNo || "______"}</b></span>
+                  <span>Date: <b>{ccData.issueDate}</b></span>
+                </div>
+
+                <div style={{ fontSize: "12px", lineHeight: "1.9", textAlign: "justify" }}>
+                  <p style={{ marginBottom: "12px" }}>
+                    This is to certify that <b><u>{ccData.studentName || "_______________"}</u></b> {relation} of{" "}
+                    <b>{ccData.fatherName || "_______________"}</b> and <b>{ccData.motherName || "_______________"}</b>{" "}
+                    bearing Admission No. <b>{ccData.admissionNo}</b> is / was a bonafide student of this school in{" "}
+                    <b>Class {ccData.classField} {ccData.section ? `"${ccData.section}"` : ""}</b> during the session <b>{ccData.session}</b>.
+                  </p>
+                  <p style={{ marginBottom: "12px" }}>
+                    {pronounCap} was born on <b>{ccData.dob || "_______________"}</b> as per the school records.
+                  </p>
+                  <p style={{ marginBottom: "12px" }}>
+                    During {possessive} stay in this school, {pronoun} has shown <b>{ccData.conduct}</b> conduct and {possessive} behaviour
+                    has been <b>{ccData.behaviour}</b>. {pronounCap} has never been involved in any indiscipline or misconduct.
+                  </p>
+                  <p style={{ marginBottom: "12px" }}>
+                    This certificate is being issued to {pronoun} on {possessive} request for the purpose of <b>{ccData.purpose}</b>.
+                  </p>
+                  <p>We wish {pronoun} all the best for {possessive} future endeavours.</p>
+                </div>
+
+                {/* Signatures */}
+                <table style={{ width: "100%", marginTop: "40px", borderCollapse: "collapse" }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ textAlign: "center" }}>
+                        <div style={{ borderTop: "1px solid #000", width: "140px", margin: "0 auto", paddingTop: "4px", fontSize: "10px" }}>
+                          {ccData.classTeacher || "Class Teacher"}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <div style={{ borderTop: "1px solid #000", width: "160px", margin: "0 auto", paddingTop: "4px", fontSize: "10px", fontWeight: "bold" }}>
+                          {ccData.principalName}<br />
+                          <span style={{ fontWeight: "normal", fontSize: "9px" }}>International Access School</span><br />
+                          <span style={{ fontWeight: "normal", fontSize: "9px" }}>Harhan, Siwan, Bihar</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ textAlign: "center", marginTop: "16px", fontSize: "8px", color: "#ccc" }}>[ School Seal / Stamp ]</div>
               </div>
             </div>
           </div>
         </div>
-      )}
-
-      {!student && !isSearching && (
-        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck className="w-8 h-8 text-slate-300" />
+      ) : (
+        !isSearching && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-16 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-8 h-8 text-slate-300" />
+            </div>
+            <h3 className="font-bold text-slate-500 mb-1">Search for a Student</h3>
+            <p className="text-slate-400 text-sm max-w-sm mx-auto">
+              Enter ENR above to auto-fill the Character Certificate. Customize fields, then click Print.
+            </p>
           </div>
-          <h3 className="font-bold text-slate-500 mb-1">Search for a Student</h3>
-          <p className="text-slate-400 text-sm max-w-sm mx-auto">
-            Enter the student's Admission Number (ENR) above to auto-fill the Character Certificate. You can customize all fields before printing.
-          </p>
-        </div>
+        )
       )}
     </div>
   );
