@@ -66,6 +66,7 @@ interface AttendanceDoc {
     year: string;
     records: Record<string, string>;
     markedByName?: string;
+    isHoliday?: boolean;
 }
 
 interface StudentInfo {
@@ -167,6 +168,7 @@ export default function AdminAttendancePage() {
                             year: d.data().year || year,
                             records: d.data().records || {},
                             markedByName: d.data().markedByName,
+                            isHoliday: d.data().isHoliday || false,
                         }));
 
                     docs.sort((a, b) => b.date.localeCompare(a.date));
@@ -203,6 +205,7 @@ export default function AdminAttendancePage() {
                                         year: d.data().year || filterYear,
                                         records: d.data().records || {},
                                         markedByName: d.data().markedByName,
+                                        isHoliday: d.data().isHoliday || false,
                                     });
                                 });
                         } catch {
@@ -309,11 +312,14 @@ export default function AdminAttendancePage() {
         ? attendanceDocs.filter(d => d.month === filterMonth || d.date?.startsWith(filterMonth))
         : attendanceDocs;
 
-    const totalDays = summaryDocs.length;
+    // Summary: exclude holiday days from total count
+    const totalDays = summaryDocs.filter(d => !d.isHoliday).length;
 
     const getStudentSummary = (studentId: string) => {
         let present = 0, late = 0, absent = 0, total = 0;
         summaryDocs.forEach(d => {
+            // Skip holiday days — they don't count as working days
+            if (d.isHoliday) return;
             if (d.records[studentId]) {
                 total++;
                 if (d.records[studentId] === "present") present++;
