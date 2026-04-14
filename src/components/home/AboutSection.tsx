@@ -13,20 +13,16 @@ const stats = [
 
 export function AboutSection() {
     return (
-        <section className="py-24 md:py-32 bg-white relative overflow-hidden z-10">
-            {/* Decorative Background Elements */}
-            <div className="absolute top-0 right-0 -mt-20 -mr-20 w-[600px] h-[600px] bg-gold/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-[500px] h-[500px] bg-navy/5 rounded-full blur-3xl pointer-events-none" />
-            
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20">
-                <div className="grid lg:grid-cols-2 gap-16 md:gap-24 items-center">
+        <section className="py-24 bg-white relative overflow-hidden">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid lg:grid-cols-2 gap-16 items-center">
 
                     {/* Left: Text Content */}
                     <motion.div
                         initial={{ opacity: 0, x: -50 }}
                         whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true, margin: "-100px" }}
-                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.8 }}
                     >
                         <span className="text-gold font-bold tracking-widest uppercase text-sm mb-2 block">
                             About Our School
@@ -62,53 +58,45 @@ export function AboutSection() {
 
                     {/* Right: Images Grid */}
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 30 }}
-                        whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-100px" }}
-                        transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-                        className="relative grid grid-cols-2 gap-4 md:gap-6 h-[500px] md:h-[600px]"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        whileInView={{ opacity: 1, scale: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.8 }}
+                        className="relative grid grid-cols-2 gap-4 h-[600px]"
                     >
-                        <div className="flex flex-col gap-4 md:gap-6 mt-12">
-                            <div className="relative h-[250px] md:h-[280px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-navy/20 group">
-                                <div className="absolute inset-0 bg-navy/20 group-hover:bg-transparent transition-colors duration-500 z-10 pointer-events-none"/>
+                        <div className="flex flex-col gap-4 mt-12">
+                            <div className="relative h-[280px] rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop"
                                     alt="Students studying"
                                     fill
-                                    sizes="(max-width: 768px) 50vw, 33vw"
-                                    className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
-                            <div className="relative h-[200px] md:h-[220px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-gold/20 group">
-                                <div className="absolute inset-0 bg-gold/20 group-hover:bg-transparent transition-colors duration-500 z-10 pointer-events-none"/>
+                            <div className="relative h-[220px] rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2132&auto=format&fit=crop"
                                     alt="School building"
                                     fill
-                                    sizes="(max-width: 768px) 50vw, 33vw"
-                                    className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
                         </div>
-                        <div className="flex flex-col gap-4 md:gap-6 mb-12">
-                            <div className="relative h-[200px] md:h-[220px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-gold/20 group">
-                                <div className="absolute inset-0 bg-gold/20 group-hover:bg-transparent transition-colors duration-500 z-10 pointer-events-none"/>
+                        <div className="flex flex-col gap-4 mb-12">
+                            <div className="relative h-[220px] rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1544531586-fde5298cdd40?q=80&w=2070&auto=format&fit=crop"
                                     alt="Classroom"
                                     fill
-                                    sizes="(max-width: 768px) 50vw, 33vw"
-                                    className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
-                            <div className="relative h-[250px] md:h-[280px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-navy/20 group">
-                                <div className="absolute inset-0 bg-navy/20 group-hover:bg-transparent transition-colors duration-500 z-10 pointer-events-none"/>
+                            <div className="relative h-[280px] rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?q=80&w=2070&auto=format&fit=crop"
                                     alt="Library"
                                     fill
-                                    sizes="(max-width: 768px) 50vw, 33vw"
-                                    className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
                         </div>
