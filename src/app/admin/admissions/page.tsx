@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
     Search, X, Loader2, CheckCircle2, XCircle, Eye,
     GraduationCap, User, Users, Activity, CreditCard,
-    Home, ClipboardList, Clock, UserCheck, Ban,
+    Home, ClipboardList, Clock, UserCheck, Ban, Receipt, ChevronRight, Printer,
 } from "lucide-react";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
@@ -111,6 +111,20 @@ export default function AdminAdmissionsPage() {
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+    // ── Multi-step admission state ──
+    // step 1 = admission details form, step 2 = fee collection, step 3 = receipt
+    const [admStep, setAdmStep] = useState<1 | 2 | 3>(1);
+    const [admData, setAdmData] = useState<AcceptFormValues | null>(null); // saved after step 1
+    const [feeStructure, setFeeStructure] = useState<any>(null);
+    const [collectAdmFee, setCollectAdmFee] = useState(true);
+    const [collectMonthlyFee, setCollectMonthlyFee] = useState(false);
+    const [feePaymentMode, setFeePaymentMode] = useState<"CASH" | "UPI">("CASH");
+    const [admReceipt, setAdmReceipt] = useState<{
+        receiptNo: string; studentName: string; admissionNo: string;
+        class: string; section: string; items: { label: string; amount: number }[];
+        total: number; paidOn: string; paymentMode: string;
+    } | null>(null);
+
     const { register, handleSubmit, control, formState: { errors }, setValue, reset } = useForm<AcceptFormValues>({
         resolver: zodResolver(acceptSchema),
     });
@@ -205,33 +219,59 @@ export default function AdminAdmissionsPage() {
         finally { setIsLoading(false); }
     };
 
-    // ── Open accept form ──
+    // ── Open accept form (step 1) ──
     const openAcceptForm = (req: AdmissionRequest) => {
         setIsAccepting(true);
+        setAdmStep(1);
+        setAdmData(null);
+        setFeeStructure(null);
+        setCollectAdmFee(true);
+        setCollectMonthlyFee(false);
+        setFeePaymentMode("CASH");
+        setAdmReceipt(null);
         setValue("class", req.enrollmentClass || "");
         setError(null);
     };
 
-    // ── Confirm Admission (create account) ──
+    // ── Step 1 → Step 2: save admission details, fetch fee structure ──
     const onAcceptSubmit = async (data: AcceptFormValues) => {
         if (!selectedRequest) return;
         setIsLoading(true);
         setError(null);
+        try {
+            const normClass = data.class.trim().replace(/^class\s*/i, "").trim();
+            const fsDoc = await getDoc(doc(db, "fees", "structure", "classes", normClass));
+            setFeeStructure(fsDoc.exists() ? fsDoc.data() : null);
+            setAdmData({ ...data, class: normClass });
+            setAdmStep(2);
+        } catch (e: any) {
+            setError("Failed to fetch fee structure: " + e.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
+    // ── Step 2 → Step 3: create account + selected fee records ──
+    const onFeeConfirm = async () => {
+        if (!selectedRequest || !admData) return;
+        setIsLoading(true);
+        setError(null);
+
+        const normClass = admData.class;
+        const sectionStr = admData.section.trim().toUpperCase() || "A";
         let secondaryApp: any;
         try {
             secondaryApp = initializeApp(firebaseConfig, `adm_${Date.now()}`);
             const secondaryAuth = getAuth(secondaryApp);
-            const email = `${data.admissionNo}@ias.edu`;
+            const email = `${admData.admissionNo}@ias.edu`;
 
-            // Password = DOB formatted as DD-MM-YY
             const rawDob = selectedRequest.dob || "";
             let password = rawDob;
             if (rawDob.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 const [y, m, d] = rawDob.split("-");
                 password = `${d}-${m}-${y.slice(-2)}`;
             }
-            if (!password.trim()) password = `ias${data.admissionNo}`;
+            if (!password.trim()) password = `ias${admData.admissionNo}`;
 
             const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
             const uid = cred.user.uid;
@@ -240,13 +280,9 @@ export default function AdminAdmissionsPage() {
             const nameParts = fullName.split(" ");
             const firstName = nameParts[0] || "Student";
             const lastName = nameParts.slice(1).join(" ");
-            const normClass = data.class.trim().replace(/^class\s*/i, "").trim();
-            const sectionStr = data.section.trim().toUpperCase() || "A";
 
-            // Determine chronological serial number based on total student count
             const snapshot = await getCountFromServer(collectionGroup(db, "profiles"));
-            const totalStudents = snapshot.data().count;
-            const newSerialNumber = String(totalStudents + 1);
+            const newSerialNumber = String(snapshot.data().count + 1);
 
             // users doc
             await setDoc(doc(db, "users", uid), {
@@ -264,7 +300,7 @@ export default function AdminAdmissionsPage() {
                     name: fullName, firstName, lastName,
                     className: normClass, currentClass: normClass, classAtAdmission: normClass,
                     section: sectionStr,
-                    admissionNumber: data.admissionNo,
+                    admissionNumber: admData.admissionNo,
                     session: selectedRequest.session || "",
                     dateOfAdmission: new Date().toISOString().split("T")[0],
                     status: "ACTIVE",
@@ -311,43 +347,40 @@ export default function AdminAdmissionsPage() {
 
             // studentLookup
             await setDoc(doc(db, "studentLookup", uid), {
-                uid, admissionNumber: data.admissionNo, name: fullName,
+                uid, admissionNumber: admData.admissionNo, name: fullName,
                 className: normClass, section: sectionStr,
                 status: "ACTIVE", mobileNo: selectedRequest.mobileNo || "", email,
             });
 
             // update admission request
             await updateDoc(doc(db, "admission_requests", selectedRequest.id), {
-                status: "accepted",
-                studentId: uid,
-                assignedAdmissionNo: data.admissionNo,
-                assignedClass: normClass,
-                assignedSection: sectionStr,
+                status: "accepted", studentId: uid,
+                assignedAdmissionNo: admData.admissionNo,
+                assignedClass: normClass, assignedSection: sectionStr,
             });
 
-            // ── Auto-generate Admission Month Fee (paid) ──────────────────────
-            const feeStructureDoc = await getDoc(doc(db, "fees", "structure", "classes", normClass));
-            if (feeStructureDoc.exists()) {
-                const fs = feeStructureDoc.data();
-                const admissionFee = fs.admissionFee || 0;
-                const tuitionFee = fs.tuitionFee || 0;
-                const annualFee = fs.annualFee || 0;
-                const registrationFee = fs.registrationFee || 0;
-                const sportsFee = fs.sportsFee || 0;
-                const miscFee = fs.miscFee || 0;
-                const monthlyFee = fs.monthly || 0;
-                const dueDay = fs.dueDay || 10;
+            // ── Create fee record ONLY for fees selected to collect now ──────
+            const receiptItems: { label: string; amount: number }[] = [];
+            const fs = feeStructure || {};
+            const now = new Date();
+            const admMonth = now.getMonth() + 1;
+            const admYear = now.getFullYear();
+            const admSession = admMonth >= 4 ? admYear.toString() : (admYear - 1).toString();
+            const dueDay = fs.dueDay || 10;
+            const dueDate = new Date(admYear, admMonth - 1, dueDay);
 
-                const now = new Date();
-                const admMonth = now.getMonth() + 1; // 1-based
-                const admYear = now.getFullYear();
-                // Session: April = start of new session year
-                const admSession = admMonth >= 4 ? admYear.toString() : (admYear - 1).toString();
-                const totalFee = monthlyFee + admissionFee; // current month + one-time admission charge
+            const admissionFeeAmt = collectAdmFee ? (fs.admissionFee || 0) : 0;
+            const monthlyFeeAmt = collectMonthlyFee ? (fs.monthly || fs.tuitionFee || 0) : 0;
+            const totalCollected = admissionFeeAmt + monthlyFeeAmt;
 
+            if (collectAdmFee && admissionFeeAmt > 0)
+                receiptItems.push({ label: "Admission Fee", amount: admissionFeeAmt });
+            if (collectMonthlyFee && monthlyFeeAmt > 0)
+                receiptItems.push({ label: "Monthly Fee (" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][admMonth-1] + ")", amount: monthlyFeeAmt });
+
+            if (totalCollected > 0) {
                 const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
-                const admReceiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
-                const dueDate = new Date(admYear, admMonth - 1, dueDay);
+                const receiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
 
                 await setDoc(
                     doc(db, `feeRecords/${admYear}/months/${admMonth}/classes/${normClass}/records`, uid),
@@ -356,46 +389,66 @@ export default function AdminAdmissionsPage() {
                         studentName: fullName,
                         class: normClass,
                         section: sectionStr,
-                        admissionNumber: data.admissionNo,
+                        admissionNumber: admData.admissionNo,
                         rollNo: "",
-                        parentEmail: `${data.admissionNo}@ias.edu`,
+                        parentEmail: email,
                         month: admMonth,
                         year: admYear,
                         session: admSession,
                         dueDate,
-                        amount: monthlyFee,         // regular monthly amount
-                        admissionFee,               // one-time admission charge
-                        totalAmount: totalFee,       // monthly + admission
+                        amount: monthlyFeeAmt,          // base monthly (0 if not collected)
+                        admissionFee: admissionFeeAmt,  // one-time
+                        totalAmount: totalCollected,
                         previousDues: 0,
                         breakdown: {
-                            tuitionFee,
-                            annualFee,
-                            admissionFee,
-                            registrationFee,
-                            sportsFee,
-                            miscFee,
+                            tuitionFee: fs.tuitionFee || 0,
+                            annualFee: 0,    // annual fee goes to annual fee section
+                            admissionFee: admissionFeeAmt,
+                            registrationFee: fs.registrationFee || 0,
+                            sportsFee: fs.sportsFee || 0,
+                            miscFee: fs.miscFee || 0,
                         },
                         status: "paid",
                         paidOn: now,
-                        receiptNo: admReceiptNo,
-                        paymentMode: "CASH",
+                        receiptNo,
+                        paymentMode: feePaymentMode,
                         markedBy: "system-admission",
-                        admissionMonth: true, // flag so report can distinguish
+                        admissionMonth: true,
                         createdAt: serverTimestamp(),
                     }
                 );
+
+                setAdmReceipt({
+                    receiptNo,
+                    studentName: fullName,
+                    admissionNo: admData.admissionNo,
+                    class: normClass,
+                    section: sectionStr,
+                    items: receiptItems,
+                    total: totalCollected,
+                    paidOn: now.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                    paymentMode: feePaymentMode,
+                });
             }
 
             setAllRequests(prev => prev.map(r =>
                 r.id === selectedRequest.id
-                    ? { ...r, status: "accepted", assignedAdmissionNo: data.admissionNo, assignedClass: normClass, assignedSection: sectionStr }
+                    ? { ...r, status: "accepted", assignedAdmissionNo: admData.admissionNo, assignedClass: normClass, assignedSection: sectionStr }
                     : r
             ));
-            setSelectedRequest(null);
-            setIsAccepting(false);
-            reset();
-            showToast(`🎉 ${fullName} admitted! Login: ${email} | Password: ${password}`);
-            setActiveTab("accepted");
+
+            setAdmStep(totalCollected > 0 ? 3 : 1);
+            if (totalCollected === 0) {
+                // No fees collected — close and show toast
+                setSelectedRequest(null);
+                setIsAccepting(false);
+                reset();
+                setActiveTab("accepted");
+                showToast(`🎉 ${fullName} admitted! Email: ${email} | Password: ${password}`);
+            } else {
+                showToast(`🎉 ${fullName} admitted successfully!`);
+                setActiveTab("accepted");
+            }
         } catch (err: any) {
             if (err.code === "auth/email-already-in-use") {
                 setError("This Admission Number is already used. Try a different one.");
@@ -611,15 +664,15 @@ export default function AdminAdmissionsPage() {
                                         </Section>
                                     </div>
                                 </div>
-                            ) : (
-                                // ── Accept Form ──
+                            ) : admStep === 1 ? (
+                                // ── Step 1: Assign Admission Details ──
                                 <div className="max-w-md mx-auto py-6">
                                     <div className="text-center mb-6">
                                         <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
                                             <GraduationCap className="w-7 h-7 text-emerald-600" />
                                         </div>
-                                        <h3 className="text-lg font-bold text-navy">Confirm Admission</h3>
-                                        <p className="text-sm text-gray-500 mt-1">Assign a registration number to create the student account.</p>
+                                        <h3 className="text-lg font-bold text-navy">Step 1 of 2 — Assign Details</h3>
+                                        <p className="text-sm text-gray-500 mt-1">Assign registration number, class and section.</p>
                                     </div>
 
                                     <form onSubmit={handleSubmit(onAcceptSubmit)} className="space-y-4">
@@ -668,12 +721,171 @@ export default function AdminAdmissionsPage() {
                                                 Back
                                             </Button>
                                             <Button type="submit" disabled={isLoading} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
-                                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Admission"}
+                                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ChevronRight className="w-4 h-4 mr-1" />Next: Fee Collection</>}
                                             </Button>
                                         </div>
                                     </form>
                                 </div>
-                            )}
+
+                            ) : admStep === 2 ? (
+                                // ── Step 2: Fee Collection ──
+                                <div className="max-w-md mx-auto py-6 space-y-5">
+                                    <div className="text-center">
+                                        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                                            <CreditCard className="w-7 h-7 text-amber-600" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-navy">Step 2 of 2 — Fee Collection</h3>
+                                        <p className="text-sm text-gray-500 mt-1">Select which fees are being collected right now.</p>
+                                    </div>
+
+                                    {/* Fee options */}
+                                    <div className="space-y-3">
+                                        {/* Admission Fee */}
+                                        <label className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                            collectAdmFee ? "border-emerald-400 bg-emerald-50" : "border-gray-200 bg-white hover:border-gray-300"
+                                        }`}>
+                                            <div className="flex items-center gap-3">
+                                                <input type="checkbox" checked={collectAdmFee} onChange={e => setCollectAdmFee(e.target.checked)}
+                                                    className="w-4 h-4 accent-emerald-600" />
+                                                <div>
+                                                    <p className="font-semibold text-navy text-sm">Admission Fee</p>
+                                                    <p className="text-xs text-gray-500">One-time payment at admission</p>
+                                                </div>
+                                            </div>
+                                            <span className="font-bold text-navy">₹{(feeStructure?.admissionFee || 0).toLocaleString()}</span>
+                                        </label>
+
+                                        {/* Monthly Fee */}
+                                        <label className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                            collectMonthlyFee ? "border-emerald-400 bg-emerald-50" : "border-gray-200 bg-white hover:border-gray-300"
+                                        }`}>
+                                            <div className="flex items-center gap-3">
+                                                <input type="checkbox" checked={collectMonthlyFee} onChange={e => setCollectMonthlyFee(e.target.checked)}
+                                                    className="w-4 h-4 accent-emerald-600" />
+                                                <div>
+                                                    <p className="font-semibold text-navy text-sm">Monthly Fee (Current Month)</p>
+                                                    <p className="text-xs text-gray-500">Managed via Fees → Manage Fees</p>
+                                                </div>
+                                            </div>
+                                            <span className="font-bold text-navy">₹{(feeStructure?.monthly || feeStructure?.tuitionFee || 0).toLocaleString()}</span>
+                                        </label>
+
+                                        {/* Annual Fee - info only */}
+                                        <div className="flex items-center justify-between p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 opacity-70">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-4 h-4 rounded border border-gray-300 bg-gray-200" />
+                                                <div>
+                                                    <p className="font-semibold text-gray-500 text-sm">Annual Fee</p>
+                                                    <p className="text-xs text-gray-400">Collect via Fees → Annual Fees section</p>
+                                                </div>
+                                            </div>
+                                            <span className="font-bold text-gray-400">₹{(feeStructure?.annualFee || 0).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Total */}
+                                    <div className="bg-navy/5 rounded-xl p-4 flex justify-between items-center">
+                                        <span className="font-semibold text-navy">Collecting Now</span>
+                                        <span className="text-xl font-bold text-navy">
+                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.monthly || feeStructure?.tuitionFee || 0) : 0)).toLocaleString()}
+                                        </span>
+                                    </div>
+
+                                    {/* Payment Mode */}
+                                    <div>
+                                        <p className="text-sm font-semibold text-navy mb-2">Payment Mode</p>
+                                        <div className="flex gap-3">
+                                            {(["CASH", "UPI"] as const).map(mode => (
+                                                <button key={mode} type="button"
+                                                    onClick={() => setFeePaymentMode(mode)}
+                                                    className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                                                        feePaymentMode === mode
+                                                            ? "border-navy bg-navy text-white"
+                                                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                                                    }`}>
+                                                    {mode}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {!collectAdmFee && !collectMonthlyFee && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700">
+                                            ⚠️ No fees selected — student will be admitted without any fee collection.
+                                        </div>
+                                    )}
+
+                                    {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">{error}</div>}
+
+                                    <div className="flex gap-3 pt-2">
+                                        <Button type="button" variant="outline" className="flex-1" onClick={() => setAdmStep(1)}>
+                                            Back
+                                        </Button>
+                                        <Button type="button" disabled={isLoading} onClick={onFeeConfirm}
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
+                                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4 mr-1" />Confirm Admission</>}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                            ) : admStep === 3 && admReceipt ? (
+                                // ── Step 3: Receipt ──
+                                <div className="max-w-sm mx-auto py-6">
+                                    <div className="text-center mb-5">
+                                        <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                                            <Receipt className="w-7 h-7 text-emerald-600" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-emerald-700">Admission Successful!</h3>
+                                        <p className="text-sm text-gray-500 mt-1">Fee receipt generated below.</p>
+                                    </div>
+
+                                    {/* Receipt Card */}
+                                    <div className="border border-gray-200 rounded-2xl overflow-hidden" id="adm-receipt">
+                                        <div className="gradient-navy p-5 text-white">
+                                            <p className="text-white/60 text-xs">International Access School</p>
+                                            <h4 className="text-xl font-bold mt-1">Admission Fee Receipt</h4>
+                                            <p className="text-white/60 text-sm font-mono">{admReceipt.receiptNo}</p>
+                                        </div>
+                                        <div className="p-5 space-y-2.5 text-sm">
+                                            {[
+                                                ["Student", admReceipt.studentName],
+                                                ["Admission No.", admReceipt.admissionNo],
+                                                ["Class", `${admReceipt.class} - ${admReceipt.section}`],
+                                                ["Date", admReceipt.paidOn],
+                                                ["Mode", admReceipt.paymentMode],
+                                            ].map(([l, v]) => (
+                                                <div key={l} className="flex justify-between border-b border-gray-50 pb-2">
+                                                    <span className="text-gray-500">{l}</span>
+                                                    <span className="font-semibold text-navy">{v}</span>
+                                                </div>
+                                            ))}
+                                            <div className="pt-1 space-y-1.5">
+                                                {admReceipt.items.map(item => (
+                                                    <div key={item.label} className="flex justify-between text-sm">
+                                                        <span className="text-gray-600">{item.label}</span>
+                                                        <span className="font-medium text-navy">₹{item.amount.toLocaleString()}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-navy/20">
+                                                <span className="font-bold text-navy">Total Paid</span>
+                                                <span className="text-xl font-bold text-emerald-700">₹{admReceipt.total.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 mt-5">
+                                        <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+                                            <Printer className="w-4 h-4 mr-2" /> Print
+                                        </Button>
+                                        <Button className="flex-1 bg-navy text-white hover:bg-navy/90"
+                                            onClick={() => { setSelectedRequest(null); setIsAccepting(false); reset(); }}
+                                        >
+                                            Done
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
 
                         {/* Modal Footer Actions */}
