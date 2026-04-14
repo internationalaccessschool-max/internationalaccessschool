@@ -110,13 +110,17 @@ export default function AdminAttendancePage() {
                 const directSnap = await getDocs(
                     collection(db, "users", "classes", selectedClass, "sections", selectedSection, "students", "profiles")
                 );
-                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                let allProfiles: any[] = directSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter((d: any) => !d.status || d.status === "active");
 
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
                         collection(db, "users", "classes", classNum, "sections", selectedSection, "students", "profiles")
                     );
-                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    allProfiles = altSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter((d: any) => !d.status || d.status === "active");
                 }
 
                 const seenIds = new Set<string>();
