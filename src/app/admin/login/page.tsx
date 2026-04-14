@@ -42,15 +42,15 @@ export default function AdminLoginPage() {
 
             document.cookie = "auth=true; path=/; max-age=86400";
 
-            // Verify role is actually admin and email matches exact admin email
+            // Verify role is actually admin in Firestore (allows all admin accounts)
             const userDoc = await getDoc(doc(db, "users", user.uid));
 
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                if (userData.role === "admin" && user.email === "internationalaccessschool@gmail.com") {
+                if (userData.role === "admin") {
                     router.push("/admin");
                 } else {
-                    setError("Access denied. Not the authorized administrator account.");
+                    setError("Access denied. This account does not have admin privileges.");
                     await auth.signOut();
                     // Clear cookies that might have been set by AuthContext immediately upon signout
                     document.cookie = "auth=; path=/; max-age=0";
