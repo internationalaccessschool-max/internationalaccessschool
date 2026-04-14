@@ -137,13 +137,17 @@ export default function TeacherAttendancePage() {
                     collection(db, "users", "classes", assignedClass, "sections", assignedSection, "students", "profiles")
                 );
 
-                let allProfiles: any[] = directSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                let allProfiles: any[] = directSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter((d: any) => !d.status || d.status === "active");
 
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
                         collection(db, "users", "classes", normClass, "sections", assignedSection, "students", "profiles")
                     );
-                    allProfiles = altSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    allProfiles = altSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter((d: any) => !d.status || d.status === "active");
                 }
 
                 if (allProfiles.length === 0) {
@@ -152,7 +156,9 @@ export default function TeacherAttendancePage() {
                         .map((d): any => ({ id: d.id, ...d.data() }))
                         .filter((d: any) => {
                             const cls = d.className || d.currentClass || "";
-                            return (cls === assignedClass || cls === normClass) && d.section === assignedSection;
+                            return (cls === assignedClass || cls === normClass)
+                                && d.section === assignedSection
+                                && (!d.status || d.status === "active");
                         });
                 }
 
