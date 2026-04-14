@@ -3,6 +3,10 @@
         {
             "path": "/api/cron/cleanup-homework",
             "schedule": "0 0 * * *"
+        },
+        {
+            "path": "/api/cron/late-fee",
+            "schedule": "30 18 * * *"
         }
     ]
 }
