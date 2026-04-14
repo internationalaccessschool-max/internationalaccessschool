@@ -370,7 +370,8 @@ export default function AdminAdmissionsPage() {
             const dueDate = new Date(admYear, admMonth - 1, dueDay);
 
             const admissionFeeAmt = collectAdmFee ? (fs.admissionFee || 0) : 0;
-            const monthlyFeeAmt = collectMonthlyFee ? (fs.monthly || fs.tuitionFee || 0) : 0;
+            const tuitionFeeAmt = fs.tuitionFee || 0;                           // only tuition, not monthly total
+            const monthlyFeeAmt = collectMonthlyFee ? tuitionFeeAmt : 0;
             const totalCollected = admissionFeeAmt + monthlyFeeAmt;
 
             if (collectAdmFee && admissionFeeAmt > 0)
@@ -378,46 +379,52 @@ export default function AdminAdmissionsPage() {
             if (collectMonthlyFee && monthlyFeeAmt > 0)
                 receiptItems.push({ label: "Tuition Fee (" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][admMonth-1] + ")", amount: monthlyFeeAmt });
 
+            // ── Always create a fee record for the current month ─────────────
+            // If tuition was collected → status: paid
+            // If tuition was NOT collected → status: pending (so accountant can track it)
+            const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
+            const receiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
+            const tuitionStatus = collectMonthlyFee && monthlyFeeAmt > 0 ? "paid" : "pending";
+
+            // Idempotent doc ID — same as generate-fee-records route
+            const feeDocId = `${uid}_${admMonth}_${admYear}_tuition`;
+
+            await setDoc(
+                doc(db, `feeRecords/${admYear}/months/${admMonth}/classes/${normClass}/records`, feeDocId),
+                {
+                    studentId: uid,
+                    studentName: fullName,
+                    class: normClass,
+                    section: sectionStr,
+                    admissionNumber: admData.admissionNo,
+                    rollNo: "",
+                    parentEmail: email,
+                    month: admMonth,
+                    year: admYear,
+                    session: admSession,
+                    dueDate,
+                    feeType: "tuition",
+                    amount: tuitionFeeAmt,              // always the full tuition amount
+                    admissionFee: admissionFeeAmt,      // one-time, 0 if not collected
+                    totalAmount: admissionFeeAmt + (tuitionStatus === "paid" ? tuitionFeeAmt : 0),
+                    previousDues: 0,
+                    breakdown: {
+                        tuitionFee: tuitionFeeAmt,
+                        annualFee: 0,
+                        admissionFee: admissionFeeAmt,
+                        registrationFee: fs.registrationFee || 0,
+                        sportsFee: fs.sportsFee || 0,
+                        miscFee: fs.miscFee || 0,
+                    },
+                    status: tuitionStatus,
+                    ...(tuitionStatus === "paid" ? { paidOn: now, receiptNo, paymentMode: feePaymentMode } : {}),
+                    markedBy: "system-admission",
+                    admissionMonth: true,
+                    createdAt: serverTimestamp(),
+                }
+            );
+
             if (totalCollected > 0) {
-                const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
-                const receiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
-
-                await setDoc(
-                    doc(db, `feeRecords/${admYear}/months/${admMonth}/classes/${normClass}/records`, uid),
-                    {
-                        studentId: uid,
-                        studentName: fullName,
-                        class: normClass,
-                        section: sectionStr,
-                        admissionNumber: admData.admissionNo,
-                        rollNo: "",
-                        parentEmail: email,
-                        month: admMonth,
-                        year: admYear,
-                        session: admSession,
-                        dueDate,
-                        amount: monthlyFeeAmt,          // base monthly (0 if not collected)
-                        admissionFee: admissionFeeAmt,  // one-time
-                        totalAmount: totalCollected,
-                        previousDues: 0,
-                        breakdown: {
-                            tuitionFee: fs.tuitionFee || 0,
-                            annualFee: 0,    // annual fee goes to annual fee section
-                            admissionFee: admissionFeeAmt,
-                            registrationFee: fs.registrationFee || 0,
-                            sportsFee: fs.sportsFee || 0,
-                            miscFee: fs.miscFee || 0,
-                        },
-                        status: "paid",
-                        paidOn: now,
-                        receiptNo,
-                        paymentMode: feePaymentMode,
-                        markedBy: "system-admission",
-                        admissionMonth: true,
-                        createdAt: serverTimestamp(),
-                    }
-                );
-
                 setAdmReceipt({
                     receiptNo,
                     studentName: fullName,
@@ -767,7 +774,7 @@ export default function AdminAdmissionsPage() {
                                                     <p className="text-xs text-gray-500">Managed via Fees → Manage Fees</p>
                                                 </div>
                                             </div>
-                                            <span className="font-bold text-navy">₹{(feeStructure?.monthly || feeStructure?.tuitionFee || 0).toLocaleString()}</span>
+                                            <span className="font-bold text-navy">₹{(feeStructure?.tuitionFee || 0).toLocaleString()}</span>
                                         </label>
 
                                         {/* Annual Fee - info only */}
