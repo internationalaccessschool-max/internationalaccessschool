@@ -8,10 +8,11 @@ import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from
 
 interface AttendanceRecord {
     date: string;
-    status: "present" | "absent" | "late";
+    status: "present" | "absent" | "late" | "holiday";
     day: string;
     month: string; // "YYYY-MM"
     year: string;  // "YYYY"
+    isHoliday?: boolean;
 }
 
 // Generate month options for the filter dropdown
@@ -164,6 +165,24 @@ export default function StudentAttendancePage() {
                                     const data = d.data();
                                     // Check section match
                                     if (data.section && data.section !== sec) return;
+
+                                    const dateStr: string = data.date || d.id.split("_")[0] || "";
+                                    if (!dateStr) return;
+                                    const dateObj = new Date(dateStr + "T00:00:00");
+
+                                    // ── Holiday: show as holiday badge, don't count in working days ──
+                                    if (data.isHoliday) {
+                                        studentRecords.push({
+                                            date: dateStr,
+                                            status: "holiday" as "present" | "absent" | "late" | "holiday",
+                                            day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
+                                            month: monthStr,
+                                            year,
+                                            isHoliday: true,
+                                        });
+                                        return;
+                                    }
+
                                     const statusMap = data.records || {};
 
                                     // Try multiple keys to find this student's status
@@ -172,10 +191,6 @@ export default function StudentAttendancePage() {
                                         if (statusMap[key]) { myStatus = statusMap[key]; break; }
                                     }
                                     if (!myStatus) return;
-
-                                    const dateStr: string = data.date || d.id.split("_")[0] || "";
-                                    if (!dateStr) return;
-                                    const dateObj = new Date(dateStr + "T00:00:00");
 
                                     studentRecords.push({
                                         date: dateStr,
@@ -224,15 +239,18 @@ export default function StudentAttendancePage() {
         ? records
         : records.filter(r => (r.month || r.date?.slice(0, 7)) === filterMonth);
 
-    const totalDays = filteredRecords.length;
-    const presentDays = filteredRecords.filter(r => r.status === "present").length;
-    const lateDays = filteredRecords.filter(r => r.status === "late").length;
-    const absentDays = filteredRecords.filter(r => r.status === "absent").length;
+    // Holidays excluded from working day calculation
+    const workingDays = filteredRecords.filter(r => !r.isHoliday);
+    const totalDays = workingDays.length;
+    const presentDays = workingDays.filter(r => r.status === "present").length;
+    const lateDays = workingDays.filter(r => r.status === "late").length;
+    const absentDays = workingDays.filter(r => r.status === "absent").length;
     const percentage = totalDays > 0 ? Math.round(((presentDays + lateDays) / totalDays) * 100) : 0;
 
-    const allTotal = records.length;
-    const allPresent = records.filter(r => r.status === "present").length;
-    const allLate = records.filter(r => r.status === "late").length;
+    const allWorking = records.filter(r => !r.isHoliday);
+    const allTotal = allWorking.length;
+    const allPresent = allWorking.filter(r => r.status === "present").length;
+    const allLate = allWorking.filter(r => r.status === "late").length;
     const allPct = allTotal > 0 ? Math.round(((allPresent + allLate) / allTotal) * 100) : 0;
 
     const selectedMonthLabel = filterMonth === "all"
@@ -381,11 +399,12 @@ export default function StudentAttendancePage() {
                                         </div>
                                     </div>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                        record.status === "present" ? "bg-emerald-100 text-emerald-700"
+                                        record.isHoliday ? "bg-purple-100 text-purple-700"
+                                        : record.status === "present" ? "bg-emerald-100 text-emerald-700"
                                         : record.status === "late" ? "bg-amber-100 text-amber-700"
                                         : "bg-red-100 text-red-700"
                                     }`}>
-                                        {record.status === "present" ? "✓ Present" : record.status === "late" ? "⏰ Late" : "✗ Absent"}
+                                        {record.isHoliday ? "🗓️ Holiday" : record.status === "present" ? "✓ Present" : record.status === "late" ? "⏰ Late" : "✗ Absent"}
                                     </span>
                                 </div>
                             );
