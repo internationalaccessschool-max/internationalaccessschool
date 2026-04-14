@@ -23,8 +23,9 @@ interface FeeRecord {
     class: string;
     section: string;
     amount: number;
-    totalAmount?: number;
-    previousDues?: number;
+    previousDues?: number;    // sum of unpaid previous months carried forward
+    lateFine?: number;        // ₹100 late fine applied after 15th if unpaid
+    totalAmount?: number;     // amount + previousDues + lateFine (what parent must pay)
     month: number;
     year: number;
     dueDate: { toDate: () => Date } | null;
@@ -751,6 +752,13 @@ export default function AccountantDashboard() {
                                                             <span>Base Fee: <strong className="text-navy">₹{(r.amount || 0).toLocaleString()}</strong></span>
                                                             {(r.previousDues || 0) > 0 && (
                                                                 <span>Arrears: <strong className="text-rose-600">+₹{(r.previousDues || 0).toLocaleString()}</strong></span>
+                                                            )}
+                                                            {(r.lateFine || 0) > 0 && (
+                                                                <span className="col-span-2">
+                                                                    <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                                                        ⚠️ Late Fine: +₹{(r.lateFine || 0).toLocaleString()}
+                                                                    </span>
+                                                                </span>
                                                             )}
                                                             {r.status === "paid" && r.paidOn?.toDate && (
                                                                 <span>Paid On: <strong className="text-emerald-700">{r.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</strong></span>
