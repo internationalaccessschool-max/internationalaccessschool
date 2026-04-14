@@ -376,7 +376,7 @@ export default function AdminAdmissionsPage() {
             if (collectAdmFee && admissionFeeAmt > 0)
                 receiptItems.push({ label: "Admission Fee", amount: admissionFeeAmt });
             if (collectMonthlyFee && monthlyFeeAmt > 0)
-                receiptItems.push({ label: "Monthly Fee (" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][admMonth-1] + ")", amount: monthlyFeeAmt });
+                receiptItems.push({ label: "Tuition Fee (" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][admMonth-1] + ")", amount: monthlyFeeAmt });
 
             if (totalCollected > 0) {
                 const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
@@ -763,7 +763,7 @@ export default function AdminAdmissionsPage() {
                                                 <input type="checkbox" checked={collectMonthlyFee} onChange={e => setCollectMonthlyFee(e.target.checked)}
                                                     className="w-4 h-4 accent-emerald-600" />
                                                 <div>
-                                                    <p className="font-semibold text-navy text-sm">Monthly Fee (Current Month)</p>
+                                                    <p className="font-semibold text-navy text-sm">Tuition Fee (Current Month)</p>
                                                     <p className="text-xs text-gray-500">Managed via Fees → Manage Fees</p>
                                                 </div>
                                             </div>
