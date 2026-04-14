@@ -111,6 +111,11 @@ export default function AdminAdmissionsPage() {
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+    // ── Current session (derived from today's date — April onwards = current year) ──
+    const _now = new Date();
+    const _nowMonth = _now.getMonth() + 1;
+    const admSession = _nowMonth >= 4 ? _now.getFullYear().toString() : (_now.getFullYear() - 1).toString();
+
     // ── Multi-step admission state ──
     // step 1 = admission details form, step 2 = fee collection, step 3 = receipt
     const [admStep, setAdmStep] = useState<1 | 2 | 3>(1);
@@ -118,6 +123,8 @@ export default function AdminAdmissionsPage() {
     const [feeStructure, setFeeStructure] = useState<any>(null);
     const [collectAdmFee, setCollectAdmFee] = useState(true);
     const [collectMonthlyFee, setCollectMonthlyFee] = useState(false);
+    const [collectAnnualFee, setCollectAnnualFee] = useState(false);
+    const [annualFeeCollectAmt, setAnnualFeeCollectAmt] = useState(0);
     const [feePaymentMode, setFeePaymentMode] = useState<"CASH" | "UPI">("CASH");
     const [admReceipt, setAdmReceipt] = useState<{
         receiptNo: string; studentName: string; admissionNo: string;
@@ -227,6 +234,8 @@ export default function AdminAdmissionsPage() {
         setFeeStructure(null);
         setCollectAdmFee(true);
         setCollectMonthlyFee(false);
+        setCollectAnnualFee(false);
+        setAnnualFeeCollectAmt(0);
         setFeePaymentMode("CASH");
         setAdmReceipt(null);
         setValue("class", req.enrollmentClass || "");
@@ -372,12 +381,16 @@ export default function AdminAdmissionsPage() {
             const admissionFeeAmt = collectAdmFee ? (fs.admissionFee || 0) : 0;
             const tuitionFeeAmt = fs.tuitionFee || 0;                           // only tuition, not monthly total
             const monthlyFeeAmt = collectMonthlyFee ? tuitionFeeAmt : 0;
-            const totalCollected = admissionFeeAmt + monthlyFeeAmt;
+            const annualFeeStructureAmt = fs.annualFee || 0;
+            const annualFeeCollected = collectAnnualFee ? Math.min(annualFeeCollectAmt, annualFeeStructureAmt) : 0;
+            const totalCollected = admissionFeeAmt + monthlyFeeAmt + annualFeeCollected;
 
             if (collectAdmFee && admissionFeeAmt > 0)
                 receiptItems.push({ label: "Admission Fee", amount: admissionFeeAmt });
             if (collectMonthlyFee && monthlyFeeAmt > 0)
                 receiptItems.push({ label: "Tuition Fee (" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][admMonth-1] + ")", amount: monthlyFeeAmt });
+            if (collectAnnualFee && annualFeeCollected > 0)
+                receiptItems.push({ label: `Annual Fee (Session ${admSession})`, amount: annualFeeCollected });
 
             // ── Always create a fee record for the current month ─────────────
             // If tuition was collected → status: paid
@@ -423,6 +436,38 @@ export default function AdminAdmissionsPage() {
                     createdAt: serverTimestamp(),
                 }
             );
+
+            // ── Create Annual Fee record in annualFeeRecords ─────────────────
+            // Always create if annualFee > 0 in fee structure
+            if (annualFeeStructureAmt > 0) {
+                const annualRef = doc(db, `annualFeeRecords/${admSession}/students/${uid}`);
+                const annualStatus = annualFeeCollected >= annualFeeStructureAmt ? "paid"
+                    : annualFeeCollected > 0 ? "partial"
+                    : "unpaid";
+                const annualReceiptNo = annualFeeCollected > 0
+                    ? `ANN-ADM-${admYear}-${Date.now().toString().slice(-6)}`
+                    : "";
+                await setDoc(annualRef, {
+                    studentId: uid,
+                    studentName: fullName,
+                    class: normClass,
+                    section: sectionStr,
+                    admissionNumber: admData.admissionNo,
+                    session: admSession,
+                    totalFee: annualFeeStructureAmt,
+                    amountPaid: annualFeeCollected,
+                    balance: Math.max(0, annualFeeStructureAmt - annualFeeCollected),
+                    status: annualStatus,
+                    payments: annualFeeCollected > 0 ? [{
+                        amount: annualFeeCollected,
+                        date: now.toISOString(),
+                        paymentMode: feePaymentMode,
+                        receiptNo: annualReceiptNo,
+                        markedBy: "system-admission",
+                    }] : [],
+                    generatedAt: serverTimestamp(),
+                });
+            }
 
             if (totalCollected > 0) {
                 setAdmReceipt({
@@ -777,24 +822,55 @@ export default function AdminAdmissionsPage() {
                                             <span className="font-bold text-navy">₹{(feeStructure?.tuitionFee || 0).toLocaleString()}</span>
                                         </label>
 
-                                        {/* Annual Fee - info only */}
-                                        <div className="flex items-center justify-between p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 opacity-70">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-4 h-4 rounded border border-gray-300 bg-gray-200" />
-                                                <div>
-                                                    <p className="font-semibold text-gray-500 text-sm">Annual Fee</p>
-                                                    <p className="text-xs text-gray-400">Collect via Fees → Annual Fees section</p>
+                                        {/* Annual Fee - now selectable with partial amount */}
+                                        <label className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                            collectAnnualFee ? "border-amber-400 bg-amber-50" : "border-gray-200 bg-white hover:border-gray-300"
+                                        } ${!(feeStructure?.annualFee > 0) ? "opacity-50 pointer-events-none" : ""}`}>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <input type="checkbox"
+                                                        checked={collectAnnualFee}
+                                                        onChange={e => {
+                                                            setCollectAnnualFee(e.target.checked);
+                                                            if (e.target.checked) setAnnualFeeCollectAmt(feeStructure?.annualFee || 0);
+                                                            else setAnnualFeeCollectAmt(0);
+                                                        }}
+                                                        className="w-4 h-4 accent-amber-500"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-navy text-sm">Annual Fee (Session {admSession})</p>
+                                                        <p className="text-xs text-gray-500">Can collect full or partial amount</p>
+                                                    </div>
                                                 </div>
+                                                <span className="font-bold text-navy">₹{(feeStructure?.annualFee || 0).toLocaleString()}</span>
                                             </div>
-                                            <span className="font-bold text-gray-400">₹{(feeStructure?.annualFee || 0).toLocaleString()}</span>
-                                        </div>
+                                            {/* Amount input shown when checked */}
+                                            {collectAnnualFee && (
+                                                <div className="mt-3 flex items-center gap-2">
+                                                    <span className="text-sm text-gray-500 whitespace-nowrap">Collecting Now (₹)</span>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={feeStructure?.annualFee || 0}
+                                                        value={annualFeeCollectAmt || ""}
+                                                        onChange={e => setAnnualFeeCollectAmt(Math.min(parseFloat(e.target.value) || 0, feeStructure?.annualFee || 0))}
+                                                        onClick={e => e.preventDefault()}
+                                                        className="flex-1 border-2 border-amber-200 rounded-xl px-3 py-2 text-sm font-bold text-navy outline-none focus:border-amber-500"
+                                                        placeholder="0"
+                                                    />
+                                                    {annualFeeCollectAmt > 0 && annualFeeCollectAmt < (feeStructure?.annualFee || 0) && (
+                                                        <span className="text-xs text-amber-600 whitespace-nowrap">Balance: ₹{((feeStructure?.annualFee || 0) - annualFeeCollectAmt).toLocaleString()}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </label>
                                     </div>
 
                                     {/* Total */}
                                     <div className="bg-navy/5 rounded-xl p-4 flex justify-between items-center">
                                         <span className="font-semibold text-navy">Collecting Now</span>
                                         <span className="text-xl font-bold text-navy">
-                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0)).toLocaleString()}
+                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0) + (collectAnnualFee ? annualFeeCollectAmt : 0)).toLocaleString()}
                                         </span>
                                     </div>
 
