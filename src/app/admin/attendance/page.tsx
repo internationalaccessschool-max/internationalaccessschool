@@ -112,7 +112,7 @@ export default function AdminAttendancePage() {
                 );
                 let allProfiles: any[] = directSnap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
-                    .filter((d: any) => !d.status || d.status === "active");
+                    .filter((d: any) => (d.status || "").toUpperCase() !== "LEFT");
 
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
@@ -120,7 +120,7 @@ export default function AdminAttendancePage() {
                     );
                     allProfiles = altSnap.docs
                         .map(d => ({ id: d.id, ...d.data() }))
-                        .filter((d: any) => !d.status || d.status === "active");
+                        .filter((d: any) => (d.status || "").toUpperCase() !== "LEFT");
                 }
 
                 const seenIds = new Set<string>();
