@@ -10,7 +10,10 @@ interface FeeRecord {
     studentName: string;
     class: string;
     amount: number;
-    status: "pending" | "paid" | "overdue";
+    previousDues?: number;
+    lateFine?: number;
+    totalAmount?: number;   // amount + previousDues + lateFine
+    status: "pending" | "paid" | "overdue" | "carried_forward";
     month: number;
     year: number;
 }
@@ -56,7 +59,10 @@ export default function SupervisorFeeDashboard() {
                         );
                         const mSnaps = await Promise.all(mPromises);
                         const total = mSnaps.reduce((acc, snap) =>
-                            acc + snap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0), 0);
+                            acc + snap.docs.reduce((sum, doc) => {
+                                const d = doc.data();
+                                return sum + (d.totalAmount || d.amount || 0);
+                            }, 0), 0);
                         return { month: MONTHS[d.getMonth()], year: mYear, value: total };
                     })
                 );
@@ -70,9 +76,10 @@ export default function SupervisorFeeDashboard() {
         fetch();
     }, [filterMonth, filterYear]);
 
-    const totalCollected = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
-    const totalPending = records.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
-    const totalExpected = records.reduce((s, r) => s + r.amount, 0);
+    // Use totalAmount for all financial calculations (includes arrears + lateFine)
+    const totalCollected = records.filter(r => r.status === "paid").reduce((s, r) => s + (r.totalAmount || r.amount), 0);
+    const totalPending = records.filter(r => r.status !== "paid").reduce((s, r) => s + (r.totalAmount || r.amount), 0);
+    const totalExpected = records.reduce((s, r) => s + (r.totalAmount || r.amount), 0);
     const collectionRate = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
 
     const classMap: Record<string, { paid: number; pending: number; overdue: number; total: number; amount: number }> = {};
@@ -80,7 +87,7 @@ export default function SupervisorFeeDashboard() {
         const cls = `Class ${r.class}`;
         if (!classMap[cls]) classMap[cls] = { paid: 0, pending: 0, overdue: 0, total: 0, amount: 0 };
         classMap[cls].total++;
-        classMap[cls].amount += r.amount;
+        classMap[cls].amount += (r.totalAmount || r.amount);
         if (r.status === "paid") classMap[cls].paid++;
         else if (r.status === "overdue") classMap[cls].overdue++;
         else classMap[cls].pending++;
@@ -89,7 +96,7 @@ export default function SupervisorFeeDashboard() {
 
     const defaulters = records
         .filter(r => r.status !== "paid")
-        .sort((a, b) => b.amount - a.amount)
+        .sort((a, b) => (b.totalAmount || b.amount) - (a.totalAmount || a.amount))
         .slice(0, 10);
 
     return (
@@ -198,10 +205,17 @@ export default function SupervisorFeeDashboard() {
                                                 <p className="text-xs text-gray-400">Class {r.class}</p>
                                             </div>
                                             <div className="text-right shrink-0">
-                                                <p className="text-sm font-bold text-navy">₹{r.amount?.toLocaleString()}</p>
-                                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${r.status === "overdue" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}>
-                                                    {r.status}
-                                                </span>
+                                                <p className="text-sm font-bold text-navy">₹{(r.totalAmount || r.amount)?.toLocaleString()}</p>
+                                                <div className="flex items-center gap-1 justify-end flex-wrap mt-0.5">
+                                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${r.status === "overdue" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}>
+                                                        {r.status}
+                                                    </span>
+                                                    {(r.lateFine || 0) > 0 && (
+                                                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                                                            +₹{r.lateFine} fine
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
