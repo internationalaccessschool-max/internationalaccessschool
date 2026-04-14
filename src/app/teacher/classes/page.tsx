@@ -100,15 +100,16 @@ export default function TeacherClassesPage() {
 
                 if (assignedClasses.length === 0) {
                     // No class assigned — show all students as fallback
+                    const isNotLeft = (d: any) => (d.status || "").toUpperCase() !== "LEFT";
                     let allStudents: Student[] = [];
                     try {
                         const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-                        allStudents = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                        allStudents = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student)).filter(isNotLeft);
                     } catch { /* ignore */ }
                     if (allStudents.length === 0) {
                         try {
                             const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                            allStudents = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                            allStudents = profilesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student)).filter(isNotLeft);
                         } catch { /* ignore */ }
                     }
                     setStudents(allStudents);
@@ -119,17 +120,18 @@ export default function TeacherClassesPage() {
                         const normCls = cls.replace(/^class\s*/i, "").trim();
                         const sections = classSections[cls];
 
+                        const isNotLeft = (s: any) => (s.status || "").toUpperCase() !== "LEFT";
                         if (sections && sections.length > 0) {
                             for (const sec of sections) {
                                 // Try both "Class 12" and "12" formats
                                 fetchTasks.push(
                                     getDocs(collection(db, "users", "classes", cls, "sections", sec, "students", "profiles"))
-                                        .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)))
+                                        .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)).filter(isNotLeft))
                                         .then(async students => {
                                             if (students.length === 0) {
                                                 // Try normalised name (e.g. "12" → check path with normCls)
                                                 const altSnap = await getDocs(collection(db, "users", "classes", normCls, "sections", sec, "students", "profiles"));
-                                                return altSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+                                                return altSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student)).filter(isNotLeft);
                                             }
                                             return students;
                                         })
@@ -162,6 +164,7 @@ export default function TeacherClassesPage() {
                         const usersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
                         const allUsers: Student[] = usersSnap.docs.map((d): any => ({ id: d.id, ...d.data() }));
                         finalList = allUsers.filter((s: any) => {
+                            if ((s.status || "").toUpperCase() === "LEFT") return false;
                             const sCls = (s.className || "").replace(/^class\s*/i, "").trim();
                             const sSec = (s.section || "").trim().toUpperCase();
                             const matchClsRaw = assignedClasses.find(c => c.replace(/^class\s*/i, "").trim() === sCls);
