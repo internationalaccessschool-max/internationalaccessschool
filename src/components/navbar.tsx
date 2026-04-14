@@ -71,12 +71,12 @@ export function Navbar() {
     useEffect(() => { setMobileOpen(false); }, [pathname]);
 
     const headerBg = scrolled || !isHome
-        ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100"
-        : "bg-transparent";
+        ? "bg-white/80 backdrop-blur-xl shadow-sm border-b border-white/50"
+        : "bg-gradient-to-b from-black/60 to-transparent";
 
     const textColor = scrolled || !isHome || mobileOpen
-        ? "text-navy"
-        : "text-white";
+        ? "text-navy font-semibold"
+        : "text-white font-medium";
 
     const logoColor = scrolled || !isHome || mobileOpen
         ? "text-navy"
@@ -96,41 +96,45 @@ export function Navbar() {
     return (
         <>
             <header
-                className={`fixed top-0 left-0 right-0 z-navbar transition-all duration-300 flex flex-col ${headerBg}`}
+                className={`fixed top-0 left-0 right-0 z-navbar transition-all duration-500 flex flex-col ${headerBg}`}
             >
                 <NewsTicker />
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-                    <div className="flex items-center justify-between h-[72px]">
+                    <div className="flex items-center justify-between h-[80px]">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-3 group">
-                            <div className="relative w-12 h-12 rounded-xl overflow-hidden">
-                                <Image
-                                    src="/LOGO.png"
-                                    alt="IAS Logo"
-                                    fill
-                                    className="object-contain"
-                                />
+                            <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white shadow-md flex items-center justify-center p-1 group-hover:scale-105 transition-transform duration-300">
+                                <div className="relative w-full h-full">
+                                    <Image
+                                        src="/LOGO.png"
+                                        alt="IAS Logo"
+                                        fill
+                                        className="object-contain"
+                                    />
+                                </div>
                             </div>
                             <div className="flex flex-col">
-                                <span className={`font-bold text-lg leading-tight tracking-tight transition-colors ${logoColor}`}>
+                                <span className={`font-black text-xl leading-tight tracking-tight transition-colors duration-500 ${logoColor}`}>
                                     International Access
                                 </span>
-                                <span className={`text-[11px] uppercase tracking-[0.2em] font-medium transition-colors ${scrolled || !isHome ? "text-gold" : "text-gold-light"}`}>
+                                <span className={`text-[10px] uppercase tracking-[0.25em] font-bold transition-colors duration-500 ${scrolled || !isHome ? "text-gold" : "text-gold-light"}`}>
                                     School
                                 </span>
                             </div>
                         </Link>
 
                         {/* Desktop Navigation */}
-                        <nav className="hidden md:flex items-center gap-1">
+                        <nav className="hidden md:flex items-center gap-2">
                             {/* Home */}
-                            <Link href="/" className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${pathname === '/' ? (scrolled || !isHome ? "text-navy bg-navy/5" : "text-white bg-white/15") : `${textColor} hover:${scrolled || !isHome ? "bg-gray-50" : "bg-white/10"}`}`}>
-                                Home
+                            <Link href="/" className={`relative px-3 py-2 text-sm transition-all duration-300 group ${textColor}`}>
+                                <span>Home</span>
+                                <span className={`absolute bottom-0 left-1/2 w-0 h-0.5 bg-gold transition-all duration-300 group-hover:w-full group-hover:left-0 ${pathname === '/' ? 'w-full left-0' : ''}`}></span>
                             </Link>
 
                             {/* About */}
-                            <Link href="/about" className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${pathname === '/about' ? (scrolled || !isHome ? "text-navy bg-navy/5" : "text-white bg-white/15") : `${textColor} hover:${scrolled || !isHome ? "bg-gray-50" : "bg-white/10"}`}`}>
-                                About
+                            <Link href="/about" className={`relative px-3 py-2 text-sm transition-all duration-300 group ${textColor}`}>
+                                <span>About</span>
+                                <span className={`absolute bottom-0 left-1/2 w-0 h-0.5 bg-gold transition-all duration-300 group-hover:w-full group-hover:left-0 ${pathname === '/about' ? 'w-full left-0' : ''}`}></span>
                             </Link>
 
                             {/* Academics Dropdown */}
@@ -141,49 +145,40 @@ export function Navbar() {
                             >
                                 <Link
                                     href="/academics"
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1
-                                        ${pathname === '/academics'
-                                            ? (scrolled || !isHome ? "text-navy bg-navy/5" : "text-white bg-white/15")
-                                            : `${textColor} hover:${scrolled || !isHome ? "bg-gray-50" : "bg-white/10"}`
-                                        }`}
+                                    className={`relative px-3 py-2 text-sm transition-all duration-300 group flex items-center gap-1 ${textColor}`}
                                 >
-                                    Academics <ChevronDown className="w-4 h-4" />
+                                    <span>Academics</span> <ChevronDown className="w-4 h-4 opacity-70 group-hover:rotate-180 transition-transform duration-300" />
+                                    <span className={`absolute bottom-0 left-1/2 w-0 h-0.5 bg-gold transition-all duration-300 group-hover:w-full group-hover:left-0 ${pathname === '/academics' ? 'w-full left-0' : ''}`}></span>
                                 </Link>
 
                                 {/* Dropdown Menu */}
-                                <div className={`absolute left-0 mt-0 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden text-navy py-2 transition-all duration-200 origin-top-left ${academicsOpen ? "opacity-100 scale-100 visible" : "opacity-0 scale-95 invisible"}`}>
+                                <div className={`absolute left-0 mt-2 w-64 bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_40px_-15px_rgba(15,27,61,0.1)] border border-gray-100 overflow-hidden text-navy py-3 transition-all duration-300 origin-top-left ${academicsOpen ? "opacity-100 scale-100 visible translate-y-0" : "opacity-0 scale-95 invisible -translate-y-2"}`}>
                                     {academicLinks.map((link) => (
                                         <Link
                                             key={link.slug}
                                             href={`/academics#${link.slug}`}
-                                            className="block px-4 py-2 text-sm hover:bg-gray-50 hover:text-gold transition-colors"
+                                            className="block px-5 py-2.5 text-sm hover:bg-gold/10 hover:text-gold hover:pl-7 transition-all font-medium"
                                         >
                                             {link.label}
                                         </Link>
                                     ))}
                                     {academicLinks.length === 0 && (
-                                        <span className="block px-4 py-2 text-xs text-gray-400">Loading...</span>
+                                        <span className="block px-5 py-2.5 text-xs text-gray-400">Loading...</span>
                                     )}
                                 </div>
                             </div>
 
                             {/* Remaining Links */}
-                            {navLinks.slice(2).map((link) => { // Skip Home, About, Academics (handled manually)
+                            {navLinks.slice(2).map((link) => { // Skip Home, About, Academics
                                 const isActive = pathname === link.href;
                                 return (
                                     <Link
                                         key={link.href}
                                         href={link.href}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                                            ${isActive
-                                                ? scrolled || !isHome
-                                                    ? "text-navy bg-navy/5"
-                                                    : "text-white bg-white/15"
-                                                : `${textColor} hover:${scrolled || !isHome ? "bg-gray-50" : "bg-white/10"}`
-                                            }
-                                        `}
+                                        className={`relative px-3 py-2 text-sm transition-all duration-300 group ${textColor}`}
                                     >
-                                        {link.label}
+                                        <span>{link.label}</span>
+                                        <span className={`absolute bottom-0 left-1/2 w-0 h-0.5 bg-gold transition-all duration-300 group-hover:w-full group-hover:left-0 ${isActive ? 'w-full left-0' : ''}`}></span>
                                     </Link>
                                 );
                             })}
@@ -193,10 +188,10 @@ export function Navbar() {
                         <div className="flex items-center gap-3">
                             <Link
                                 href="/login"
-                                className={`hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200
+                                className={`hidden md:inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 transform hover:scale-105
                                     ${scrolled || !isHome
-                                        ? "bg-navy text-white hover:bg-navy-light shadow-md hover:shadow-lg"
-                                        : "bg-white text-navy hover:bg-white/90 shadow-md hover:shadow-lg"
+                                        ? "bg-navy text-white hover:bg-gold hover:text-navy shadow-[0_4px_14px_rgba(15,27,61,0.3)]"
+                                        : "bg-white text-navy hover:bg-gold hover:text-navy shadow-[0_4px_14px_rgba(255,255,255,0.3)]"
                                     }
                                 `}
                             >
