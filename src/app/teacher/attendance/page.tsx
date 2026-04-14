@@ -6,9 +6,9 @@ import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, X, Clock, Loader2, AlertCircle } from "lucide-react";
+import { Check, X, Clock, Loader2, AlertCircle, CalendarX } from "lucide-react";
 
-type AttendanceStatus = "present" | "absent" | "late";
+type AttendanceStatus = "present" | "absent" | "late" | "holiday";
 
 interface Student {
     id: string;
@@ -53,6 +53,7 @@ export default function TeacherAttendancePage() {
         return d.toISOString().split("T")[0]; // "2026-04-03"
     });
     const [existingDoc, setExistingDoc] = useState(false);
+    const [isHoliday, setIsHoliday] = useState(false);
 
     // Step 1: Find the teacher's assigned class from teacher doc
     useEffect(() => {
@@ -190,14 +191,21 @@ export default function TeacherAttendancePage() {
                 const snap = await getDoc(ref);
                 if (snap.exists()) {
                     const data = snap.data();
-                    const records = data.records || {};
                     setExistingDoc(true);
-                    setStudents(prev => prev.map(s => ({
-                        ...s,
-                        status: (records[s.id] as AttendanceStatus) || "present",
-                    })));
+                    if (data.isHoliday) {
+                        setIsHoliday(true);
+                        setStudents(prev => prev.map(s => ({ ...s, status: "holiday" as AttendanceStatus })));
+                    } else {
+                        setIsHoliday(false);
+                        const records = data.records || {};
+                        setStudents(prev => prev.map(s => ({
+                            ...s,
+                            status: (records[s.id] as AttendanceStatus) || "present",
+                        })));
+                    }
                 } else {
                     setExistingDoc(false);
+                    setIsHoliday(false);
                     setStudents(prev => prev.map(s => ({ ...s, status: "present" as AttendanceStatus })));
                 }
             } catch (err) {
@@ -214,7 +222,13 @@ export default function TeacherAttendancePage() {
     };
 
     const markAll = (status: AttendanceStatus) => {
-        setStudents(prev => prev.map(s => ({ ...s, status })));
+        if (status === "holiday") {
+            setIsHoliday(true);
+            setStudents(prev => prev.map(s => ({ ...s, status: "holiday" as AttendanceStatus })));
+        } else {
+            setIsHoliday(false);
+            setStudents(prev => prev.map(s => ({ ...s, status })));
+        }
         setSaved(false);
     };
 
@@ -239,7 +253,8 @@ export default function TeacherAttendancePage() {
                 date: selectedDate,
                 year,
                 month,
-                records,
+                isHoliday: isHoliday,
+                records: isHoliday ? {} : records,
                 markedBy: currentUser?.uid || "unknown",
                 markedByName: currentUser?.displayName || "Teacher",
                 createdAt: serverTimestamp(),
@@ -386,7 +401,7 @@ export default function TeacherAttendancePage() {
             )}
 
             {/* Quick actions */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
                 <button
                     disabled={isPastDate}
                     onClick={() => markAll("present")}
@@ -405,7 +420,29 @@ export default function TeacherAttendancePage() {
                         }`}>
                     Mark All Absent
                 </button>
+                <button
+                    disabled={isPastDate}
+                    onClick={() => markAll("holiday")}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${isPastDate
+                        ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                        : isHoliday
+                            ? "bg-purple-500 text-white"
+                            : "bg-purple-50 text-purple-600 hover:bg-purple-100"
+                        }`}>
+                    <span className="flex items-center gap-1">
+                        <CalendarX className="w-3 h-3" />
+                        Mark Holiday
+                    </span>
+                </button>
             </div>
+
+            {/* Holiday banner */}
+            {isHoliday && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-800 text-sm font-medium">
+                    <CalendarX className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span>This day is marked as a <strong>Holiday</strong>. It will not be counted as a working day in attendance reports.</span>
+                </div>
+            )}
 
             {/* Student List */}
             {students.length === 0 ? (
@@ -429,44 +466,53 @@ export default function TeacherAttendancePage() {
                                     </div>
 
                                     <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                                        {/* Present */}
-                                        <button
-                                            disabled={isPastDate}
-                                            onClick={() => setStatus(student.id, "present")}
-                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                ? student.status === "present" ? "bg-emerald-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                : student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
-                                                }`}
-                                        >
-                                            <Check className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Present</span>
-                                        </button>
+                                        {isHoliday ? (
+                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-100 text-purple-700">
+                                                <CalendarX className="w-3.5 h-3.5" />
+                                                Holiday
+                                            </span>
+                                        ) : (
+                                            <>
+                                                {/* Present */}
+                                                <button
+                                                    disabled={isPastDate}
+                                                    onClick={() => setStatus(student.id, "present")}
+                                                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                        ? student.status === "present" ? "bg-emerald-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                        : student.status === "present" ? "bg-emerald-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
+                                                        }`}
+                                                >
+                                                    <Check className="w-3.5 h-3.5" />
+                                                    <span className="hidden sm:inline">Present</span>
+                                                </button>
 
-                                        {/* Late */}
-                                        <button
-                                            disabled={isPastDate}
-                                            onClick={() => setStatus(student.id, "late")}
-                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                ? student.status === "late" ? "bg-amber-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                : student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
-                                                }`}
-                                        >
-                                            <Clock className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Late</span>
-                                        </button>
+                                                {/* Late */}
+                                                <button
+                                                    disabled={isPastDate}
+                                                    onClick={() => setStatus(student.id, "late")}
+                                                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                        ? student.status === "late" ? "bg-amber-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                        : student.status === "late" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                                                        }`}
+                                                >
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    <span className="hidden sm:inline">Late</span>
+                                                </button>
 
-                                        {/* Absent */}
-                                        <button
-                                            disabled={isPastDate}
-                                            onClick={() => setStatus(student.id, "absent")}
-                                            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
-                                                ? student.status === "absent" ? "bg-red-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
-                                                : student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                                }`}
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Absent</span>
-                                        </button>
+                                                {/* Absent */}
+                                                <button
+                                                    disabled={isPastDate}
+                                                    onClick={() => setStatus(student.id, "absent")}
+                                                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all ${isPastDate
+                                                        ? student.status === "absent" ? "bg-red-500 text-white opacity-60" : "bg-gray-100 text-gray-300"
+                                                        : student.status === "absent" ? "bg-red-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                        }`}
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                    <span className="hidden sm:inline">Absent</span>
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             ))}
