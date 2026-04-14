@@ -20,6 +20,8 @@ interface FeeRecord {
     studentId?: string;
     admissionNumber?: string;
     rollNo?: string;
+    lateFine?: number;          // ₹100 fine applied after 15th if unpaid
+    totalAmount?: number;       // amount + previousDues + lateFine
     // Extra fields for receipt
     studentName?: string;
     class?: string;
@@ -130,12 +132,19 @@ export default function StudentFeesPage() {
 
 
     const totalPaid = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
-    const totalDue = records.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
+    // Use totalAmount (includes arrears + lateFine) for the due sum
+    const totalDue = records
+        .filter(r => r.status !== "paid")
+        .reduce((s, r) => s + (r.totalAmount || r.amount), 0);
 
     // Build breakdown items for receipt
     const getBreakdownItems = (record: FeeRecord) => {
-        if (!record.breakdown) return [{ label: "School Fee", amount: record.amount }];
-        const items = [
+        if (!record.breakdown) {
+            const fallback: { label: string; amount: number }[] = [{ label: "School Fee", amount: record.amount }];
+            if ((record.lateFine || 0) > 0) fallback.push({ label: "Late Payment Fine", amount: record.lateFine! });
+            return fallback;
+        }
+        const items: { label: string; amount: number }[] = [
             { label: "Tuition Fee", amount: record.breakdown.tuitionFee || 0 },
             { label: "Annual Fee", amount: record.breakdown.annualFee || 0 },
             { label: "Admission Fee", amount: record.breakdown.admissionFee || 0 },
@@ -144,6 +153,9 @@ export default function StudentFeesPage() {
             { label: "Sports Fee", amount: record.breakdown.sportsFee || 0 },
             { label: "Miscellaneous Fee", amount: record.breakdown.miscFee || 0 },
         ].filter(i => i.amount > 0);
+        if ((record.lateFine || 0) > 0) {
+            items.push({ label: "Late Payment Fine", amount: record.lateFine! });
+        }
         return items.length > 0 ? items : [{ label: "School Fee", amount: record.amount }];
     };
 
@@ -214,13 +226,18 @@ export default function StudentFeesPage() {
                                             <p className="text-xs text-gray-400 mt-0.5">
                                                 Due: {record.dueDate?.toDate ? record.dueDate.toDate().toLocaleDateString("en-IN") : "—"}
                                             </p>
+                                            {(record.lateFine || 0) > 0 && record.status !== "paid" && (
+                                                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 mt-1">
+                                                    ⚠️ Late Fine: ₹{record.lateFine}
+                                                </span>
+                                            )}
                                             {record.receiptNo && (
                                                 <p className="text-xs font-mono text-gray-400 mt-0.5">Receipt: {record.receiptNo}</p>
                                             )}
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className="text-lg font-bold text-navy">₹{record.amount?.toLocaleString()}</p>
+                                        <p className="text-lg font-bold text-navy">₹{(record.totalAmount || record.amount)?.toLocaleString()}</p>
                                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                                             <StatusIcon className="w-3 h-3" />
                                             {cfg.label}
