@@ -794,7 +794,7 @@ export default function AdminAdmissionsPage() {
                                     <div className="bg-navy/5 rounded-xl p-4 flex justify-between items-center">
                                         <span className="font-semibold text-navy">Collecting Now</span>
                                         <span className="text-xl font-bold text-navy">
-                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.monthly || feeStructure?.tuitionFee || 0) : 0)).toLocaleString()}
+                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0)).toLocaleString()}
                                         </span>
                                     </div>
 
