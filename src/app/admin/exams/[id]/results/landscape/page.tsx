@@ -68,8 +68,9 @@ const MAX_PER_SUBJECT: Record<ReportType, number> = {
 };
 
 // ─── Attendance counter ───────────────────────────────────────────────────────
+// isHoliday: true wale din ko working day mein count NAHI karte
 function countAtt(
-  records: { date: string; status: string }[],
+  records: { date: string; status: string; isHoliday?: boolean }[],
   from: string, to: string,
   fromExclusive = false
 ): { wd: number; p: number } {
@@ -80,7 +81,11 @@ function countAtt(
   for (const r of records) {
     const d = new Date(r.date).getTime();
     const startOk = fromExclusive ? d > f : d >= f;
-    if (startOk && d <= t) { wd++; if (r.status === "present" || r.status === "late") p++; }
+    if (startOk && d <= t) {
+      if (r.isHoliday) continue; // ← Holiday: skip entirely
+      wd++;
+      if (r.status === "present" || r.status === "late") p++;
+    }
   }
   return { wd, p };
 }
@@ -340,7 +345,8 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
       // Try both "Class N" and bare class name variants
       const clsVariants = [selectedClass, normCls, `Class ${normCls}`];
 
-      const attPerStudent: Record<string, { date: string; status: string }[]> = {};
+      const attPerStudent: Record<string, { date: string; status: string; isHoliday?: boolean }[]> = {};
+      const holidayDates = new Set<string>(); // ← holiday dates collected here
 
       for (const clsVar of clsVariants) {
         let found = false;
@@ -357,6 +363,13 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
               if (sec && sec !== selectedSection) return;
               const dateStr = data.date || d.id.split("_")[0] || "";
               if (!dateStr) return;
+
+              // ── Holiday: collect date, skip individual records ──
+              if (data.isHoliday) {
+                holidayDates.add(dateStr);
+                return;
+              }
+
               Object.entries(data.records || {}).forEach(([uid, st]: [string, any]) => {
                 if (!attPerStudent[uid]) attPerStudent[uid] = [];
                 attPerStudent[uid].push({ date: dateStr, status: st });
@@ -365,6 +378,17 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
           } catch { /* month not found */ }
         }
         if (found) break; // stop trying class name variants once data found
+      }
+
+      // Inject holiday entries into every student's records so countAtt skips them
+      if (holidayDates.size > 0) {
+        const allStudentIds = profiles.map((p: any) => p.id);
+        for (const uid of allStudentIds) {
+          if (!attPerStudent[uid]) attPerStudent[uid] = [];
+          for (const hDate of holidayDates) {
+            attPerStudent[uid].push({ date: hDate, status: "holiday", isHoliday: true });
+          }
+        }
       }
 
       // 6. Build results
