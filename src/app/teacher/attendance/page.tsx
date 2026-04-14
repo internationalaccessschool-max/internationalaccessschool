@@ -139,7 +139,7 @@ export default function TeacherAttendancePage() {
 
                 let allProfiles: any[] = directSnap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
-                    .filter((d: any) => !d.status || d.status === "active");
+                    .filter((d: any) => (d.status || "").toUpperCase() !== "LEFT");
 
                 if (allProfiles.length === 0) {
                     const altSnap = await getDocs(
@@ -147,7 +147,7 @@ export default function TeacherAttendancePage() {
                     );
                     allProfiles = altSnap.docs
                         .map(d => ({ id: d.id, ...d.data() }))
-                        .filter((d: any) => !d.status || d.status === "active");
+                        .filter((d: any) => (d.status || "").toUpperCase() !== "LEFT");
                 }
 
                 if (allProfiles.length === 0) {
@@ -158,7 +158,7 @@ export default function TeacherAttendancePage() {
                             const cls = d.className || d.currentClass || "";
                             return (cls === assignedClass || cls === normClass)
                                 && d.section === assignedSection
-                                && (!d.status || d.status === "active");
+                                && (d.status || "").toUpperCase() !== "LEFT";
                         });
                 }
 
