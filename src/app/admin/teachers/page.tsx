@@ -662,7 +662,7 @@ export default function AdminTeachersPage() {
             {/* ── Edit Teacher Modal ── */}
             {
                 editingTeacher && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setEditingTeacher(null)}>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                             {/* Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
