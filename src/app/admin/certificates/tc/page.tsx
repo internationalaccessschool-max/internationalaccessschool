@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collectionGroup, getDocs } from "firebase/firestore";
+import { collectionGroup, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
@@ -274,6 +274,22 @@ export default function TransferCertificatePage() {
       const lastCls = safeStr(s.lastClass || s.currentClass);
       const lastNum = parseInt(lastCls) || 0;
 
+      // Fetch subjects from classSubjects collection for this student's class
+      const classKey = safeStr(s.lastClass || s.currentClass || s.className);
+      let subjectsStr = "English, Hindi, Mathematics, Urdu, Science, Social Science, GK & Computer";
+      try {
+        if (classKey) {
+          const subSnap = await getDoc(doc(db, "classSubjects", classKey));
+          if (subSnap.exists()) {
+            const raw = subSnap.data().subjects || [];
+            const names: string[] = raw.map((item: any) =>
+              typeof item === "string" ? item : (item.name || item.id || "")
+            ).filter(Boolean);
+            if (names.length > 0) subjectsStr = names.join(", ");
+          }
+        }
+      } catch { /* fallback to default */ }
+
       setTcData({
         bookNo: "06",
         slNo: safeStr(s.serialNumber),
@@ -292,7 +308,7 @@ export default function TransferCertificatePage() {
         lastClassWords: lastNum ? `(in words) ${numToWords(lastNum)}` : "",
         board: safeStr(s.previousBoard) || "AISSE - 2024 (QUALIFIED)",
         failed: "NO",
-        subjects: "English, Hindi, Mathematics, Urdu, Science, Social Science, GK & Computer",
+        subjects: subjectsStr,
         qualified: "YES",
         ifSoClass: lastCls ? `STD - ${lastCls}` : "",
         qualifiedClass: lastNum ? `(in words) ${numToWords(lastNum)}` : "",
