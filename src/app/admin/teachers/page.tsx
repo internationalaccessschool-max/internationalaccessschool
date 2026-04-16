@@ -22,14 +22,13 @@ import { FileViewerTrigger } from "@/components/ui/file-viewer";
 import { authFetch } from "@/lib/auth-fetch";
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const CLASSES = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
-    "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"];
+const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
 const SUBJECTS = ["Mathematics", "Physics", "Chemistry", "Biology", "English",
     "Hindi", "History", "Geography", "Civics", "Computer Science",
     "Economics", "Accountancy", "Business Studies", "Physical Education", "Art", "Other"];
 const STREAMS = ["General", "Science", "Commerce", "Arts", "Vocational"];
-const SENIOR_CLASSES = ["Class 11", "Class 12"];
+const SENIOR_CLASSES = ["11", "12"];
 
 const teacherSchema = z.object({
     firstName: z.string().min(2, "First name required"),
@@ -41,7 +40,7 @@ const teacherSchema = z.object({
 });
 type TeacherForm = z.infer<typeof teacherSchema>;
 
-interface ClassSectionMap { [cls: string]: string[] } // e.g. { "Class 6": ["A","B"] }
+interface ClassSectionMap { [cls: string]: string[] } // e.g. { "6": ["A","B"] }
 interface Assignment {
     classSections: ClassSectionMap;
     subjects: string[];
