@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { sendEmail } from '@/lib/mailer';
 import { buildReceiptHTML, ReceiptData } from '@/lib/print-receipt';
 import { adminDb } from '@/lib/firebase-admin';
+import { verifyAuth } from '@/lib/auth-guard';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+    const authResult = await verifyAuth(req, ["admin", "accountant"]);
+    if (authResult instanceof NextResponse) return authResult;
+
     try {
         const body = await req.json();
         const { to, studentId, receiptData } = body as { to?: string, studentId?: string, receiptData: ReceiptData };
