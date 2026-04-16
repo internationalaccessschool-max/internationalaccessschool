@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-const CLASS_LIST = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+const CLASS_LIST = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
 
 interface ClassSection {
@@ -67,7 +67,7 @@ export default function AdminClassesPage() {
                     await Promise.all(SECTIONS.map(async section => {
                         try {
                             const snap = await getDocs(
-                                collection(db, "users", "classes", cls, "sections", section, "students")
+                                collection(db, "users", "classes", cls, "sections", section, "students", "profiles")
                             );
                             if (snap.size > 0) countMap[`${cls}-${section}`] = snap.size;
                         } catch { /* section may not exist */ }
