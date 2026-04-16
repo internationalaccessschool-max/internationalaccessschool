@@ -82,7 +82,7 @@ interface Student {
 
 interface TCData {
   bookNo: string; slNo: string; udise: string;
-  studentName: string; motherName: string; fatherName: string;
+  studentName: string; pen: string; motherName: string; fatherName: string;
   dobFigures: string; dobWords: string; proofDob: string;
   nationality: string; category: string;
   classAtAdmission: string; admissionDate: string;
@@ -98,7 +98,7 @@ interface TCData {
 
 const defaultTC = (): TCData => ({
   bookNo: "06", slNo: "", udise: "",
-  studentName: "", motherName: "", fatherName: "",
+  studentName: "", pen: "", motherName: "", fatherName: "",
   dobFigures: "", dobWords: "", proofDob: "AADHAAR",
   nationality: "INDIAN", category: "NO",
   classAtAdmission: "", admissionDate: "",
@@ -117,6 +117,7 @@ const defaultTC = (): TCData => ({
 function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string): string {
   const rows: [string, string, string, string][] = [
     ["1.", "Name of the Student", tc.studentName, ""],
+    ["1a.", "Permanent Education Number (PEN)", tc.pen || "—", ""],
     ["2.", "Mother's Name :-", tc.motherName, ""],
     ["3.", "Father's / Guardian's Name :-", tc.fatherName, ""],
     ["4.", "Date of Birth (in Christian era) according to Admission & Withdrawal Register. (In figures)", tc.dobFigures, `(in words) ${tc.dobWords}`],
@@ -295,6 +296,7 @@ export default function TransferCertificatePage() {
         slNo: safeStr(s.serialNumber),
         udise: safeStr(s.udise),
         studentName: `${safeStr(s.firstName)} ${safeStr(s.lastName)}`.trim().toUpperCase(),
+        pen: safeStr(s.pen),
         motherName: safeStr(s.motherName).toUpperCase(),
         fatherName: safeStr(s.fatherName || s.guardianName).toUpperCase(),
         dobFigures: formatDate(safeStr(s.dob)),
@@ -431,6 +433,7 @@ export default function TransferCertificatePage() {
             </div>
             {field("udise", "UDISE No.")}
             {field("studentName", "Student Name")}
+            {field("pen", "PEN (Permanent Education Number)")}
             {field("motherName", "Mother's Name")}
             {field("fatherName", "Father's / Guardian's Name")}
             <div className="grid grid-cols-2 gap-2">
@@ -526,6 +529,7 @@ export default function TransferCertificatePage() {
                 <tbody>
                   {[
                     ["1.", "Name of the Student", tcData.studentName, ""],
+                    ["1a.", "Permanent Education Number (PEN)", tcData.pen || "—", ""],
                     ["2.", "Mother's Name :-", tcData.motherName, ""],
                     ["3.", "Father's / Guardian's Name :-", tcData.fatherName, ""],
                     ["4.", "Date of Birth (In figures)", tcData.dobFigures, `(in words) ${tcData.dobWords}`],
