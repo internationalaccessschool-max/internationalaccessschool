@@ -180,8 +180,8 @@ export default function AssignTeachersPage() {
             ) : (
                 <div className="space-y-4">
                     {Object.entries(grouped).sort(([a], [b]) => {
-                        const na = parseInt(a.replace("Class ", ""));
-                        const nb = parseInt(b.replace("Class ", ""));
+                        const na = parseInt(a);
+                        const nb = parseInt(b);
                         return na - nb;
                     }).map(([classLabel, list]) => (
                         <div key={classLabel} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
