@@ -46,7 +46,7 @@ export async function GET(req: Request) {
         const classesSnap = await adminDb
             .collection("fees").doc("structure").collection("classes")
             .get();
-        const classIds = classesSnap.docs.map(d => d.id);
+        const classIds = classesSnap.docs.map((d: any) => d.id);
 
         let totalProcessed = 0;
         let totalSkipped   = 0;
