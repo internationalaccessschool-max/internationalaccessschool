@@ -69,6 +69,16 @@ interface AttendanceDoc {
     isHoliday?: boolean;
 }
 
+interface ClassDaySummary {
+    cls: string;
+    section: string;
+    total: number;
+    present: number;
+    late: number;
+    absent: number;
+    holiday: boolean;
+}
+
 interface StudentInfo {
     id: string;
     name: string;
@@ -101,9 +111,11 @@ export default function AdminAttendancePage() {
     const [markedBy, setMarkedBy] = useState<string | null>(null);
     const [existingDocId, setExistingDocId] = useState<string | null>(null);
     const [isHoliday, setIsHoliday] = useState(false);
+    const [schoolOverview, setSchoolOverview] = useState<ClassDaySummary[]>([]);
 
     // Fetch students for selected class-section
     useEffect(() => {
+        if (selectedClass === "ALL") { setStudents([]); return; }
         const fetchStudents = async () => {
             try {
                 const classNum = selectedClass.replace(/^class\s*/i, "").trim();
@@ -154,6 +166,50 @@ export default function AdminAttendancePage() {
             setExistingDocId(null);
             setMarkedBy(null);
             setIsHoliday(false);
+            setSchoolOverview([]);
+
+            // ── School-wide overview (ALL classes) ────────────────────────────
+            if (selectedClass === "ALL") {
+                const year = selectedDate.slice(0, 4);
+                const month = selectedDate.slice(0, 7);
+                const overviews: ClassDaySummary[] = [];
+                const classOrder: Record<string, number> = { NUR: 0, LKG: 1, UKG: 2 };
+
+                try {
+                    // 15 parallel reads — one getDocs per class for the month
+                    await Promise.all(CLASSES.map(async (cls) => {
+                        try {
+                            const snap = await getDocs(collection(db, "attendance", year, cls, "months", month));
+                            snap.docs
+                                .filter(d => (d.data().date || d.id.split("_")[0]) === selectedDate)
+                                .forEach(d => {
+                                    const data = d.data();
+                                    const section = data.section || d.id.split("_")[1] || "?";
+                                    const records = data.records || {};
+                                    const isHol = !!data.isHoliday;
+                                    const vals = Object.values(records) as string[];
+                                    overviews.push({
+                                        cls, section,
+                                        total: isHol ? 0 : vals.length,
+                                        present: isHol ? 0 : vals.filter(v => v === "present").length,
+                                        late: isHol ? 0 : vals.filter(v => v === "late").length,
+                                        absent: isHol ? 0 : vals.filter(v => v === "absent").length,
+                                        holiday: isHol,
+                                    });
+                                });
+                        } catch { /* class may have no attendance yet */ }
+                    }));
+                } catch { /* ignore */ }
+
+                overviews.sort((a, b) => {
+                    const na = classOrder[a.cls] ?? (parseInt(a.cls) || 99);
+                    const nb = classOrder[b.cls] ?? (parseInt(b.cls) || 99);
+                    return na !== nb ? na - nb : a.section.localeCompare(b.section);
+                });
+                setSchoolOverview(overviews);
+                setLoading(false);
+                return;
+            }
 
             try {
                 if (viewMode === "date") {
@@ -384,29 +440,32 @@ export default function AdminAttendancePage() {
                             onChange={e => setSelectedClass(e.target.value)}
                             className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[130px]"
                         >
+                            <option value="ALL">All Classes</option>
                             {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
                 </div>
 
-                {/* Section */}
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Section</label>
-                    <div className="relative">
-                        <select
-                            value={selectedSection}
-                            onChange={e => setSelectedSection(e.target.value)}
-                            className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[100px]"
-                        >
-                            {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                {/* Section — hidden when ALL selected */}
+                {selectedClass !== "ALL" && (
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Section</label>
+                        <div className="relative">
+                            <select
+                                value={selectedSection}
+                                onChange={e => setSelectedSection(e.target.value)}
+                                className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[100px]"
+                            >
+                                {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {/* Date — only in Day View */}
-                {viewMode === "date" && (
+                {/* Date — in Day View or ALL */}
+                {(viewMode === "date" || selectedClass === "ALL") && (
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1">Date</label>
                         <input
@@ -418,8 +477,8 @@ export default function AdminAttendancePage() {
                     </div>
                 )}
 
-                {/* Year + Month filter — only in Summary View */}
-                {viewMode === "summary" && (
+                {/* Year + Month filter — only in Summary View (not ALL) */}
+                {viewMode === "summary" && selectedClass !== "ALL" && (
                     <>
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 mb-1">Year</label>
@@ -453,27 +512,106 @@ export default function AdminAttendancePage() {
                     </>
                 )}
 
-                {/* View Toggle */}
-                <div className="flex rounded-xl border border-gray-200 overflow-hidden ml-auto">
-                    <button
-                        onClick={() => setViewMode("date")}
-                        className={`px-4 py-2 text-xs font-semibold transition-colors ${viewMode === "date" ? "bg-navy text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
-                    >
-                        Day View
-                    </button>
-                    <button
-                        onClick={() => setViewMode("summary")}
-                        className={`px-4 py-2 text-xs font-semibold transition-colors ${viewMode === "summary" ? "bg-navy text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
-                    >
-                        Summary
-                    </button>
-                </div>
+                {/* View Toggle — hidden when ALL selected */}
+                {selectedClass !== "ALL" && (
+                    <div className="flex rounded-xl border border-gray-200 overflow-hidden ml-auto">
+                        <button
+                            onClick={() => setViewMode("date")}
+                            className={`px-4 py-2 text-xs font-semibold transition-colors ${viewMode === "date" ? "bg-navy text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                        >
+                            Day View
+                        </button>
+                        <button
+                            onClick={() => setViewMode("summary")}
+                            className={`px-4 py-2 text-xs font-semibold transition-colors ${viewMode === "summary" ? "bg-navy text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                        >
+                            Summary
+                        </button>
+                    </div>
+                )}
             </div>
 
             {loading ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-navy" />
                 </div>
+            ) : selectedClass === "ALL" ? (
+                /* ── School-wide Overview ── */
+                <>
+                    {/* Aggregate stats */}
+                    {(() => {
+                        const schoolTotal = schoolOverview.reduce((s, r) => s + r.total, 0);
+                        const schoolPresent = schoolOverview.reduce((s, r) => s + r.present, 0);
+                        const schoolLate = schoolOverview.reduce((s, r) => s + r.late, 0);
+                        const schoolAbsent = schoolOverview.reduce((s, r) => s + r.absent, 0);
+                        const holidayClasses = schoolOverview.filter(r => r.holiday).length;
+                        return (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-navy">{schoolTotal}</div>
+                                    <div className="text-xs text-gray-400">Total Marked</div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-emerald-600">{schoolPresent}</div>
+                                    <div className="text-xs text-gray-400">Present</div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-amber-600">{schoolLate}</div>
+                                    <div className="text-xs text-gray-400">Late</div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-red-600">{schoolAbsent}</div>
+                                    <div className="text-xs text-gray-400">Absent</div>
+                                </div>
+                                {holidayClasses > 0 && (
+                                    <div className="col-span-2 sm:col-span-4 flex items-center gap-2 px-4 py-2.5 bg-purple-50 rounded-xl border border-purple-100 text-purple-700 text-xs font-medium">
+                                        <CalendarX className="w-3.5 h-3.5" />
+                                        {holidayClasses} class-section{holidayClasses > 1 ? "s" : ""} marked as Holiday
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
+                    <p className="text-sm font-semibold text-navy">{dateDisplay}</p>
+
+                    {schoolOverview.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
+                            No attendance marked for this date yet.
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="grid grid-cols-[90px_70px_1fr_1fr_1fr_1fr] px-5 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
+                                <span>Class</span>
+                                <span>Section</span>
+                                <span className="text-center">Total</span>
+                                <span className="text-center text-emerald-600">Present</span>
+                                <span className="text-center text-amber-600">Late</span>
+                                <span className="text-center text-red-600">Absent</span>
+                            </div>
+                            <div className="divide-y divide-gray-50">
+                                {schoolOverview.map((row, i) => (
+                                    <div key={i} className={`grid grid-cols-[90px_70px_1fr_1fr_1fr_1fr] px-5 py-3 items-center hover:bg-gray-50/50 transition-colors ${row.holiday ? "opacity-60" : ""}`}>
+                                        <span className="font-bold text-navy text-sm">{row.cls}</span>
+                                        <span className="text-xs text-gray-500 font-medium">Sec {row.section}</span>
+                                        {row.holiday ? (
+                                            <span className="col-span-4 flex items-center gap-1.5 text-xs text-purple-600 font-semibold">
+                                                <CalendarX className="w-3.5 h-3.5" /> Holiday
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <span className="text-center text-sm font-semibold text-gray-700">{row.total}</span>
+                                                <span className="text-center text-sm font-bold text-emerald-600">{row.present}</span>
+                                                <span className="text-center text-sm font-bold text-amber-600">{row.late}</span>
+                                                <span className="text-center text-sm font-bold text-red-600">{row.absent}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
             ) : viewMode === "date" ? (
                 <>
                     {/* Day Stats */}
