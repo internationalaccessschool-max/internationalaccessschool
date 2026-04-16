@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-    collection, doc, getDoc, getDocs, updateDoc, setDoc, query, where
+    doc, getDoc, updateDoc, setDoc
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
-    X, Printer, CreditCard, CheckCircle2, Clock, AlertCircle,
-    Loader2, School, Bus, ChevronDown, ChevronUp, RefreshCw
+    X, Printer, CreditCard, CheckCircle2,
+    Loader2, School, Bus, RefreshCw
 } from "lucide-react";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
 import toast from "react-hot-toast";
@@ -22,7 +22,7 @@ const MONTHS_FULL = [
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 2023 }, (_, i) => 2024 + i).concat([CURRENT_YEAR + 1]);
 
 const STATUS_CONFIG = {
     paid:             { label: "Paid",     bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
@@ -154,8 +154,11 @@ export function StudentFeeModal({ student, onClose }: Props) {
                         getDoc(doc(db, ...basePath, stdDocId)),
                         getDoc(doc(db, ...basePath, admDocId)),
                     ]);
-                    // Prefer standard format; fall back to admission format
-                    return stdSnap.exists() ? stdSnap : admSnap;
+                    // Prefer whichever is paid; if neither paid, prefer standard format
+                    if (stdSnap.exists() && stdSnap.data()?.status === "paid") return stdSnap;
+                    if (admSnap.exists() && admSnap.data()?.status === "paid") return admSnap;
+                    if (stdSnap.exists()) return stdSnap;
+                    return admSnap;
                 })),
                 // Transport: 12 direct doc reads by studentId
                 Promise.all(months.map(m =>
