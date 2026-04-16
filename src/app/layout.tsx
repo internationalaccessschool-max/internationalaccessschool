@@ -42,7 +42,7 @@ export default function RootLayout({
             window.OneSignalDeferred = window.OneSignalDeferred || [];
             OneSignalDeferred.push(async function(OneSignal) {
               await OneSignal.init({
-                appId: "e885e7b1-75ba-41ba-8f34-722a565b037a",
+                appId: "${process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID}",
                 safari_web_id: "web.onesignal.auto.10485988-1822-4e96-b399-29edb7cde282",
                 notifyButton: { enable: false },
                 allowLocalhostAsSecureOrigin: true,
