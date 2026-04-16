@@ -1,71 +1,69 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// Map each role to its dashboard and login path
+const ROLE_ROUTES: Record<string, { dashboard: string; login: string }> = {
+    admin:      { dashboard: "/admin",      login: "/admin/login" },
+    teacher:    { dashboard: "/teacher",    login: "/teacher/login" },
+    student:    { dashboard: "/student",    login: "/student/login" },
+    parent:     { dashboard: "/student",    login: "/student/login" },
+    accountant: { dashboard: "/accountant", login: "/accountant/login" },
+    supervisor: { dashboard: "/supervisor", login: "/supervisor/login" },
+};
+
+function getLoginPath(pathname: string): string {
+    if (pathname.startsWith("/admin"))      return "/admin/login";
+    if (pathname.startsWith("/teacher"))    return "/teacher/login";
+    if (pathname.startsWith("/student"))    return "/student/login";
+    if (pathname.startsWith("/accountant")) return "/accountant/login";
+    if (pathname.startsWith("/supervisor")) return "/supervisor/login";
+    return "/login";
+}
+
+function getRequiredRole(pathname: string): string[] {
+    if (pathname.startsWith("/admin"))      return ["admin"];
+    if (pathname.startsWith("/teacher"))    return ["teacher"];
+    if (pathname.startsWith("/student"))    return ["student", "parent"];
+    if (pathname.startsWith("/accountant")) return ["accountant"];
+    if (pathname.startsWith("/supervisor")) return ["supervisor"];
+    return [];
+}
+
 export function middleware(request: NextRequest) {
-    const authCookie = request.cookies.get("auth");
-    const roleCookie = request.cookies.get("role")?.value;
     const { pathname } = request.nextUrl;
 
-    // Admin login page is public but standard login paths aren't necessarily protected.
-    // The main protection is for the dashboard segments.
+    // 1. Skip non-protected routes immediately
+    const isProtected = ["/admin", "/teacher", "/student", "/supervisor", "/accountant"]
+        .some(p => pathname.startsWith(p));
+    if (!isProtected) return NextResponse.next();
 
-    // Quick escape for standard public routes
-    if (!pathname.startsWith("/student") && !pathname.startsWith("/teacher") && !pathname.startsWith("/admin") && !pathname.startsWith("/supervisor") && !pathname.startsWith("/accountant")) {
+    const authCookie = request.cookies.get("auth")?.value;
+    const roleCookie = request.cookies.get("role")?.value;
+    const isLoggedIn = authCookie === "true" && !!roleCookie;
+
+    // 2. On login pages — only redirect to dashboard if FULLY logged in with correct role
+    const loginPath = getLoginPath(pathname);
+    if (pathname === loginPath) {
+        if (isLoggedIn) {
+            const route = ROLE_ROUTES[roleCookie!];
+            // Only redirect if this login page matches their role (prevents cross-role loop)
+            if (route && pathname === route.login) {
+                return NextResponse.redirect(new URL(route.dashboard, request.url));
+            }
+        }
+        // Always allow login pages through
         return NextResponse.next();
     }
 
-    // Exception for the login pages themselves (don't block them)
-    if (pathname === "/student/login" || pathname === "/admin/login" || pathname === "/teacher/login" || pathname === "/accountant/login" || pathname === "/supervisor/login") {
-        // If already logged in, redirect them away from login page to dashboard
-        if (authCookie && roleCookie) {
-            if (pathname === "/admin/login" && roleCookie === "admin") return NextResponse.redirect(new URL("/admin", request.url));
-            if (pathname === "/student/login" && roleCookie === "student") return NextResponse.redirect(new URL("/student", request.url));
-            if (pathname === "/teacher/login" && roleCookie === "teacher") return NextResponse.redirect(new URL("/teacher", request.url));
-            if (pathname === "/accountant/login" && roleCookie === "accountant") return NextResponse.redirect(new URL("/accountant", request.url));
-            if (pathname === "/supervisor/login" && roleCookie === "supervisor") return NextResponse.redirect(new URL("/supervisor", request.url));
-        }
-        return NextResponse.next();
+    // 3. Not logged in → send to login page (no `from` param to avoid loop chains)
+    if (!isLoggedIn) {
+        return NextResponse.redirect(new URL(loginPath, request.url));
     }
 
-    // Main Protection Logic
-    if (!authCookie || !roleCookie) {
-        // Not logged in
-        let loginPath = "/login";
-        if (pathname.startsWith("/student")) loginPath = "/student/login";
-        else if (pathname.startsWith("/teacher")) loginPath = "/teacher/login";
-        else if (pathname.startsWith("/admin")) loginPath = "/admin/login";
-        else if (pathname.startsWith("/accountant")) loginPath = "/accountant/login";
-        else if (pathname.startsWith("/supervisor")) loginPath = "/supervisor/login";
-
-        const loginUrl = new URL(loginPath, request.url);
-        loginUrl.searchParams.set("from", pathname);
-        return NextResponse.redirect(loginUrl);
-    }
-
-    // Role-based Path Checking
-    if (pathname.startsWith("/admin")) {
-        // Strict Admin Check — role cookie is sufficient; email verified in Firestore at login
-        if (roleCookie !== "admin") {
-            return NextResponse.redirect(new URL("/admin/login", request.url));
-        }
-    } else if (pathname.startsWith("/teacher")) {
-        // Strict Teacher Check
-        if (roleCookie !== "teacher") {
-            return NextResponse.redirect(new URL("/teacher/login", request.url));
-        }
-    } else if (pathname.startsWith("/student")) {
-        // Strict Student Check (allowing parents too if needed later, but enforcing student now)
-        if (roleCookie !== "student" && roleCookie !== "parent") {
-            return NextResponse.redirect(new URL("/student/login", request.url));
-        }
-    } else if (pathname.startsWith("/supervisor")) {
-        if (roleCookie !== "supervisor") {
-            return NextResponse.redirect(new URL("/supervisor/login", request.url));
-        }
-    } else if (pathname.startsWith("/accountant")) {
-        if (roleCookie !== "accountant") {
-            return NextResponse.redirect(new URL("/accountant/login", request.url));
-        }
+    // 4. Wrong role → send to correct login page (not their current page, avoids loop)
+    const requiredRoles = getRequiredRole(pathname);
+    if (requiredRoles.length > 0 && !requiredRoles.includes(roleCookie!)) {
+        return NextResponse.redirect(new URL(loginPath, request.url));
     }
 
     return NextResponse.next();
