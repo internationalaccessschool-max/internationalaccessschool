@@ -286,6 +286,13 @@ export default function AdvanceFeePage() {
                         const schoolRef = doc(db, `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`, recordId);
                         const schoolSnap = await getDoc(schoolRef);
                         if (schoolSnap.exists() && schoolSnap.data()?.status === "paid") schoolAlreadyPaid = true;
+                        // Also check admission-format docId (used when fee collected at admission time)
+                        if (!schoolAlreadyPaid) {
+                            const admDocId = `${selectedStudent.id}_${month}_${year}_tuition`;
+                            const admRef = doc(db, `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`, admDocId);
+                            const admSnap = await getDoc(admRef);
+                            if (admSnap.exists() && admSnap.data()?.status === "paid") schoolAlreadyPaid = true;
+                        }
                     } catch { /* ignore */ }
 
                     try {
