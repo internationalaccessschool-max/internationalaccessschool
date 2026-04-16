@@ -27,8 +27,6 @@ const ALL_TABS = [
     { id: "documents", label: "Documents", icon: ImageIcon },
 ];
 
-const CLASSES = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
-    "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
 const GENDER_OPTIONS = ["Male", "Female", "Other"];
 const BLOOD_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
