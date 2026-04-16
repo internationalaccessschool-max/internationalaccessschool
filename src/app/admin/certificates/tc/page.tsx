@@ -236,7 +236,7 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string): string {
       <td style="text-align:center;width:33%">
         <div style="border-top:1px solid #000;width:160px;margin:0 auto;padding-top:4px;font-size:10px;font-weight:bold">
           Principal<br/>
-          <span style="font-weight:normal;font-size:9px">International Access School</span>
+          <span style="font-weight:normal;font-size:9px">International Access School (Siwan)</span>
         </div>
       </td>
     </tr>
@@ -574,7 +574,7 @@ export default function TransferCertificatePage() {
               <table style={{ width: "100%", marginTop: "28px", borderCollapse: "collapse" }}>
                 <tbody>
                   <tr>
-                    {["Sign. of Class Teacher", "Checked by", "Principal / International Access School"].map((s, i) => (
+                    {["Sign. of Class Teacher", "Checked by", "Principal / International Access School (Siwan)"].map((s, i) => (
                       <td key={i} style={{ textAlign: "center" }}>
                         <div style={{ borderTop: "1px solid #000", width: i === 2 ? "160px" : "120px", margin: "0 auto", paddingTop: "3px", fontSize: "9px" }}>{s}</div>
                       </td>
