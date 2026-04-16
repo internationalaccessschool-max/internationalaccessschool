@@ -7,7 +7,7 @@ import { Loader2, Check, Clock, X, ChevronDown, CalendarX } from "lucide-react";
 
 type AttendanceStatus = "present" | "late" | "absent" | "holiday";
 
-const CLASSES = Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`);
+const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SECTIONS = ["A", "B", "C", "D"];
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ interface StudentInfo {
 }
 
 export default function AdminAttendancePage() {
-    const [selectedClass, setSelectedClass] = useState("Class 1");
+    const [selectedClass, setSelectedClass] = useState("1");
     const [selectedSection, setSelectedSection] = useState("A");
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
@@ -239,16 +239,16 @@ export default function AdminAttendancePage() {
         fetchAttendance();
     }, [selectedClass, selectedSection, selectedDate, viewMode, filterYear]);
 
-    // Apply fetched attendance statuses to student list
+    // Apply fetched attendance statuses to student list (skip if day is holiday)
     useEffect(() => {
-        if (students.length > 0) {
+        if (students.length > 0 && !isHoliday) {
             setStudents(prev => prev.map(s => ({
                 ...s,
                 status: (singleDayRecords[s.id] as AttendanceStatus) || "present",
             })));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [singleDayRecords]);
+    }, [singleDayRecords, isHoliday]);
 
     const setStatus = (studentId: string, status: AttendanceStatus) => {
         setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status } : s));
@@ -482,18 +482,27 @@ export default function AdminAttendancePage() {
                             <div className="text-2xl font-bold text-navy">{dayTotal}</div>
                             <div className="text-xs text-gray-400">Total</div>
                         </div>
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
-                            <div className="text-2xl font-bold text-emerald-600">{dayPresent}</div>
-                            <div className="text-xs text-gray-400">Present</div>
-                        </div>
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
-                            <div className="text-2xl font-bold text-amber-600">{dayLate}</div>
-                            <div className="text-xs text-gray-400">Late</div>
-                        </div>
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
-                            <div className="text-2xl font-bold text-red-600">{dayAbsent}</div>
-                            <div className="text-xs text-gray-400">Absent</div>
-                        </div>
+                        {isHoliday ? (
+                            <div className="col-span-3 bg-purple-50 rounded-2xl p-4 shadow-sm border border-purple-200 text-center flex items-center justify-center gap-2">
+                                <CalendarX className="w-5 h-5 text-purple-500" />
+                                <div className="text-xl font-bold text-purple-700">Holiday — {dayTotal} students</div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-emerald-600">{dayPresent}</div>
+                                    <div className="text-xs text-gray-400">Present</div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-amber-600">{dayLate}</div>
+                                    <div className="text-xs text-gray-400">Late</div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+                                    <div className="text-2xl font-bold text-red-600">{dayAbsent}</div>
+                                    <div className="text-xs text-gray-400">Absent</div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex items-center justify-between">
