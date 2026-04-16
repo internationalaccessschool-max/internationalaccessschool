@@ -24,7 +24,7 @@ interface Homework {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const CLASSES = Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`);
+const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
 const SECTIONS = ["A", "B", "C", "D"];
 
@@ -37,18 +37,21 @@ const SUBJECTS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const CLASS_COLORS: Record<string, string> = {
-    "Class 1": "bg-pink-50 text-pink-600",
-    "Class 2": "bg-red-50 text-red-600",
-    "Class 3": "bg-orange-50 text-orange-600",
-    "Class 4": "bg-amber-50 text-amber-700",
-    "Class 5": "bg-yellow-50 text-yellow-700",
-    "Class 6": "bg-lime-50 text-lime-700",
-    "Class 7": "bg-green-50 text-green-700",
-    "Class 8": "bg-teal-50 text-teal-700",
-    "Class 9": "bg-cyan-50 text-cyan-700",
-    "Class 10": "bg-blue-50 text-blue-700",
-    "Class 11": "bg-indigo-50 text-indigo-700",
-    "Class 12": "bg-purple-50 text-purple-700",
+    "NUR": "bg-rose-50 text-rose-600",
+    "LKG": "bg-fuchsia-50 text-fuchsia-600",
+    "UKG": "bg-violet-50 text-violet-600",
+    "1": "bg-pink-50 text-pink-600",
+    "2": "bg-red-50 text-red-600",
+    "3": "bg-orange-50 text-orange-600",
+    "4": "bg-amber-50 text-amber-700",
+    "5": "bg-yellow-50 text-yellow-700",
+    "6": "bg-lime-50 text-lime-700",
+    "7": "bg-green-50 text-green-700",
+    "8": "bg-teal-50 text-teal-700",
+    "9": "bg-cyan-50 text-cyan-700",
+    "10": "bg-blue-50 text-blue-700",
+    "11": "bg-indigo-50 text-indigo-700",
+    "12": "bg-purple-50 text-purple-700",
 };
 
 export default function HomeworkAdminPage() {
