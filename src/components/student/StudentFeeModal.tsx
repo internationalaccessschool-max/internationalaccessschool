@@ -142,17 +142,20 @@ export function StudentFeeModal({ student, onClose }: Props) {
             const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
             const [schoolSnaps, transportSnaps] = await Promise.all([
-                // School: 12 direct doc reads using standard docId format
-                Promise.all(months.map(m => {
+                // School: try standard docId first, then admission-format docId as fallback
+                // Standard format: {studentId}_{year}_{monthPadded}  (generate / advance fee)
+                // Admission format: {studentId}_{month}_{year}_tuition  (admission fee collection)
+                Promise.all(months.map(async m => {
                     const monthPadded = String(m).padStart(2, "0");
-                    const docId = `${studentId}_${selectedYear}_${monthPadded}`;
-                    return getDoc(doc(
-                        db,
-                        "feeRecords", selectedYear.toString(),
-                        "months", m.toString(),
-                        "classes", classId,
-                        "records", docId
-                    ));
+                    const stdDocId = `${studentId}_${selectedYear}_${monthPadded}`;
+                    const admDocId = `${studentId}_${m}_${selectedYear}_tuition`;
+                    const basePath = ["feeRecords", selectedYear.toString(), "months", m.toString(), "classes", classId, "records"] as const;
+                    const [stdSnap, admSnap] = await Promise.all([
+                        getDoc(doc(db, ...basePath, stdDocId)),
+                        getDoc(doc(db, ...basePath, admDocId)),
+                    ]);
+                    // Prefer standard format; fall back to admission format
+                    return stdSnap.exists() ? stdSnap : admSnap;
                 })),
                 // Transport: 12 direct doc reads by studentId
                 Promise.all(months.map(m =>
@@ -168,9 +171,9 @@ export function StudentFeeModal({ student, onClose }: Props) {
             const result: MonthRecord[] = months.map((m, i) => {
                 const schoolSnap = schoolSnaps[i];
                 const transportSnap = transportSnaps[i];
-                const monthPadded = String(m).padStart(2, "0");
-                const docId = `${studentId}_${selectedYear}_${monthPadded}`;
-                const docPath = `feeRecords/${selectedYear}/months/${m}/classes/${classId}/records/${docId}`;
+                // Use the actual doc path from whichever format was found
+                const docPath = schoolSnap.exists() ? schoolSnap.ref.path : "";
+                const docId = schoolSnap.exists() ? schoolSnap.id : `${studentId}_${selectedYear}_${String(m).padStart(2, "0")}`;
 
                 // ── School ──
                 let schoolExists = false;
