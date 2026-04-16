@@ -3,12 +3,12 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp, collectionGroup, deleteField } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
     Banknote, Search, CheckCircle2, AlertCircle, Clock,
-    Mail, Loader2, RefreshCw, Bus, School, X
+    Mail, Loader2, RefreshCw, Bus, School, X, RotateCcw
 } from "lucide-react";
 
 import toast from "react-hot-toast";
@@ -66,7 +66,8 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
 };
 
 export default function ManageFeesPage() {
-    const { user } = useAuth();
+    const { user, role } = useAuth();
+    const isAdmin = role === "admin";
     const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -90,6 +91,10 @@ export default function ManageFeesPage() {
     const [transportArrearMonths, setTransportArrearMonths] = useState<string[]>([]);
     // Live transport dues fetched from Firestore (overrides stale Firestore field)
     const [liveTransportDues, setLiveTransportDues] = useState<number>(0);
+
+    // Undo (reverse paid) — admin only
+    const [undoRecord, setUndoRecord] = useState<{ record: FeeRecord; type: "school" | "transport" | "both" } | null>(null);
+    const [undoLoading, setUndoLoading] = useState(false);
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -837,6 +842,53 @@ export default function ManageFeesPage() {
         }
     };
 
+    // ── Undo Handler (Admin only) ──────────────────────────────────────────
+    const handleConfirmUndo = async () => {
+        if (!undoRecord) return;
+        const { record, type } = undoRecord;
+        setUndoLoading(true);
+        try {
+            const studentUid = record.studentId || record.id;
+
+            if ((type === "school" || type === "both") && record.status === "paid" && record.path) {
+                await updateDoc(doc(db, record.path), {
+                    status: "pending",
+                    paidOn: deleteField(),
+                    receiptNo: deleteField(),
+                    paymentMode: deleteField(),
+                    totalAmountPaid: deleteField(),
+                    markedBy: deleteField(),
+                });
+                setRecords(prev => prev.map(r =>
+                    r.id === record.id ? { ...r, status: "pending", receiptNo: null, paidOn: null } : r
+                ));
+                toast.success(`School fee wapas pending — ${record.studentName}`);
+            }
+
+            if ((type === "transport" || type === "both") && record.transportStatus === "paid") {
+                const trRef = doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid);
+                await updateDoc(trRef, {
+                    status: "pending",
+                    paidOn: deleteField(),
+                    receiptNo: deleteField(),
+                    paymentMode: deleteField(),
+                    totalAmountPaid: deleteField(),
+                    markedBy: deleteField(),
+                });
+                setRecords(prev => prev.map(r =>
+                    r.id === record.id ? { ...r, transportStatus: "pending", transportReceiptNo: null } : r
+                ));
+                toast.success(`Transport fee wapas pending — ${record.studentName}`);
+            }
+
+            setUndoRecord(null);
+        } catch (err: any) {
+            toast.error(err.message || "Reverse karne mein error aaya");
+        } finally {
+            setUndoLoading(false);
+        }
+    };
+
     // Filter records
     const classes = [...new Set(records.map(r => r.class).filter(c => c != null && c !== ""))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const filtered = records.filter(r => {
@@ -1168,6 +1220,23 @@ export default function ManageFeesPage() {
                                                             Transport Receipt
                                                         </button>
                                                     )}
+                                                    {/* Undo (admin only) */}
+                                                    {isAdmin && (record.status === "paid" || record.transportStatus === "paid") && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const schoolPaid = record.status === "paid";
+                                                                const trpPaid = record.transportStatus === "paid";
+                                                                setUndoRecord({
+                                                                    record,
+                                                                    type: schoolPaid && trpPaid ? "both" : schoolPaid ? "school" : "transport",
+                                                                });
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 text-xs font-medium hover:bg-rose-100 transition-colors"
+                                                        >
+                                                            <RotateCcw className="w-3 h-3" />
+                                                            Undo
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -1184,6 +1253,64 @@ export default function ManageFeesPage() {
                 record={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}
             />
+
+            {/* ── Undo (Reverse Paid) Dialog ─────────────────────────────────── */}
+            {undoRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-lg font-bold text-rose-600">Reverse Payment</h3>
+                                <p className="text-sm text-gray-400 mt-0.5">
+                                    {undoRecord.record.studentName} · {MONTHS[undoRecord.record.month - 1]} {undoRecord.record.year}
+                                </p>
+                            </div>
+                            <button onClick={() => setUndoRecord(null)} className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="px-6 py-5 space-y-4">
+                            <p className="text-sm text-gray-600">
+                                Yeh action fee ko wapas <strong>Pending</strong> kar dega aur receipt delete ho jaayegi. Confirm karo?
+                            </p>
+                            {/* Toggle — only if both school and transport are paid */}
+                            {undoRecord.record.status === "paid" && undoRecord.record.transportStatus === "paid" && (
+                                <div className="flex gap-2">
+                                    {(["both", "school", "transport"] as const).map((t) => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setUndoRecord({ ...undoRecord, type: t })}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                                                undoRecord.type === t
+                                                    ? "bg-rose-600 text-white border-rose-600"
+                                                    : "bg-white text-gray-600 border-gray-200 hover:border-rose-300"
+                                            }`}
+                                        >
+                                            {t === "both" ? "Dono" : t === "school" ? "School Only" : "Transport Only"}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="flex gap-3 pt-1">
+                                <button
+                                    onClick={() => setUndoRecord(null)}
+                                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmUndo}
+                                    disabled={undoLoading}
+                                    className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {undoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                                    {undoLoading ? "Reversing..." : "Confirm Reverse"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Mark Paid Dialog ───────────────────────────────────────────── */}
             {markPaidRecord && (
