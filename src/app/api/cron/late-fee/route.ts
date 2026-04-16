@@ -28,7 +28,7 @@ const CRON_SECRET = process.env.CRON_SECRET;
  *                       totalAmount=2900, status=pending
  *   May  16th (cron):   lateFine=100, totalAmount=3000, status=overdue
  */
-export async function POST(req: Request) {
+export async function GET(req: Request) {
     // ── Security check ───────────────────────────────────────────────────────
     const authHeader = req.headers.get("authorization");
     const providedSecret = authHeader?.replace("Bearer ", "") ?? "";
