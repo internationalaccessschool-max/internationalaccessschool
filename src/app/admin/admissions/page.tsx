@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
     Search, X, Loader2, CheckCircle2, XCircle, Eye,
     GraduationCap, User, Users, Activity, CreditCard,
-    Home, ClipboardList, Clock, UserCheck, Ban, Receipt, ChevronRight, Printer,
+    Home, ClipboardList, Clock, UserCheck, Ban, Receipt, ChevronRight, Printer, Tag,
 } from "lucide-react";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
@@ -125,11 +125,12 @@ export default function AdminAdmissionsPage() {
     const [collectMonthlyFee, setCollectMonthlyFee] = useState(false);
     const [collectAnnualFee, setCollectAnnualFee] = useState(false);
     const [annualFeeCollectAmt, setAnnualFeeCollectAmt] = useState(0);
+    const [discountAmt, setDiscountAmt] = useState(0);
     const [feePaymentMode, setFeePaymentMode] = useState<"CASH" | "UPI">("CASH");
     const [admReceipt, setAdmReceipt] = useState<{
         receiptNo: string; studentName: string; admissionNo: string;
         class: string; section: string; items: { label: string; amount: number }[];
-        total: number; paidOn: string; paymentMode: string;
+        total: number; discount: number; paidOn: string; paymentMode: string;
     } | null>(null);
 
     const { register, handleSubmit, control, formState: { errors }, setValue, reset } = useForm<AcceptFormValues>({
@@ -236,6 +237,7 @@ export default function AdminAdmissionsPage() {
         setCollectMonthlyFee(false);
         setCollectAnnualFee(false);
         setAnnualFeeCollectAmt(0);
+        setDiscountAmt(0);
         setFeePaymentMode("CASH");
         setAdmReceipt(null);
         setValue("class", req.enrollmentClass || "");
@@ -383,7 +385,9 @@ export default function AdminAdmissionsPage() {
             const monthlyFeeAmt = collectMonthlyFee ? tuitionFeeAmt : 0;
             const annualFeeStructureAmt = fs.annualFee || 0;
             const annualFeeCollected = collectAnnualFee ? Math.min(annualFeeCollectAmt, annualFeeStructureAmt) : 0;
-            const totalCollected = admissionFeeAmt + monthlyFeeAmt + annualFeeCollected;
+            const rawTotal = admissionFeeAmt + monthlyFeeAmt + annualFeeCollected;
+            const discountApplied = Math.min(discountAmt, rawTotal);
+            const totalCollected = rawTotal - discountApplied;
 
             if (collectAdmFee && admissionFeeAmt > 0)
                 receiptItems.push({ label: "Admission Fee", amount: admissionFeeAmt });
@@ -429,6 +433,7 @@ export default function AdminAdmissionsPage() {
                         sportsFee: fs.sportsFee || 0,
                         miscFee: fs.miscFee || 0,
                     },
+                    discount: discountApplied,
                     status: tuitionStatus,
                     ...(tuitionStatus === "paid" ? { paidOn: now, receiptNo, paymentMode: feePaymentMode } : {}),
                     markedBy: "system-admission",
@@ -469,7 +474,7 @@ export default function AdminAdmissionsPage() {
                 });
             }
 
-            if (totalCollected > 0) {
+            if (totalCollected > 0 || discountApplied > 0) {
                 setAdmReceipt({
                     receiptNo,
                     studentName: fullName,
@@ -478,6 +483,7 @@ export default function AdminAdmissionsPage() {
                     section: sectionStr,
                     items: receiptItems,
                     total: totalCollected,
+                    discount: discountApplied,
                     paidOn: now.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
                     paymentMode: feePaymentMode,
                 });
@@ -489,7 +495,7 @@ export default function AdminAdmissionsPage() {
                     : r
             ));
 
-            setAdmStep(totalCollected > 0 ? 3 : 1);
+            setAdmStep((totalCollected > 0 || discountApplied > 0) ? 3 : 1);
             if (totalCollected === 0) {
                 // No fees collected — close and show toast
                 setSelectedRequest(null);
@@ -866,13 +872,62 @@ export default function AdminAdmissionsPage() {
                                         </label>
                                     </div>
 
+                                    {/* Discount */}
+                                    {(() => {
+                                        const rawFeeTotal = (collectAdmFee ? (feeStructure?.admissionFee || 0) : 0)
+                                            + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0)
+                                            + (collectAnnualFee ? annualFeeCollectAmt : 0);
+                                        return (
+                                            <div className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${discountAmt > 0 ? "border-rose-300 bg-rose-50" : "border-dashed border-gray-200 bg-white hover:border-gray-300"}`}>
+                                                <Tag className="w-4 h-4 text-rose-500 shrink-0" />
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-navy text-sm">Discount</p>
+                                                    <p className="text-xs text-gray-500">Optional — deducted from total</p>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-sm font-bold text-rose-600">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={rawFeeTotal}
+                                                        value={discountAmt || ""}
+                                                        onChange={e => setDiscountAmt(Math.min(parseFloat(e.target.value) || 0, rawFeeTotal))}
+                                                        onClick={e => e.preventDefault()}
+                                                        className="w-24 border-2 border-rose-200 rounded-xl px-3 py-2 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 text-right"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* Total */}
-                                    <div className="bg-navy/5 rounded-xl p-4 flex justify-between items-center">
-                                        <span className="font-semibold text-navy">Collecting Now</span>
-                                        <span className="text-xl font-bold text-navy">
-                                            ₹{((collectAdmFee ? (feeStructure?.admissionFee || 0) : 0) + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0) + (collectAnnualFee ? annualFeeCollectAmt : 0)).toLocaleString()}
-                                        </span>
-                                    </div>
+                                    {(() => {
+                                        const rawFeeTotal = (collectAdmFee ? (feeStructure?.admissionFee || 0) : 0)
+                                            + (collectMonthlyFee ? (feeStructure?.tuitionFee || 0) : 0)
+                                            + (collectAnnualFee ? annualFeeCollectAmt : 0);
+                                        const finalTotal = rawFeeTotal - Math.min(discountAmt, rawFeeTotal);
+                                        return (
+                                            <div className="bg-navy/5 rounded-xl p-4 space-y-2">
+                                                {discountAmt > 0 && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-gray-500">Subtotal</span>
+                                                        <span className="font-medium text-gray-600">₹{rawFeeTotal.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {discountAmt > 0 && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-rose-600 font-medium">Discount</span>
+                                                        <span className="font-bold text-rose-600">− ₹{Math.min(discountAmt, rawFeeTotal).toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-center pt-1 border-t border-navy/10">
+                                                    <span className="font-semibold text-navy">Collecting Now</span>
+                                                    <span className="text-xl font-bold text-navy">₹{finalTotal.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Payment Mode */}
                                     <div>
@@ -949,6 +1004,14 @@ export default function AdminAdmissionsPage() {
                                                         <span className="font-medium text-navy">₹{item.amount.toLocaleString()}</span>
                                                     </div>
                                                 ))}
+                                                {admReceipt.discount > 0 && (
+                                                    <div className="flex justify-between text-sm border-t border-dashed border-rose-200 pt-1.5">
+                                                        <span className="text-rose-600 font-medium flex items-center gap-1">
+                                                            <Tag className="w-3 h-3" /> Discount
+                                                        </span>
+                                                        <span className="font-bold text-rose-600">− ₹{admReceipt.discount.toLocaleString()}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-navy/20">
                                                 <span className="font-bold text-navy">Total Paid</span>
