@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-    doc, getDoc, updateDoc, setDoc
+    doc, getDoc, getDocs, updateDoc, setDoc,
+    collectionGroup, query, where, deleteField
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
     X, Printer, CreditCard, CheckCircle2,
-    Loader2, School, Bus, RefreshCw
+    Loader2, School, Bus, RefreshCw, RotateCcw
 } from "lucide-react";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
 import toast from "react-hot-toast";
@@ -133,6 +134,10 @@ export function StudentFeeModal({ student, onClose }: Props) {
     const [payMode, setPayMode] = useState<"CASH" | "UPI">("CASH");
     const [payLoading, setPayLoading] = useState(false);
 
+    // Undo (reverse paid) dialog
+    const [undoDialog, setUndoDialog] = useState<{ month: number; type: "school" | "transport" | "both" } | null>(null);
+    const [undoLoading, setUndoLoading] = useState(false);
+
     // ─── Load Data ─────────────────────────────────────────────────────────
 
     const loadData = useCallback(async () => {
@@ -141,26 +146,17 @@ export function StudentFeeModal({ student, onClose }: Props) {
             // Fetch 12 months in parallel (school + transport)
             const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-            const [schoolSnaps, transportSnaps] = await Promise.all([
-                // School: try standard docId first, then admission-format docId as fallback
-                // Standard format: {studentId}_{year}_{monthPadded}  (generate / advance fee)
-                // Admission format: {studentId}_{month}_{year}_tuition  (admission fee collection)
-                Promise.all(months.map(async m => {
-                    const monthPadded = String(m).padStart(2, "0");
-                    const stdDocId = `${studentId}_${selectedYear}_${monthPadded}`;
-                    const admDocId = `${studentId}_${m}_${selectedYear}_tuition`;
-                    const basePath = ["feeRecords", selectedYear.toString(), "months", m.toString(), "classes", classId, "records"] as const;
-                    const [stdSnap, admSnap] = await Promise.all([
-                        getDoc(doc(db, ...basePath, stdDocId)),
-                        getDoc(doc(db, ...basePath, admDocId)),
-                    ]);
-                    // Prefer whichever is paid; if neither paid, prefer standard format
-                    if (stdSnap.exists() && stdSnap.data()?.status === "paid") return stdSnap;
-                    if (admSnap.exists() && admSnap.data()?.status === "paid") return admSnap;
-                    if (stdSnap.exists()) return stdSnap;
-                    return admSnap;
-                })),
-                // Transport: 12 direct doc reads by studentId
+            // School: one collectionGroup query finds ALL records for this student+year
+            // regardless of which class folder they live in (handles promotions correctly)
+            // Also handles both docId formats (standard + admission) automatically
+            const schoolQuery = query(
+                collectionGroup(db, "records"),
+                where("studentId", "==", studentId),
+                where("year", "==", selectedYear)
+            );
+            const [schoolQuerySnap, transportSnaps] = await Promise.all([
+                getDocs(schoolQuery),
+                // Transport: 12 direct reads by studentId (already student-scoped)
                 Promise.all(months.map(m =>
                     getDoc(doc(
                         db,
@@ -171,12 +167,23 @@ export function StudentFeeModal({ student, onClose }: Props) {
                 )),
             ]);
 
+            // Build month → best doc map (prefer paid when duplicates exist)
+            const schoolDocMap = new Map<number, typeof schoolQuerySnap.docs[0]>();
+            for (const d of schoolQuerySnap.docs) {
+                const data = d.data() as any;
+                const m = data.month as number;
+                if (!m || m < 1 || m > 12) continue;
+                const existing = schoolDocMap.get(m);
+                if (!existing || data.status === "paid") {
+                    schoolDocMap.set(m, d);
+                }
+            }
+
             const result: MonthRecord[] = months.map((m, i) => {
-                const schoolSnap = schoolSnaps[i];
+                const schoolSnap = schoolDocMap.get(m) ?? null;
                 const transportSnap = transportSnaps[i];
-                // Use the actual doc path from whichever format was found
-                const docPath = schoolSnap.exists() ? schoolSnap.ref.path : "";
-                const docId = schoolSnap.exists() ? schoolSnap.id : `${studentId}_${selectedYear}_${String(m).padStart(2, "0")}`;
+                const docPath = schoolSnap ? schoolSnap.ref.path : "";
+                const docId   = schoolSnap ? schoolSnap.id : `${studentId}_${selectedYear}_${String(m).padStart(2, "0")}`;
 
                 // ── School ──
                 let schoolExists = false;
@@ -189,7 +196,7 @@ export function StudentFeeModal({ student, onClose }: Props) {
                 let schoolPaymentMode = "";
                 let schoolBreakdown: Record<string, number> = {};
 
-                if (schoolSnap.exists()) {
+                if (schoolSnap && schoolSnap.exists()) {
                     const d = schoolSnap.data() as any;
                     schoolExists = true;
                     schoolStatus = (d.status || "pending") as FeeStatus;
@@ -296,6 +303,11 @@ export function StudentFeeModal({ student, onClose }: Props) {
                     totalAmountPaid: rec.schoolTotalAmount,
                 });
 
+                // Extract classId from the actual doc path (correct even for promoted students)
+                // Path: feeRecords/{year}/months/{month}/classes/{classId}/records/{docId}
+                const pathParts = rec.schoolDocPath.split("/");
+                const recordClassId = pathParts[6] || classId;
+
                 // Backward cascade: mark previous carried_forward school records as paid
                 try {
                     for (let offset = 1; offset <= 12; offset++) {
@@ -304,7 +316,7 @@ export function StudentFeeModal({ student, onClose }: Props) {
                         if (prevM <= 0) { prevM += 12; prevY -= 1; }
                         const prevMPad = String(prevM).padStart(2, "0");
                         const prevDocId = `${studentId}_${prevY}_${prevMPad}`;
-                        const prevRef = doc(db, `feeRecords/${prevY}/months/${prevM}/classes/${classId}/records`, prevDocId);
+                        const prevRef = doc(db, `feeRecords/${prevY}/months/${prevM}/classes/${recordClassId}/records`, prevDocId);
                         const prevSnap = await getDoc(prevRef);
                         if (!prevSnap.exists()) continue;
                         const prevData = prevSnap.data() as any;
@@ -328,7 +340,7 @@ export function StudentFeeModal({ student, onClose }: Props) {
                         if (nextM > 12) { nextM -= 12; nextY += 1; }
                         const nextMPad = String(nextM).padStart(2, "0");
                         const nextDocId = `${studentId}_${nextY}_${nextMPad}`;
-                        const nextRef = doc(db, `feeRecords/${nextY}/months/${nextM}/classes/${classId}/records`, nextDocId);
+                        const nextRef = doc(db, `feeRecords/${nextY}/months/${nextM}/classes/${recordClassId}/records`, nextDocId);
                         const nextSnap = await getDoc(nextRef);
                         if (!nextSnap.exists()) break;
                         const nextData = nextSnap.data() as any;
@@ -559,6 +571,74 @@ export function StudentFeeModal({ student, onClose }: Props) {
         );
     };
 
+    // ─── Undo (Reverse Paid → Pending) ─────────────────────────────────────
+
+    const handleConfirmUndo = async () => {
+        if (!undoDialog) return;
+        const rec = records[undoDialog.month - 1];
+        setUndoLoading(true);
+        try {
+            const undoSchool = undoDialog.type === "school" || undoDialog.type === "both";
+            const undoTransport = undoDialog.type === "transport" || undoDialog.type === "both";
+
+            // ── School fee reverse ───────────────────────────────────────────
+            if (undoSchool && rec.schoolExists && rec.schoolStatus === "paid") {
+                await updateDoc(doc(db, rec.schoolDocPath), {
+                    status: "pending",
+                    paidOn: deleteField(),
+                    receiptNo: deleteField(),
+                    paymentMode: deleteField(),
+                    totalAmountPaid: deleteField(),
+                    markedBy: deleteField(),
+                });
+            }
+
+            // ── Transport fee reverse ────────────────────────────────────────
+            if (undoTransport && rec.transportExists && rec.transportStatus === "paid") {
+                const transportRef = doc(
+                    db, "transportFeeRecords", selectedYear.toString(),
+                    "months", rec.month.toString(), "students", studentId
+                );
+                await updateDoc(transportRef, {
+                    status: "pending",
+                    paidOn: deleteField(),
+                    receiptNo: deleteField(),
+                    paymentMode: deleteField(),
+                    totalAmountPaid: deleteField(),
+                    markedBy: deleteField(),
+                });
+            }
+
+            // Update local state
+            setRecords(prev => prev.map(r => {
+                if (r.month !== rec.month) return r;
+                return {
+                    ...r,
+                    ...(undoSchool && r.schoolStatus === "paid" ? {
+                        schoolStatus: "pending" as FeeStatus,
+                        schoolReceiptNo: null,
+                        schoolPaidOn: null,
+                        schoolPaymentMode: "",
+                    } : {}),
+                    ...(undoTransport && r.transportStatus === "paid" ? {
+                        transportStatus: "pending" as FeeStatus,
+                        transportReceiptNo: null,
+                        transportPaidOn: null,
+                        transportPaymentMode: "",
+                    } : {}),
+                };
+            }));
+
+            toast.success(`Fee wapas pending kar di — ${MONTHS_SHORT[rec.month - 1]} ${selectedYear}`);
+            setUndoDialog(null);
+        } catch (err: any) {
+            console.error("[StudentFeeModal] Undo error:", err);
+            toast.error(err.message || "Reverse karne mein error aaya");
+        } finally {
+            setUndoLoading(false);
+        }
+    };
+
     // ─── Derived Summary ────────────────────────────────────────────────────
 
     const summary = records.reduce(
@@ -779,6 +859,23 @@ export function StudentFeeModal({ student, onClose }: Props) {
                                                             Print
                                                         </button>
                                                     )}
+                                                    {anyPaid && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const schoolPaid = rec.schoolStatus === "paid";
+                                                                const trpPaid = rec.transportStatus === "paid";
+                                                                setUndoDialog({
+                                                                    month: rec.month,
+                                                                    type: schoolPaid && trpPaid ? "both" : schoolPaid ? "school" : "transport",
+                                                                });
+                                                            }}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-white hover:bg-rose-50 ring-1 ring-slate-200 hover:ring-rose-200 shadow-sm transition-all"
+                                                            title="Galti se paid hua? Wapas pending karo"
+                                                        >
+                                                            <RotateCcw className="w-3 h-3" strokeWidth={2.5} />
+                                                            Undo
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -892,6 +989,82 @@ export function StudentFeeModal({ student, onClose }: Props) {
                                     {payLoading
                                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
                                         : <><CheckCircle2 className="w-4 h-4" strokeWidth={2.5} /> Confirm & Pay</>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* ── Undo Dialog ────────────────────────────────────────────────── */}
+            {undoDialog && (() => {
+                const rec = records[undoDialog.month - 1];
+                const feeMonth = `${MONTHS_FULL[undoDialog.month - 1]} ${selectedYear}`;
+                return (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-[2px]">
+                        <div className="bg-white rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.15)] w-full max-w-sm p-7 space-y-5">
+                            {/* Icon + Title */}
+                            <div className="flex flex-col items-center text-center gap-3 pt-1">
+                                <div className="w-14 h-14 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center">
+                                    <RotateCcw className="w-6 h-6 text-rose-500" strokeWidth={2.5} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">Fee Wapas Pending Karo?</h3>
+                                    <p className="text-xs text-slate-400 mt-1">{feeMonth} · {getDisplayName(student)}</p>
+                                </div>
+                            </div>
+
+                            {/* What will happen */}
+                            <div className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 space-y-1.5">
+                                <p className="text-xs font-bold text-rose-700">Yeh sab hoga:</p>
+                                {(undoDialog.type === "school" || undoDialog.type === "both") && rec.schoolStatus === "paid" && (
+                                    <p className="text-xs text-rose-600 flex items-center gap-1.5">
+                                        <School className="w-3.5 h-3.5 shrink-0" />
+                                        School fee → Pending · Receipt delete
+                                    </p>
+                                )}
+                                {(undoDialog.type === "transport" || undoDialog.type === "both") && rec.transportStatus === "paid" && (
+                                    <p className="text-xs text-rose-600 flex items-center gap-1.5">
+                                        <Bus className="w-3.5 h-3.5 shrink-0" />
+                                        Transport fee → Pending · Receipt delete
+                                    </p>
+                                )}
+                                <p className="text-[11px] text-rose-400 pt-0.5">Note: Arrear cascade reverse nahi hoga — sirf yeh month reset hoga.</p>
+                            </div>
+
+                            {/* Both paid — toggle */}
+                            {rec.schoolStatus === "paid" && rec.transportStatus === "paid" && (
+                                <div className="flex gap-1 p-1 rounded-2xl bg-slate-100">
+                                    {(["both", "school", "transport"] as const).map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setUndoDialog(d => d ? { ...d, type: t } : d)}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${undoDialog.type === t ? "bg-white shadow text-rose-600 ring-1 ring-rose-200" : "text-slate-500 hover:text-slate-700"}`}
+                                        >
+                                            {t === "both" ? "Dono" : t === "school" ? "School Only" : "Transport Only"}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Buttons */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setUndoDialog(null)}
+                                    disabled={undoLoading}
+                                    className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors outline-none disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmUndo}
+                                    disabled={undoLoading}
+                                    className="flex-1 px-4 py-3 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    {undoLoading
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Reversing…</>
+                                        : <><RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Haan, Reverse Karo</>
                                     }
                                 </button>
                             </div>
