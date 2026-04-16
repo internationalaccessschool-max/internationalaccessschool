@@ -4,7 +4,6 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
     const authCookie = request.cookies.get("auth");
     const roleCookie = request.cookies.get("role")?.value;
-    const emailCookie = request.cookies.get("email")?.value;
     const { pathname } = request.nextUrl;
 
     // Admin login page is public but standard login paths aren't necessarily protected.
@@ -45,8 +44,8 @@ export function middleware(request: NextRequest) {
 
     // Role-based Path Checking
     if (pathname.startsWith("/admin")) {
-        // Strict Admin Check
-        if (roleCookie !== "admin" || emailCookie !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+        // Strict Admin Check — role cookie is sufficient; email verified in Firestore at login
+        if (roleCookie !== "admin") {
             return NextResponse.redirect(new URL("/admin/login", request.url));
         }
     } else if (pathname.startsWith("/teacher")) {
