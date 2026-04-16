@@ -19,18 +19,21 @@ const FALLBACK_SUBJECTS = [
 ];
 
 const CLASS_COLORS: Record<string, string> = {
-    "Class 1": "bg-pink-100 text-pink-700",
-    "Class 2": "bg-red-100 text-red-700",
-    "Class 3": "bg-orange-100 text-orange-700",
-    "Class 4": "bg-amber-100 text-amber-700",
-    "Class 5": "bg-yellow-100 text-yellow-700",
-    "Class 6": "bg-lime-100 text-lime-700",
-    "Class 7": "bg-green-100 text-green-700",
-    "Class 8": "bg-teal-100 text-teal-700",
-    "Class 9": "bg-cyan-100 text-cyan-700",
-    "Class 10": "bg-blue-100 text-blue-700",
-    "Class 11": "bg-indigo-100 text-indigo-700",
-    "Class 12": "bg-purple-100 text-purple-700",
+    "NUR": "bg-rose-100 text-rose-700",
+    "LKG": "bg-fuchsia-100 text-fuchsia-700",
+    "UKG": "bg-violet-100 text-violet-700",
+    "1": "bg-pink-100 text-pink-700",
+    "2": "bg-red-100 text-red-700",
+    "3": "bg-orange-100 text-orange-700",
+    "4": "bg-amber-100 text-amber-700",
+    "5": "bg-yellow-100 text-yellow-700",
+    "6": "bg-lime-100 text-lime-700",
+    "7": "bg-green-100 text-green-700",
+    "8": "bg-teal-100 text-teal-700",
+    "9": "bg-cyan-100 text-cyan-700",
+    "10": "bg-blue-100 text-blue-700",
+    "11": "bg-indigo-100 text-indigo-700",
+    "12": "bg-purple-100 text-purple-700",
 };
 
 export default function TeacherHomeworkPage() {
