@@ -25,9 +25,9 @@ async function sendOneSignalNotification(
                 target_channel: "push",
                 contents: { en: body },
                 headings: { en: title },
-                url: "https://internationalaccessschool.vercel.app/student/fees",
-                chrome_web_icon: "https://internationalaccessschool.vercel.app/LOGO.png",
-                chrome_web_badge: "https://internationalaccessschool.vercel.app/LOGO.png",
+                url: `${process.env.NEXT_PUBLIC_BASE_URL || "https://internationalaccessschool.vercel.app"}/student/fees`,
+                chrome_web_icon: `${process.env.NEXT_PUBLIC_BASE_URL || "https://internationalaccessschool.vercel.app"}/LOGO.png`,
+                chrome_web_badge: `${process.env.NEXT_PUBLIC_BASE_URL || "https://internationalaccessschool.vercel.app"}/LOGO.png`,
             }),
         });
 
