@@ -6,7 +6,7 @@ import {
     collectionGroup, getDocs,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Subject } from "@/types";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,14 +51,22 @@ export default function ClassSubjectMappingPage() {
         const fetchClasses = async () => {
             try {
                 const snap = await getDocs(collectionGroup(db, "profiles"));
-                const classSet = new Set<string>();
+                // Start with standard class order (NUR/LKG/UKG first, then 1-12)
+                const order: Record<string, number> = { NUR: 0, LKG: 1, UKG: 2 };
+                const classSet = new Set<string>(["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]);
                 snap.docs.forEach(d => {
                     const data = d.data();
                     if (data.className) classSet.add(data.className);
                 });
-                setAllClasses(Array.from(classSet).sort());
+                const sorted = Array.from(classSet).sort((a, b) => {
+                    const na = order[a.toUpperCase()] ?? (parseInt(a) || 99);
+                    const nb = order[b.toUpperCase()] ?? (parseInt(b) || 99);
+                    return na - nb;
+                });
+                setAllClasses(sorted);
             } catch (err) {
                 console.error("Error fetching classes:", err);
+                setAllClasses(["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]);
             } finally {
                 setIsLoadingClasses(false);
             }
