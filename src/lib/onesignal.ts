@@ -37,14 +37,27 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
   }
 
   try {
-    // Tell OneSignal SDK to subscribe (permission already granted)
     const OneSignal = await getOneSignal();
     await OneSignal.User.PushSubscription.optIn();
+
+    // Wait a bit for push subscription to be fully created (especially on mobile)
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Verify the push subscription actually got created
+    const pushId = OneSignal.User.PushSubscription.id;
+    const pushToken = OneSignal.User.PushSubscription.token;
+    console.log("[OneSignal] Push subscription ID:", pushId);
+    console.log("[OneSignal] Push token present:", !!pushToken);
+
+    if (!pushId && !pushToken) {
+      console.error("[OneSignal] ❌ Push subscription not created — service worker may not be registered in PWA scope");
+      return { success: false, reason: "sdk_error" };
+    }
 
     // Link this device to the student's admission number
     await OneSignal.login(externalUserId);
 
-    console.log("[OneSignal] ✅ Subscribed for user:", externalUserId);
+    console.log("[OneSignal] ✅ Subscribed for user:", externalUserId, "pushId:", pushId);
     return { success: true };
   } catch (err: any) {
     console.error("[OneSignal] Subscribe error:", err?.message);
