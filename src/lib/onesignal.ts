@@ -25,26 +25,23 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
   success: boolean;
   reason?: "permission_denied" | "sdk_error" | "unsupported";
 }> => {
-  // 1. Check browser support
+  // Check browser support
   if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-    console.warn("[OneSignal] Push not supported in this browser.");
     return { success: false, reason: "unsupported" };
   }
 
+  // Caller must have already called Notification.requestPermission() FIRST
+  // (before any awaits) to ensure the browser popup showed correctly.
+  if (Notification.permission !== "granted") {
+    return { success: false, reason: "permission_denied" };
+  }
+
   try {
-    // 2. Request native browser permission FIRST — this shows the Allow/Block popup
-    const permission = await Notification.requestPermission();
-
-    if (permission !== "granted") {
-      console.warn("[OneSignal] Permission denied by user.");
-      return { success: false, reason: "permission_denied" };
-    }
-
-    // 3. Now tell OneSignal SDK to subscribe
+    // Tell OneSignal SDK to subscribe (permission already granted)
     const OneSignal = await getOneSignal();
     await OneSignal.User.PushSubscription.optIn();
 
-    // 4. Link this device to the student's admission number
+    // Link this device to the student's admission number
     await OneSignal.login(externalUserId);
 
     console.log("[OneSignal] ✅ Subscribed for user:", externalUserId);
