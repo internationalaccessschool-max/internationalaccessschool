@@ -1,7 +1,12 @@
 "use client";
 
-import { Bell, Lock, Palette, Save, Shield, User } from "lucide-react";
-import { useState } from "react";
+import { Bell, Lock, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone } from "lucide-react";
+import { useState, useEffect } from "react";
+import { subscribeToNotifications, unsubscribeFromNotifications, isSubscribed } from "@/lib/onesignal";
+import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, updateDoc, collectionGroup, query, where, getDocs, limit } from "firebase/firestore";
+import toast from "react-hot-toast";
 
 const sections = [
     { id: "profile", label: "Profile", icon: User },
@@ -14,6 +19,147 @@ const sections = [
 export default function StudentSettingsPage() {
     const [active, setActive] = useState("profile");
     const [saved, setSaved] = useState(false);
+    const { user } = useAuth();
+
+    // --- Notification State ---
+    const [notifSubscribed, setNotifSubscribed] = useState<boolean | null>(null);
+    const [notifLoading, setNotifLoading] = useState(false);
+    const [notifEmail, setNotifEmail] = useState("");
+    const [notifEmailSaving, setNotifEmailSaving] = useState(false);
+    const [admissionNumber, setAdmissionNumber] = useState<string>("");
+    const [browserSupported, setBrowserSupported] = useState(true);
+
+    // Check browser support and current subscription status
+    useEffect(() => {
+        if (active !== "notifications") return;
+
+        // Check if browser supports push notifications
+        const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+        setBrowserSupported(supported);
+
+        // Check current OneSignal subscription status
+        const checkStatus = async () => {
+            const subscribed = await isSubscribed();
+            setNotifSubscribed(subscribed);
+        };
+        checkStatus();
+    }, [active]);
+
+    // Fetch student profile data (admissionNumber + notificationEmail)
+    useEffect(() => {
+        if (!user?.uid) return;
+        const fetchProfile = async () => {
+            try {
+                // Try studentLookup for fast resolution
+                const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
+                let admNo = "";
+                let email = "";
+
+                if (lookupSnap.exists()) {
+                    const lu = lookupSnap.data();
+                    admNo = lu.admissionNumber || lu.rollNo || "";
+                    const cls = lu.className;
+                    const sec = lu.section;
+                    if (cls && sec) {
+                        const profileRef = doc(
+                            db,
+                            "users", "classes", cls, "sections", sec, "students", "profiles",
+                            user.uid
+                        );
+                        const profileSnap = await getDoc(profileRef);
+                        if (profileSnap.exists()) {
+                            const data = profileSnap.data();
+                            admNo = admNo || data.admissionNumber || data.rollNo || "";
+                            email = data.notificationEmail || data.parentEmail || "";
+                            // Skip internal emails
+                            if (email.includes("@ias.edu") || email.includes("@school.")) email = "";
+                        }
+                    }
+                }
+
+                // Fallback: collectionGroup scan
+                if (!admNo || !email) {
+                    const snap = await getDocs(
+                        query(collectionGroup(db, "profiles"), where("uid", "==", user.uid), limit(1))
+                    );
+                    if (!snap.empty) {
+                        const data = snap.docs[0].data();
+                        admNo = admNo || data.admissionNumber || data.rollNo || "";
+                        if (!email) {
+                            const e = data.notificationEmail || data.parentEmail || "";
+                            if (!e.includes("@ias.edu")) email = e;
+                        }
+                    }
+                }
+
+                setAdmissionNumber(admNo);
+                setNotifEmail(email);
+            } catch (e) {
+                console.error("Failed to fetch student profile", e);
+            }
+        };
+        fetchProfile();
+    }, [user?.uid]);
+
+    const handleToggleNotification = async () => {
+        if (notifLoading) return;
+        setNotifLoading(true);
+        try {
+            if (notifSubscribed) {
+                // Unsubscribe
+                await unsubscribeFromNotifications();
+                setNotifSubscribed(false);
+                toast.success("Push notifications disabled.");
+            } else {
+                // Subscribe — need admissionNumber as external ID
+                const externalId = admissionNumber || user?.uid || "";
+                if (!externalId) {
+                    toast.error("Could not identify your account. Please contact admin.");
+                    return;
+                }
+                const ok = await subscribeToNotifications(externalId);
+                if (ok) {
+                    setNotifSubscribed(true);
+                    toast.success("Push notifications enabled! You'll now receive alerts.");
+                } else {
+                    toast.error("Failed to enable notifications. Please allow browser permission and try again.");
+                }
+            }
+        } catch (err: any) {
+            toast.error(err?.message || "Something went wrong.");
+        } finally {
+            setNotifLoading(false);
+        }
+    };
+
+    const handleSaveNotifEmail = async () => {
+        if (!user?.uid || !notifEmail.trim()) return;
+        setNotifEmailSaving(true);
+        try {
+            // Find and update student profile
+            const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
+            if (lookupSnap.exists()) {
+                const lu = lookupSnap.data();
+                const cls = lu.className;
+                const sec = lu.section;
+                if (cls && sec) {
+                    const profileRef = doc(
+                        db,
+                        "users", "classes", cls, "sections", sec,
+                        "students", "profiles", user.uid
+                    );
+                    await updateDoc(profileRef, { notificationEmail: notifEmail.trim() });
+                    toast.success("Receipt email saved! Fee receipts will be sent here.");
+                    return;
+                }
+            }
+            toast.error("Could not save email. Please contact admin.");
+        } catch (err: any) {
+            toast.error("Failed to save: " + (err?.message || "Unknown error"));
+        } finally {
+            setNotifEmailSaving(false);
+        }
+    };
 
     const handleSave = () => {
         setSaved(true);
@@ -91,25 +237,126 @@ export default function StudentSettingsPage() {
                     {active === "notifications" && (
                         <div className="space-y-6">
                             <h2 className="font-bold text-navy text-lg">Notification Preferences</h2>
-                            <div className="space-y-4">
-                                {[
-                                    { label: "Assignment Due Reminders", desc: "Get notified before assignments are due" },
-                                    { label: "Exam Alerts", desc: "Receive alerts about upcoming exams" },
-                                    { label: "Attendance Updates", desc: "Be informed of attendance records" },
-                                    { label: "Grade Published", desc: "Know when new marks are posted" },
-                                    { label: "School Notices", desc: "Receive general school announcements" },
-                                ].map((item) => (
-                                    <div key={item.label} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100">
-                                        <div>
-                                            <div className="text-sm font-semibold text-navy">{item.label}</div>
-                                            <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>
-                                        </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" defaultChecked className="sr-only peer" />
-                                            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-navy after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-                                        </label>
+
+                            {/* Browser not supported warning */}
+                            {!browserSupported && (
+                                <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                                    <Smartphone className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-semibold text-amber-800">Browser Not Supported</p>
+                                        <p className="text-xs text-amber-700 mt-1">
+                                            Push notifications don't work on Samsung Internet Browser.
+                                            Please open this app in <strong>Chrome</strong> or <strong>Edge</strong> on your Samsung Tab and enable notifications from there.
+                                        </p>
                                     </div>
-                                ))}
+                                </div>
+                            )}
+
+                            {/* Push notification toggle */}
+                            <div className="p-5 rounded-2xl border border-gray-100 bg-gray-50 space-y-4">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${notifSubscribed ? "bg-emerald-100" : "bg-gray-100"}`}>
+                                            {notifSubscribed
+                                                ? <Bell className="w-5 h-5 text-emerald-600" />
+                                                : <BellOff className="w-5 h-5 text-gray-400" />
+                                            }
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-navy">Push Notifications</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                                {notifSubscribed === null
+                                                    ? "Checking status..."
+                                                    : notifSubscribed
+                                                        ? "Enabled — You'll receive attendance & fee alerts"
+                                                        : "Disabled — Enable to receive real-time alerts"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        id="toggle-push-notification"
+                                        onClick={handleToggleNotification}
+                                        disabled={notifLoading || notifSubscribed === null || !browserSupported}
+                                        className={`shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                                            ${notifSubscribed
+                                                ? "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                                                : "bg-navy text-white hover:bg-navy/90"
+                                            }`}
+                                    >
+                                        {notifLoading
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : notifSubscribed
+                                                ? <><BellOff className="w-4 h-4" /> Disable</>
+                                                : <><Bell className="w-4 h-4" /> Enable</>
+                                        }
+                                    </button>
+                                </div>
+
+                                {/* What you'll receive */}
+                                {notifSubscribed && (
+                                    <div className="border-t border-gray-200 pt-4 space-y-2">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">You'll receive alerts for:</p>
+                                        {[
+                                            "Attendance marked absent or late",
+                                            "Late fee reminders",
+                                            "New homework assigned",
+                                            "Exam & result announcements",
+                                        ].map(item => (
+                                            <div key={item} className="flex items-center gap-2 text-xs text-gray-600">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                                {item}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Fee Receipt Email */}
+                            <div className="p-5 rounded-2xl border border-gray-100 bg-gray-50 space-y-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-navy">Fee Receipt Email</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        Enter your parent's email — fee payment receipts will be sent here automatically.
+                                    </p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <input
+                                        id="notification-email-input"
+                                        type="email"
+                                        value={notifEmail}
+                                        onChange={e => setNotifEmail(e.target.value)}
+                                        placeholder="parent@example.com"
+                                        className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
+                                    />
+                                    <button
+                                        id="save-notification-email"
+                                        onClick={handleSaveNotifEmail}
+                                        disabled={notifEmailSaving || !notifEmail.trim()}
+                                        className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-50 transition-all"
+                                    >
+                                        {notifEmailSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                        Save
+                                    </button>
+                                </div>
+                                {notifEmail && !notifEmail.includes("@") && (
+                                    <div className="flex items-center gap-1.5 text-xs text-rose-600">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        Please enter a valid email address.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Samsung Guide */}
+                            <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/50">
+                                <p className="text-xs font-semibold text-blue-800 flex items-center gap-1.5 mb-1">
+                                    <Smartphone className="w-3.5 h-3.5" /> Samsung Tab / Android Guide
+                                </p>
+                                <ol className="text-xs text-blue-700 space-y-1 list-decimal ml-4">
+                                    <li>Open this app in <strong>Chrome browser</strong> (not Samsung Internet)</li>
+                                    <li>Tap the 3-dot menu → <strong>"Add to Home screen"</strong></li>
+                                    <li>Come back here → <strong>Enable Push Notifications</strong></li>
+                                    <li>When prompted, tap <strong>"Allow"</strong> for notifications</li>
+                                </ol>
                             </div>
                         </div>
                     )}
@@ -144,19 +391,22 @@ export default function StudentSettingsPage() {
                         </div>
                     )}
 
-                    {/* Save Button */}
-                    <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
-                        <button
-                            onClick={handleSave}
-                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${saved
-                                    ? "bg-emerald-500 text-white"
-                                    : "bg-navy text-white hover:bg-navy/90"
-                                }`}
-                        >
-                            <Save className="w-4 h-4" />
-                            {saved ? "Saved!" : "Save Changes"}
-                        </button>
-                    </div>
+                    {/* Save Button — only show for profile/security */}
+                    {(active === "profile" || active === "security") && (
+                        <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+                            <button
+                                id="save-settings-btn"
+                                onClick={handleSave}
+                                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${saved
+                                        ? "bg-emerald-500 text-white"
+                                        : "bg-navy text-white hover:bg-navy/90"
+                                    }`}
+                            >
+                                <Save className="w-4 h-4" />
+                                {saved ? "Saved!" : "Save Changes"}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
