@@ -185,6 +185,23 @@
                 { "fieldPath": "year", "order": "DESCENDING" },
                 { "fieldPath": "month", "order": "DESCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "records",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "teacherId", "order": "ASCENDING" },
+                { "fieldPath": "year", "order": "DESCENDING" },
+                { "fieldPath": "month", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "records",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "teacherId", "order": "ASCENDING" },
+                { "fieldPath": "status", "order": "ASCENDING" }
+            ]
         }
     ],
     "fieldOverrides": []
