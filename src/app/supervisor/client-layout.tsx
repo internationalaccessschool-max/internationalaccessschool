@@ -26,6 +26,7 @@ const ALL_NAV = [
     { href: "/supervisor/class-teacher", label: "Class Teachers", icon: School, section: "Management" },
     { href: "/supervisor/classes", label: "Classes", icon: ClipboardList, section: "Management" },
     { href: "/supervisor/attendance", label: "Attendance", icon: CalendarCheck, section: "Management" },
+    { href: "/supervisor/teacher-attendance", label: "Teacher Attendance", icon: CalendarCheck, section: "Management" },
     { href: "/supervisor/applications", label: "Applications", icon: Briefcase, section: "Management" },
     { href: "/supervisor/admissions", label: "Admissions", icon: UserCheck, section: "Management" },
     { href: "/supervisor/hero", label: "Hero Slider", icon: Sliders, section: "Content" },
