@@ -104,33 +104,67 @@ export default function StudentSettingsPage() {
 
     const handleToggleNotification = async () => {
         if (notifLoading) return;
-        setNotifLoading(true);
-        try {
-            if (notifSubscribed) {
-                // Unsubscribe
+
+        // ─── UNSUBSCRIBE path ────────────────────────────────────────────────
+        if (notifSubscribed) {
+            setNotifLoading(true);
+            try {
                 await unsubscribeFromNotifications();
                 setNotifSubscribed(false);
                 toast.success("Push notifications disabled.");
+            } catch (err: any) {
+                toast.error(err?.message || "Something went wrong.");
+            } finally {
+                setNotifLoading(false);
+            }
+            return;
+        }
+
+        // ─── SUBSCRIBE path ──────────────────────────────────────────────────
+        // ⚠️ CRITICAL: Notification.requestPermission() MUST be the FIRST call
+        // after a user click. Any await before this causes Chrome/Android to
+        // lose the user gesture context and silently skip the popup.
+        if (!("Notification" in window)) {
+            toast.error("This browser does not support notifications. Please use Chrome.");
+            return;
+        }
+
+        // This is synchronous-first — triggers the browser Allow/Block popup immediately
+        let permission: NotificationPermission;
+        try {
+            permission = await Notification.requestPermission();
+        } catch {
+            toast.error("Could not request notification permission.");
+            return;
+        }
+
+        if (permission === "denied") {
+            setNotifPermission("denied");
+            toast.error("Notifications blocked. See the guide below to unblock in browser settings.");
+            return;
+        }
+
+        if (permission !== "granted") {
+            // User dismissed without choosing
+            toast("Please tap 'Allow' when prompted to enable notifications.", { icon: "🔔" });
+            return;
+        }
+
+        // Permission granted — now register with OneSignal
+        setNotifPermission("granted");
+        setNotifLoading(true);
+        try {
+            const externalId = admissionNumber || user?.uid || "";
+            if (!externalId) {
+                toast.error("Could not identify your account. Please contact admin.");
+                return;
+            }
+            const result = await subscribeToNotifications(externalId);
+            if (result.success) {
+                setNotifSubscribed(true);
+                toast.success("✅ Push notifications enabled! You'll now receive alerts.");
             } else {
-                // Subscribe — need admissionNumber as external ID
-                const externalId = admissionNumber || user?.uid || "";
-                if (!externalId) {
-                    toast.error("Could not identify your account. Please contact admin.");
-                    return;
-                }
-                const result = await subscribeToNotifications(externalId);
-                if (result.success) {
-                    setNotifSubscribed(true);
-                    setNotifPermission("granted");
-                    toast.success("Push notifications enabled! You'll now receive alerts.");
-                } else if (result.reason === "permission_denied") {
-                    setNotifPermission("denied");
-                    toast.error("Notification permission blocked. Please reset it in browser settings (see guide below).");
-                } else if (result.reason === "unsupported") {
-                    toast.error("This browser does not support push notifications. Use Chrome.");
-                } else {
-                    toast.error("Failed to enable notifications. Please try again.");
-                }
+                toast.error("Subscribed to browser but OneSignal link failed. Try again.");
             }
         } catch (err: any) {
             toast.error(err?.message || "Something went wrong.");
