@@ -1,8 +1,8 @@
 "use client";
 
-import { Bell, Lock, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone } from "lucide-react";
+import { Bell, Lock, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info } from "lucide-react";
 import { useState, useEffect } from "react";
-import { subscribeToNotifications, unsubscribeFromNotifications, isSubscribed } from "@/lib/onesignal";
+import { subscribeToNotifications, unsubscribeFromNotifications, isSubscribed, getNotificationPermission } from "@/lib/onesignal";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, collectionGroup, query, where, getDocs, limit } from "firebase/firestore";
@@ -23,6 +23,7 @@ export default function StudentSettingsPage() {
 
     // --- Notification State ---
     const [notifSubscribed, setNotifSubscribed] = useState<boolean | null>(null);
+    const [notifPermission, setNotifPermission] = useState<"default" | "granted" | "denied" | "unsupported">("default");
     const [notifLoading, setNotifLoading] = useState(false);
     const [notifEmail, setNotifEmail] = useState("");
     const [notifEmailSaving, setNotifEmailSaving] = useState(false);
@@ -33,25 +34,16 @@ export default function StudentSettingsPage() {
     useEffect(() => {
         if (active !== "notifications") return;
 
+        const checkStatus = async () => {
+            const perm = getNotificationPermission();
+            setNotifPermission(perm as any);
+            const subscribed = await isSubscribed();
+            setNotifSubscribed(subscribed);
+        };
+        checkStatus();
+
         const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
         setBrowserSupported(supported);
-
-        // Notification.permission persists natively in the browser — use it as primary source.
-        // OneSignal's optedIn is async and may return false on first load while syncing.
-        if (!("Notification" in window)) { setNotifSubscribed(false); return; }
-
-        const browserPerm = Notification.permission;
-        if (browserPerm === "granted") {
-            setNotifSubscribed(true);
-            // Background: if OneSignal subscription expired, silently re-subscribe
-            if (admissionNumber) {
-                isSubscribed().then(ok => {
-                    if (!ok) subscribeToNotifications(admissionNumber).catch(() => {});
-                }).catch(() => {});
-            }
-        } else {
-            setNotifSubscribed(false);
-        }
     }, [active, admissionNumber]);
 
     // Fetch student profile data (admissionNumber + notificationEmail)
@@ -126,14 +118,18 @@ export default function StudentSettingsPage() {
                     toast.error("Could not identify your account. Please contact admin.");
                     return;
                 }
-                await subscribeToNotifications(externalId);
-                // Use browser's Notification.permission as source of truth after attempt
-                const granted = "Notification" in window && Notification.permission === "granted";
-                setNotifSubscribed(granted);
-                if (granted) {
+                const result = await subscribeToNotifications(externalId);
+                if (result.success) {
+                    setNotifSubscribed(true);
+                    setNotifPermission("granted");
                     toast.success("Push notifications enabled! You'll now receive alerts.");
+                } else if (result.reason === "permission_denied") {
+                    setNotifPermission("denied");
+                    toast.error("Notification permission blocked. Please reset it in browser settings (see guide below).");
+                } else if (result.reason === "unsupported") {
+                    toast.error("This browser does not support push notifications. Use Chrome.");
                 } else {
-                    toast.error("Failed to enable. Please tap 'Allow' when browser asks for permission.");
+                    toast.error("Failed to enable notifications. Please try again.");
                 }
             }
         } catch (err: any) {
@@ -258,6 +254,27 @@ export default function StudentSettingsPage() {
                                         <p className="text-xs text-amber-700 mt-1">
                                             Push notifications don't work on Samsung Internet Browser.
                                             Please open this app in <strong>Chrome</strong> or <strong>Edge</strong> on your Samsung Tab and enable notifications from there.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Permission BLOCKED warning */}
+                            {notifPermission === "denied" && browserSupported && (
+                                <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-50 border border-rose-200">
+                                    <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-semibold text-rose-800">Notifications Blocked</p>
+                                        <p className="text-xs text-rose-700 mt-1 mb-2">
+                                            You previously blocked notifications. To fix this:
+                                        </p>
+                                        <ol className="text-xs text-rose-700 space-y-1 list-decimal ml-4">
+                                            <li>Click the <strong>🔒 lock icon</strong> in Chrome address bar</li>
+                                            <li>Find <strong>"Notifications"</strong> → change to <strong>"Allow"</strong></li>
+                                            <li><strong>Refresh the page</strong>, then click Enable again</li>
+                                        </ol>
+                                        <p className="text-xs text-rose-600 mt-2 font-medium">
+                                            On Android: Settings → Apps → Chrome → Notifications → Allow
                                         </p>
                                     </div>
                                 </div>
