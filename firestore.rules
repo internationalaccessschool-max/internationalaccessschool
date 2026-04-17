@@ -18,6 +18,14 @@ service cloud.firestore {
       return isAuth() && getUserRole() in ['admin', 'teacher'];
     }
 
+    function isAdminOrSupervisor() {
+      return isAuth() && getUserRole() in ['admin', 'supervisor'];
+    }
+
+    function isAdmin() {
+      return isAuth() && getUserRole() == 'admin';
+    }
+
     // Users — own data only
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -128,6 +136,24 @@ service cloud.firestore {
     match /teachers/{document=**} {
       allow read: if isAuth();
       allow write: if false;
+    }
+
+    // Teacher Attendance — admin & supervisor can mark, teachers can read
+    match /teacherAttendance/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAdminOrSupervisor();
+    }
+
+    // Teacher Salary — admin writes, admin reads all, teacher reads own
+    match /teacherSalary/{year}/months/{month}/records/{recordId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.teacherId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+    // Parent doc paths (intermediate) need read for traversal
+    match /teacherSalary/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
     }
 
     // Admissions — only accountant/admin can modify
