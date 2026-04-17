@@ -3,9 +3,9 @@
   "name": "IAS Student Portal",
   "short_name": "IAS Student",
   "description": "Student portal for International Access School.",
-  "start_url": "/student/login",
+  "start_url": "/student",
   "scope": "/student/",
-  "display": "fullscreen",
+  "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1e293b",
   "orientation": "portrait",
@@ -14,10 +14,17 @@
   "icons": [
     {
       "src": "/logo-student.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo-student.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["education"]
+  "categories": ["education"],
+  "prefer_related_applications": false
 }
