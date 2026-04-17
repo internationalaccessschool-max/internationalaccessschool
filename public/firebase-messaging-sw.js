@@ -1,61 +1,10 @@
-/* eslint-disable no-undef */
-// Firebase Messaging Service Worker
-// IMPORTANT: Use same major version as client SDK (12.x)
-importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js');
-
-firebase.initializeApp({
-  apiKey: "AIzaSyBnardmc017DwxLkGSj-NopIRp94Ho41BQ",
-  authDomain: "international-access-school.firebaseapp.com",
-  projectId: "international-access-school",
-  storageBucket: "international-access-school.firebasestorage.app",
-  messagingSenderId: "891809929028",
-  appId: "1:891809929028:web:422f555289880bb021a911"
-});
-
-// CRITICAL: Force SW to activate immediately and take control of the page
-// Without these, pushManager.subscribe() fails with "no active Service Worker"
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
-});
+// Self-unregistering stub. This file used to be a Firebase Messaging SW that
+// competed with OneSignal's SW for the same scope. Now we use OneSignal only.
+// When a browser that previously registered this SW fetches the updated file,
+// the activate handler below will unregister it and release scope to OneSignal.
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message:', payload);
-  
-  const notificationTitle = payload.notification?.title || "New Notification";
-  const notificationOptions = {
-    body: payload.notification?.body || "Tap to view",
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
-    requireInteraction: true,
-    data: payload.data || {},
-    actions: [
-      { action: 'view', title: 'View Attendance' }
-    ]
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
-// Handle notification click
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const urlToOpen = '/student/attendance';
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-    })
+    self.registration.unregister().then(() => self.clients.claim())
   );
 });
