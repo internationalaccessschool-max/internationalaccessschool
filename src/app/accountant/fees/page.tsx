@@ -535,7 +535,7 @@ export default function ManageFeesPage() {
                     schoolBreakdownItems.push({ label: `Discount Applied${pct}`, amount: -schoolDiscountAmt });
                 }
 
-                fetch("/api/send-receipt", {
+                authFetch("/api/send-receipt", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -725,7 +725,7 @@ export default function ManageFeesPage() {
                     transportLineItems.push({ label: `Discount Applied${pct}`, amount: -transpDiscountAmt2 });
                 }
 
-                fetch("/api/send-receipt", {
+                authFetch("/api/send-receipt", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
