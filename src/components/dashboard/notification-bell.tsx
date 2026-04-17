@@ -211,7 +211,21 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-2">
-                            {permissionStatus !== "granted" && (
+                            {permissionStatus === "denied" && (
+                                <div className="p-3 mb-2 bg-rose-50 rounded-lg border border-rose-100">
+                                    <p className="text-xs font-semibold text-rose-700 mb-1">🔕 Notifications Blocked</p>
+                                    <p className="text-xs text-rose-600 mb-2">
+                                        Browser ne block kar diya hai. Manually allow karo:
+                                    </p>
+                                    <ol className="text-xs text-rose-700 space-y-0.5 list-decimal ml-3">
+                                        <li>Chrome address bar → 🔒 lock icon tap karo</li>
+                                        <li><strong>Site Settings</strong> → <strong>Notifications</strong></li>
+                                        <li><strong>Allow</strong> select karo</li>
+                                        <li>Page reload karo → Enable dabao</li>
+                                    </ol>
+                                </div>
+                            )}
+                            {permissionStatus !== "granted" && permissionStatus !== "denied" && (
                                 <div className="p-3 mb-2 bg-blue-50 rounded-lg border border-blue-100">
                                     <p className="text-sm text-blue-800 mb-2">
                                         Enable notifications to get instant alerts for attendance, results and fees.
