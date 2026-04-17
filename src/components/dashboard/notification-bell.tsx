@@ -137,13 +137,25 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
     const handleEnableClick = async () => {
         setIsLoading(true);
         try {
+            if (!("Notification" in window)) {
+                toast.error("This browser doesn't support notifications. Use Chrome.");
+                return;
+            }
+            // Request permission FIRST — must be early in user gesture handler
+            const permission = await Notification.requestPermission();
+            if (permission !== "granted") {
+                setPermissionStatus(permission);
+                toast.error("Please tap 'Allow' to enable notifications.");
+                return;
+            }
+            setPermissionStatus("granted");
+
             const admNo = await getAdmNo();
-            const success = await subscribeToNotifications(admNo);
-            if (success) {
-                setPermissionStatus("granted");
+            const result = await subscribeToNotifications(admNo);
+            if (result.success) {
                 toast.success("Notifications Enabled! ✅");
             } else {
-                toast.error("Failed to enable. Please allow notifications in browser settings.");
+                toast.error("Failed to link with notification service. Try again.");
             }
         } catch {
             toast.error("An error occurred");
