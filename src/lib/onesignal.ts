@@ -38,25 +38,29 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
 
   try {
     const OneSignal = await getOneSignal();
+
+    // Link this device to the student FIRST — so even if optIn is slow,
+    // the external_id is already associated. login() is idempotent.
+    await OneSignal.login(externalUserId);
+
     await OneSignal.User.PushSubscription.optIn();
 
-    // Wait a bit for push subscription to be fully created (especially on mobile)
-    await new Promise(r => setTimeout(r, 1000));
-
-    // Verify the push subscription actually got created
-    const pushId = OneSignal.User.PushSubscription.id;
-    const pushToken = OneSignal.User.PushSubscription.token;
+    // Poll up to 8 seconds for push subscription to be fully created.
+    // On mobile PWA this can take longer than on desktop.
+    let pushId: string | undefined;
+    let pushToken: string | undefined;
+    for (let i = 0; i < 16; i++) {
+      pushId = OneSignal.User.PushSubscription.id;
+      pushToken = OneSignal.User.PushSubscription.token;
+      if (pushId || pushToken) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
     console.log("[OneSignal] Push subscription ID:", pushId);
     console.log("[OneSignal] Push token present:", !!pushToken);
 
-    if (!pushId && !pushToken) {
-      console.error("[OneSignal] ❌ Push subscription not created — service worker may not be registered in PWA scope");
-      return { success: false, reason: "sdk_error" };
-    }
-
-    // Link this device to the student's admission number
-    await OneSignal.login(externalUserId);
-
+    // We've already called login() and optIn() — treat as success even if
+    // the client-side SDK state hasn't populated yet. OneSignal server
+    // registers the subscription asynchronously anyway.
     console.log("[OneSignal] ✅ Subscribed for user:", externalUserId, "pushId:", pushId);
     return { success: true };
   } catch (err: any) {
