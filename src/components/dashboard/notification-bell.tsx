@@ -81,10 +81,10 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                 // Subscription expired — silently re-subscribe
                 let admNo = user.email?.split("@")[0] || "";
                 try {
-                    const snap = await getDoc(doc(db, "users", user.uid));
+                    const snap = await getDoc(doc(db, "studentLookup", user.uid));
                     if (snap.exists()) {
                         const d = snap.data();
-                        admNo = d.admissionNumber || d.regNo || admNo;
+                        admNo = d.admissionNumber || d.rollNo || admNo;
                     }
                 } catch { }
                 if (admNo) await subscribeToNotifications(admNo);
@@ -123,10 +123,11 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
         let admNo = user?.email?.split("@")[0] || "";
         try {
             if (user) {
-                const snap = await getDoc(doc(db, "users", user.uid));
+                // studentLookup is the correct flat collection for student data
+                const snap = await getDoc(doc(db, "studentLookup", user.uid));
                 if (snap.exists()) {
                     const d = snap.data();
-                    admNo = d.admissionNumber || d.regNo || admNo;
+                    admNo = d.admissionNumber || d.rollNo || admNo;
                 }
             }
         } catch { }
