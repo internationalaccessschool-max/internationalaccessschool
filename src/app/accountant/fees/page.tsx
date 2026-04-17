@@ -116,10 +116,23 @@ export default function ManageFeesPage() {
                 getDocs(collection(db, `feeRecords/${filterYear}/months/${filterMonth}/classes/${classId}/records`))
             );
             const snapshots = await Promise.all(promises);
-            const schoolRecords = snapshots.flatMap(snap =>
-                snap.docs
-                    .map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
+            const allSchoolDocs = snapshots.flatMap(snap =>
+                snap.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() } as FeeRecord))
             );
+
+            // Deduplicate: same student may have records in multiple class folders
+            // (e.g. after class change or accidental re-generation).
+            // Keep one per studentId — prefer paid > overdue > carried_forward > pending.
+            const statusRank: Record<string, number> = { paid: 4, overdue: 3, carried_forward: 2, pending: 1 };
+            const schoolRecordMap = new Map<string, FeeRecord>();
+            for (const rec of allSchoolDocs) {
+                const uid = rec.studentId || rec.id;
+                const existing = schoolRecordMap.get(uid);
+                if (!existing || (statusRank[rec.status] ?? 0) > (statusRank[existing.status] ?? 0)) {
+                    schoolRecordMap.set(uid, rec);
+                }
+            }
+            const schoolRecords = Array.from(schoolRecordMap.values());
 
 
             // ── 2. Fetch transport fee records for the SAME month+year ────────────
