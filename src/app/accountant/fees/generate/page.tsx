@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collection, getDocs, doc, setDoc, getDoc, collectionGroup, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, getDoc, collectionGroup, updateDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PlusCircle, Loader2, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import toast from "react-hot-toast";
@@ -111,47 +111,59 @@ export default function GenerateFeesPage() {
                         return;
                     }
 
-                    // ── ARREARS LOGIC ────────────────────────────────────────────
-                    // Scan previous months (up to 12 months back) for unpaid school fee records
+                    // ── ARREARS LOGIC (class-change safe) ────────────────────────
+                    // Fetch all records for this student in targetYear and targetYear-1
+                    // using collectionGroup — works even if student changed class.
+                    // Uses existing composite index: studentId ASC + year ASC
+                    const [snapCurYear, snapPrevYear] = await Promise.all([
+                        getDocs(query(collectionGroup(db, "records"), where("studentId", "==", student.id), where("year", "==", targetYear))),
+                        getDocs(query(collectionGroup(db, "records"), where("studentId", "==", student.id), where("year", "==", targetYear - 1))),
+                    ]);
+
+                    // Map: "year_month" → { data, ref } — prefer paid/cf on duplicates
+                    const studentRecordMap = new Map<string, { data: any; ref: any }>();
+                    for (const snap of [snapCurYear, snapPrevYear]) {
+                        for (const d of snap.docs) {
+                            const data = d.data() as any;
+                            if (!data.month || !data.year) continue;
+                            const key = `${data.year}_${data.month}`;
+                            const existing = studentRecordMap.get(key);
+                            if (!existing || data.status === "paid" || data.status === "carried_forward") {
+                                studentRecordMap.set(key, { data, ref: d.ref });
+                            }
+                        }
+                    }
+
                     let previousDues = 0;
                     const carriedOverIds: string[] = [];
                     const carryForwardBatch = writeBatch(db);
                     let hasBatchOps = false;
 
-                    // We only need to check recent months — go back up to 12 months
                     for (let offset = 1; offset <= 12; offset++) {
                         let prevMonth = targetMonth - offset;
                         let prevYear = targetYear;
-                        if (prevMonth <= 0) {
-                            prevMonth += 12;
-                            prevYear -= 1;
-                        }
+                        if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
 
                         const prevRecordId = `${student.id}_${prevYear}_${String(prevMonth).padStart(2, "0")}`;
-                        const prevRef = doc(db, `feeRecords/${prevYear}/months/${prevMonth}/classes/${classId}/records`, prevRecordId);
-                        const prevSnap = await getDoc(prevRef);
+                        const entry = studentRecordMap.get(`${prevYear}_${prevMonth}`);
 
-                        if (!prevSnap.exists()) break; // no record found, stop going further back
+                        if (!entry) continue; // month was skipped — keep scanning back
 
-                        const prevData = prevSnap.data() as any;
+                        const prevData = entry.data;
 
                         if (prevData.status === "paid" || prevData.status === "carried_forward") {
-                            break; // paid or already merged — stop scanning
+                            break; // paid or already merged — stop
                         }
 
                         if (prevData.status === "pending" || prevData.status === "overdue") {
-                            // Use totalAmount if it exists (already had arrears), else amount
                             const prevTotal = prevData.totalAmount || prevData.amount || 0;
                             previousDues += prevTotal;
                             carriedOverIds.push(prevRecordId);
-
-                            // Mark old record as carried_forward
-                            carryForwardBatch.update(prevRef, { status: "carried_forward" });
+                            carryForwardBatch.update(entry.ref, { status: "carried_forward" });
                             hasBatchOps = true;
                         }
                     }
 
-                    // Commit carry-forward status updates
                     if (hasBatchOps) {
                         await carryForwardBatch.commit();
                         withArrears++;
