@@ -143,12 +143,15 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
             }
             // Request permission FIRST — must be early in user gesture handler
             const permission = await Notification.requestPermission();
-            if (permission !== "granted") {
-                setPermissionStatus(permission);
-                toast.error("Please tap 'Allow' to enable notifications.");
+            setPermissionStatus(permission);
+            if (permission === "denied") {
+                toast.error("Notifications blocked. Chrome Settings → Site Settings → Notifications → Allow karo.");
                 return;
             }
-            setPermissionStatus("granted");
+            if (permission !== "granted") {
+                toast.error("Popup mein 'Allow' dabao — phir try karo.");
+                return;
+            }
 
             const admNo = await getAdmNo();
             const result = await subscribeToNotifications(admNo);
