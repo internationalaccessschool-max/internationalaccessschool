@@ -2,18 +2,27 @@
 
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
-import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus } from "lucide-react";
+import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus, Bell, X } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+
+/** Check if running as installed PWA (standalone mode) */
+const isPWA = () =>
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true);
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
     const { user, role, loading } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
     const isLoginPage = pathname === "/student/login";
+
+    // PWA notification prompt state
+    const [showNotifBanner, setShowNotifBanner] = useState(false);
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
@@ -22,6 +31,31 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             }
         }
     }, [user, role, loading, router, isLoginPage]);
+
+    // After login, if running as PWA and notification not yet asked → show banner once
+    useEffect(() => {
+        if (!user || isLoginPage || loading) return;
+        if (!isPWA()) return; // only show in installed PWA
+
+        // Only show if permission not yet decided (default = not asked yet)
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "default") return;
+
+        // Show only once per session
+        const key = "pwa_notif_prompted";
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, "1");
+
+        // Small delay so page renders first
+        const t = setTimeout(() => setShowNotifBanner(true), 2000);
+        return () => clearTimeout(t);
+    }, [user, isLoginPage, loading]);
+
+    const handleEnableNotif = async () => {
+        setShowNotifBanner(false);
+        // Navigate to settings → notifications tab
+        router.push("/student/settings");
+    };
 
     const links = [
         {
@@ -80,7 +114,37 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                     {children}
                 </div>
             </main>
+
             <PWAInstallTrigger appName="Student Portal" themeColor="#3b82f6" icon="🎓" />
+
+            {/* PWA Notification Permission Banner — shown once after install */}
+            {showNotifBanner && (
+                <div className="fixed bottom-6 left-4 right-4 z-[9999] flex justify-center pointer-events-none">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-navy/10 p-4 flex items-center gap-3 max-w-sm w-full pointer-events-auto"
+                        style={{ boxShadow: "0 8px 32px rgba(30,58,95,0.18)" }}>
+                        <div className="w-11 h-11 rounded-xl bg-navy/10 flex items-center justify-center shrink-0">
+                            <Bell className="w-5 h-5 text-navy" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-900">Enable Notifications</p>
+                            <p className="text-xs text-gray-500">Get attendance & fee alerts</p>
+                        </div>
+                        <button
+                            id="pwa-enable-notif-btn"
+                            onClick={handleEnableNotif}
+                            className="px-4 py-2 rounded-xl bg-navy text-white text-xs font-bold shrink-0 hover:bg-navy/90 transition-colors"
+                        >
+                            Enable
+                        </button>
+                        <button
+                            onClick={() => setShowNotifBanner(false)}
+                            className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 text-lg leading-none"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
