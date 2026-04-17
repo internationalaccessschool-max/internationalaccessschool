@@ -33,17 +33,26 @@ export default function StudentSettingsPage() {
     useEffect(() => {
         if (active !== "notifications") return;
 
-        // Check if browser supports push notifications
         const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
         setBrowserSupported(supported);
 
-        // Check current OneSignal subscription status
-        const checkStatus = async () => {
-            const subscribed = await isSubscribed();
-            setNotifSubscribed(subscribed);
-        };
-        checkStatus();
-    }, [active]);
+        // Notification.permission persists natively in the browser — use it as primary source.
+        // OneSignal's optedIn is async and may return false on first load while syncing.
+        if (!("Notification" in window)) { setNotifSubscribed(false); return; }
+
+        const browserPerm = Notification.permission;
+        if (browserPerm === "granted") {
+            setNotifSubscribed(true);
+            // Background: if OneSignal subscription expired, silently re-subscribe
+            if (admissionNumber) {
+                isSubscribed().then(ok => {
+                    if (!ok) subscribeToNotifications(admissionNumber).catch(() => {});
+                }).catch(() => {});
+            }
+        } else {
+            setNotifSubscribed(false);
+        }
+    }, [active, admissionNumber]);
 
     // Fetch student profile data (admissionNumber + notificationEmail)
     useEffect(() => {
@@ -117,12 +126,14 @@ export default function StudentSettingsPage() {
                     toast.error("Could not identify your account. Please contact admin.");
                     return;
                 }
-                const ok = await subscribeToNotifications(externalId);
-                if (ok) {
-                    setNotifSubscribed(true);
+                await subscribeToNotifications(externalId);
+                // Use browser's Notification.permission as source of truth after attempt
+                const granted = "Notification" in window && Notification.permission === "granted";
+                setNotifSubscribed(granted);
+                if (granted) {
                     toast.success("Push notifications enabled! You'll now receive alerts.");
                 } else {
-                    toast.error("Failed to enable notifications. Please allow browser permission and try again.");
+                    toast.error("Failed to enable. Please tap 'Allow' when browser asks for permission.");
                 }
             }
         } catch (err: any) {
