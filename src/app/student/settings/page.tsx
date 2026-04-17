@@ -29,6 +29,8 @@ export default function StudentSettingsPage() {
     const [notifEmailSaving, setNotifEmailSaving] = useState(false);
     const [admissionNumber, setAdmissionNumber] = useState<string>("");
     const [browserSupported, setBrowserSupported] = useState(true);
+    const [isPWA, setIsPWA] = useState(false);
+    const [showAndroidGuide, setShowAndroidGuide] = useState(false);
 
     // Check browser support and current subscription status
     useEffect(() => {
@@ -44,6 +46,11 @@ export default function StudentSettingsPage() {
 
         const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
         setBrowserSupported(supported);
+
+        // Detect if running as installed PWA
+        const pwa = window.matchMedia("(display-mode: standalone)").matches ||
+            (window.navigator as any).standalone === true;
+        setIsPWA(pwa);
     }, [active, admissionNumber]);
 
     // Fetch student profile data (admissionNumber + notificationEmail)
@@ -140,13 +147,15 @@ export default function StudentSettingsPage() {
 
         if (permission === "denied") {
             setNotifPermission("denied");
-            toast.error("Notifications blocked. See the guide below to unblock in browser settings.");
+            toast.error("Notifications blocked. See the guide below to unblock.");
             return;
         }
 
         if (permission !== "granted") {
-            // User dismissed without choosing
-            toast("Please tap 'Allow' when prompted to enable notifications.", { icon: "🔔" });
+            // Popup didn't appear — likely Android OS blocked Chrome notifications
+            // This happens when Chrome app doesn't have OS notification permission
+            setShowAndroidGuide(true);
+            toast.error("Popup didn't appear. Follow the Android guide below to fix.");
             return;
         }
 
