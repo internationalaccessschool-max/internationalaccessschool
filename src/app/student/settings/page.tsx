@@ -417,18 +417,65 @@ export default function StudentSettingsPage() {
                                 )}
                             </div>
 
-                            {/* Samsung Guide */}
-                            <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/50">
-                                <p className="text-xs font-semibold text-blue-800 flex items-center gap-1.5 mb-1">
-                                    <Smartphone className="w-3.5 h-3.5" /> Samsung Tab / Android Guide
-                                </p>
-                                <ol className="text-xs text-blue-700 space-y-1 list-decimal ml-4">
-                                    <li>Open this app in <strong>Chrome browser</strong> (not Samsung Internet)</li>
-                                    <li>Tap the 3-dot menu → <strong>"Add to Home screen"</strong></li>
-                                    <li>Come back here → <strong>Enable Push Notifications</strong></li>
-                                    <li>When prompted, tap <strong>"Allow"</strong> for notifications</li>
-                                </ol>
-                            </div>
+                            {/* Android OS-level permission guide — shown when popup didn't appear */}
+                            {showAndroidGuide && (
+                                <div className="p-4 rounded-xl border-2 border-orange-300 bg-orange-50">
+                                    <p className="text-sm font-bold text-orange-800 flex items-center gap-2 mb-2">
+                                        <Smartphone className="w-4 h-4" />
+                                        Android Notification Permission Required
+                                    </p>
+                                    <p className="text-xs text-orange-700 mb-3">
+                                        The popup didn't appear because <strong>Chrome doesn't have notification permission from Android OS</strong>.
+                                        Fix it in 3 steps:
+                                    </p>
+                                    <ol className="text-xs text-orange-800 space-y-2 list-decimal ml-4 font-medium">
+                                        <li>
+                                            Open <strong>Android Settings</strong> (gear icon)
+                                        </li>
+                                        <li>
+                                            Go to <strong>Apps → Chrome → Notifications</strong>
+                                        </li>
+                                        <li>
+                                            Turn ON <strong>"Allow Notifications"</strong>
+                                        </li>
+                                    </ol>
+                                    <p className="text-xs text-orange-700 mt-3 border-t border-orange-200 pt-2">
+                                        After allowing → come back here → tap <strong>Enable</strong> again ✅
+                                    </p>
+                                    <button
+                                        onClick={() => setShowAndroidGuide(false)}
+                                        className="mt-2 text-xs text-orange-500 underline"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* PWA Setup Guide */}
+                            {!notifSubscribed && (
+                                <div className={`p-4 rounded-xl border ${isPWA ? "border-emerald-200 bg-emerald-50/50" : "border-blue-100 bg-blue-50/50"}`}>
+                                    <p className={`text-xs font-semibold flex items-center gap-1.5 mb-2 ${isPWA ? "text-emerald-800" : "text-blue-800"}`}>
+                                        <Smartphone className="w-3.5 h-3.5" />
+                                        {isPWA ? "✅ Running as installed app (PWA)" : "📱 Install as App for best experience"}
+                                    </p>
+                                    {isPWA ? (
+                                        // Already in PWA — show notification steps
+                                        <ol className="text-xs text-emerald-700 space-y-1 list-decimal ml-4">
+                                            <li>Tap <strong>Enable</strong> button above</li>
+                                            <li>Android will ask to allow notifications → tap <strong>"Allow"</strong></li>
+                                            <li>If no popup → go to <strong>Android Settings → Apps → Chrome → Notifications → Allow</strong></li>
+                                        </ol>
+                                    ) : (
+                                        // In browser — suggest install + enable
+                                        <ol className="text-xs text-blue-700 space-y-1 list-decimal ml-4">
+                                            <li>Open in <strong>Chrome</strong> (not Samsung Internet)</li>
+                                            <li>3-dot menu → <strong>"Add to Home Screen"</strong></li>
+                                            <li>Open installed app → Settings → <strong>Enable Notifications</strong></li>
+                                            <li>Tap <strong>"Allow"</strong> when Android asks</li>
+                                        </ol>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 
