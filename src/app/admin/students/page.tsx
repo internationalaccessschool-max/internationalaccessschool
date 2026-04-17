@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
     Plus, Search, Filter, Loader2, Pencil, UserCircle2,
-    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet
+    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet, Eye
 } from "lucide-react";
 import {
     collectionGroup, getDocs, doc, updateDoc
@@ -13,6 +13,7 @@ import { db } from "@/lib/firebase";
 import Link from "next/link";
 import { StudentEditModal } from "@/components/student/StudentEditModal";
 import { StudentFeeModal } from "@/components/student/StudentFeeModal";
+import { StudentProfileModal } from "@/components/student/StudentProfileModal";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
 import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
@@ -77,6 +78,7 @@ export default function AdminStudentsPage() {
     const [selectedSection, setSelectedSection] = useState("All");
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [viewFeeStudent, setViewFeeStudent] = useState<Student | null>(null);
+    const [viewProfileStudent, setViewProfileStudent] = useState<Student | null>(null);
     const [activeTab, setActiveTab] = useState<"active" | "left">("active");
 
     // Disable dialog state
@@ -400,6 +402,9 @@ export default function AdminStudentsPage() {
                                     )}
                                     <td className="px-5 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2.5 transition-opacity">
+                                            <button onClick={() => setViewProfileStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                                                <Eye className="w-3.5 h-3.5" strokeWidth={2.5} /> View
+                                            </button>
                                             <button onClick={() => setEditingStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300">
                                                 <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} /> Edit
                                             </button>
@@ -423,6 +428,14 @@ export default function AdminStudentsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Student Profile Modal */}
+            {viewProfileStudent && (
+                <StudentProfileModal
+                    student={viewProfileStudent}
+                    onClose={() => setViewProfileStudent(null)}
+                />
+            )}
 
             {/* Fee Record Modal */}
             {viewFeeStudent && (
