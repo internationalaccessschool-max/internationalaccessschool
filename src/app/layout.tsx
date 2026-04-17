@@ -46,6 +46,7 @@ export default function RootLayout({
                 safari_web_id: "web.onesignal.auto.10485988-1822-4e96-b399-29edb7cde282",
                 notifyButton: { enable: false },
                 allowLocalhostAsSecureOrigin: true,
+                serviceWorkerPath: "/OneSignalSDKWorker.js",
               });
             });
           `}
