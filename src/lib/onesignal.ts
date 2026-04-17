@@ -20,16 +20,24 @@ export const initOneSignal = () => {
   });
 };
 
+// Wait for OneSignal SDK to be ready (handles timing issues)
+const getOneSignal = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if (window.OneSignal) { resolve(window.OneSignal); return; }
+    // SDK not ready yet — queue via OneSignalDeferred
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    const timeout = setTimeout(() => reject(new Error("OneSignal SDK timeout")), 10000);
+    window.OneSignalDeferred.push((os: any) => {
+      clearTimeout(timeout);
+      resolve(os);
+    });
+  });
+};
+
 export const subscribeToNotifications = async (externalUserId: string): Promise<boolean> => {
   try {
-    const OneSignal = window.OneSignal;
-    if (!OneSignal) {
-      console.warn("[OneSignal] SDK not loaded yet");
-      return false;
-    }
-    // Opt in to push notifications
+    const OneSignal = await getOneSignal();
     await OneSignal.User.PushSubscription.optIn();
-    // Link this subscription to the user's admissionNumber for server-side targeting
     await OneSignal.login(externalUserId);
     console.log("[OneSignal] ✅ Subscribed for user:", externalUserId);
     return true;
@@ -41,8 +49,7 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
 
 export const isSubscribed = async (): Promise<boolean> => {
   try {
-    const OneSignal = window.OneSignal;
-    if (!OneSignal) return false;
+    const OneSignal = await getOneSignal();
     return OneSignal.User.PushSubscription.optedIn === true;
   } catch {
     return false;
@@ -51,8 +58,7 @@ export const isSubscribed = async (): Promise<boolean> => {
 
 export const unsubscribeFromNotifications = async (): Promise<void> => {
   try {
-    const OneSignal = window.OneSignal;
-    if (!OneSignal) return;
+    const OneSignal = await getOneSignal();
     await OneSignal.User.PushSubscription.optOut();
     await OneSignal.logout();
     console.log("[OneSignal] Unsubscribed");
