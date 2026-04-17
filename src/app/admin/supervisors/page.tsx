@@ -30,6 +30,7 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     // ── Academic ─────────────────────────────────────────────────
     { label: "Classes", path: "/supervisor/classes", section: "Academic" },
     { label: "Attendance", path: "/supervisor/attendance", section: "Academic" },
+    { label: "Teacher Attendance", path: "/supervisor/teacher-attendance", section: "Academic" },
     { label: "Homework", path: "/supervisor/homework", section: "Academic" },
     { label: "Exams", path: "/supervisor/exams", section: "Academic" },
     { label: "Class Subjects", path: "/supervisor/class-subjects", section: "Academic" },
