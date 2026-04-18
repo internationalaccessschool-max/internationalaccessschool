@@ -472,7 +472,7 @@ export default function AdminStudentsPage() {
 
                         {/* Auto-filled form fields */}
                         <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-slate-500 block mb-1">Last Class</label>
                                     <input value={disableForm.lastClass} onChange={e => setDisableForm(p => ({ ...p, lastClass: e.target.value }))}
@@ -484,7 +484,7 @@ export default function AdminStudentsPage() {
                                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-red-300" placeholder="e.g. 2025" />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-slate-500 block mb-1">Last Date</label>
                                     <input type="date" value={disableForm.lastDate} onChange={e => setDisableForm(p => ({ ...p, lastDate: e.target.value }))}
