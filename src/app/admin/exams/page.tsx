@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -181,7 +182,7 @@ export default function AdminExamsPage() {
     const handleCreateSession = async () => {
         const yr = sessionYear.trim();
         if (!yr || !/^\d{4}-\d{2}$/.test(yr) && !/^\d{4}-\d{4}$/.test(yr)) {
-            alert("Enter session in format 2026-27 or 2026-2027");
+            toast.error("Enter session in format 2026-27 or 2026-2027");
             return;
         }
         setIsSavingSession(true);
@@ -206,7 +207,7 @@ export default function AdminExamsPage() {
             setIsSessionDialogOpen(false);
             setSessionYear("");
         } catch (err: any) {
-            alert("Error creating session: " + err.message);
+            toast.error("Error creating session: " + err.message);
         } finally {
             setIsSavingSession(false);
         }
@@ -218,7 +219,7 @@ export default function AdminExamsPage() {
         try {
             await updateDoc(doc(db, "exams", exam.id!), { isActive: newActive, updatedAt: Date.now() });
         } catch (err: any) {
-            alert("Error: " + err.message);
+            toast.error("Error: " + err.message);
         }
     };
 
@@ -228,7 +229,7 @@ export default function AdminExamsPage() {
         try {
             await updateDoc(doc(db, "exams", exam.id!), { status: next, updatedAt: Date.now() });
         } catch (err: any) {
-            alert("Error: " + err.message);
+            toast.error("Error: " + err.message);
         }
     };
 
@@ -252,7 +253,7 @@ export default function AdminExamsPage() {
             });
             setConfigExam(null);
         } catch (err: any) {
-            alert("Error saving: " + err.message);
+            toast.error("Error saving: " + err.message);
         } finally {
             setIsSavingConfig(false);
         }
