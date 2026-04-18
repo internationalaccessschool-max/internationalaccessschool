@@ -179,6 +179,7 @@ export default function TransportAdminPage() {
             setFeeRecords(records);
         } catch (err) {
             console.error(err);
+            showToast("Failed to load fee records.", "error");
         } finally {
             setLoadingFees(false);
         }
