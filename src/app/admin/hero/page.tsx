@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import {
     collection, addDoc, deleteDoc, doc, onSnapshot,
@@ -59,7 +60,7 @@ export default function HeroAdminPage() {
 
     /* ── Add Slide ── */
     const handleAdd = async () => {
-        if (!form.imageUrl) return alert("Please upload an image first.");
+        if (!form.imageUrl) { toast.error("Please upload an image first."); return; }
         setAddSaving(true);
         try {
             await addDoc(collection(db, "hero-slides"), {
@@ -73,7 +74,7 @@ export default function HeroAdminPage() {
             setAdding(false);
         } catch (e) {
             console.error(e);
-            alert("Failed to add slide.");
+            toast.error("Failed to add slide.");
         }
         setAddSaving(false);
     };
@@ -104,7 +105,7 @@ export default function HeroAdminPage() {
             setTimeout(() => setSavedId(null), 2000);
             cancelEdit(id);
         } catch (e) {
-            alert("Failed to save.");
+            toast.error("Failed to save.");
         }
         setSavingId(null);
     };
