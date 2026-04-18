@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect } from "react";
@@ -206,7 +207,7 @@ export default function AdminApplicationsPage() {
                 </div>`
             );
             setSelectedApp(null);
-        } catch (err) { console.error(err); } finally { setActionLoading(null); }
+        } catch (err) { console.error(err); toast.error("Action failed. Please try again."); } finally { setActionLoading(null); }
     };
 
     const handleDelete = async (id: string) => {
