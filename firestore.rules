@@ -1,182 +1,175 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isAuth() {
-      return request.auth != null;
-    }
-    
+
+    // ─── Helpers ───────────────────────────────────────────────────────────
+    function isAuth() { return request.auth != null; }
     function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
-    
-    function isAccountantOrAdmin() {
-      return isAuth() && getUserRole() in ['admin', 'accountant'];
-    }
+    function hasRole(r) { return isAuth() && getUserRole() == r; }
+    function hasAny(roles) { return isAuth() && getUserRole() in roles; }
+    function isAdmin() { return hasRole('admin'); }
+    function isAccountantOrAdmin() { return hasAny(['admin', 'accountant']); }
+    function isTeacherOrAdmin() { return hasAny(['admin', 'teacher']); }
+    function isAdminOrSupervisor() { return hasAny(['admin', 'supervisor']); }
+    function isStaff() { return hasAny(['admin', 'teacher', 'accountant', 'supervisor']); }
 
-    function isTeacherOrAdmin() {
-      return isAuth() && getUserRole() in ['admin', 'teacher'];
-    }
-
-    function isAdminOrSupervisor() {
-      return isAuth() && getUserRole() in ['admin', 'supervisor'];
-    }
-
-    function isAdmin() {
-      return isAuth() && getUserRole() == 'admin';
-    }
-
-    // Users — own data only
+    // ─── Users (core user docs — admin, teacher, accountant, supervisor, student) ──
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Students flat collection
-    match /students/{document=**} {
       allow read: if isAuth();
-      allow write: if false;
+      // Only admin can create new user docs (seeds role). Prevents privilege escalation.
+      allow create: if isAdmin();
+      // Admin full update; self can update own profile BUT role field must stay same.
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (request.auth.uid == userId &&
+         request.resource.data.role == resource.data.role)
+      );
+      allow delete: if isAdmin();
     }
 
-    // Students profiles subcollection (collectionGroup)
+    // ─── Students: deep-nested under users/classes/.../profiles/{uid} ──────
+    // Placeholder/marker docs at intermediate levels
+    match /users/classes/{className}/{path=**} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+    // Ensure profiles (collectionGroup) readable for any auth user
     match /{path=**}/profiles/{profileId} {
       allow read: if isAuth();
+      allow write: if isStaff();
     }
 
-    // Homework — only teachers and admins can write
-    match /homework/{document=**} {
-      allow read: if isAuth();
-      allow write: if isTeacherOrAdmin();
-    }
-
-    // Attendance — only teachers and admins can write
-    match /attendance/{document=**} {
-      allow read: if isAuth();
-      allow write: if isTeacherOrAdmin();
-    }
-
-    // Fee Structure — accountant reads/writes, others read only
-    match /fees/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAccountantOrAdmin();
-    }
-
-    // Fee Records — DEEP NESTED PATH SUPPORT
-    match /feeRecords/{year}/months/{month}/classes/{classId}/records/{recordId} {
-      allow read: if isAuth();
-      allow write: if isAccountantOrAdmin();
-    }
-
-    // Notices — public read, only teachers/admin can write
-    match /notices/{document=**} {
-      allow read: if true;
-      allow write: if isTeacherOrAdmin();
-    }
-
-    // Settings
-    match /settings/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() == 'admin';
-    }
-
-    // Gallery
-    match /gallery/{document=**} {
-      allow read: if true;
-      allow write: if isAuth();
-    }
-
-    // Transport routes
-    match /transport/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() in ['admin', 'supervisor'];
-    }
-
-    // Transport buses
-    match /transport_buses/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() in ['admin', 'supervisor'];
-    }
-
-    // Student Lookup — students can read their own, admin/accountant can read all
-    match /studentLookup/{uid} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-
-    // Fee Structure
-    match /feeStructure/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAccountantOrAdmin();
-    }
-
-    // Exams and Results
-    match /exams/{document=**} {
-      allow read: if isAuth();
-      allow write: if isTeacherOrAdmin();
-    }
-    match /results/{document=**} {
-      allow read: if isAuth();
-      allow write: if isTeacherOrAdmin();
-    }
-
-    // Classes and subjects
-    match /classes/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() == 'admin';
-    }
-    match /classSubjects/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() == 'admin';
-    }
-    match /class_teachers/{document=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && getUserRole() == 'admin';
-    }
-
-    // Teachers
+    // ─── Role lookup collections ───────────────────────────────────────────
+    match /admins/{document=**}      { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /accountants/{document=**} { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /supervisors/{document=**} { allow read: if isAuth(); allow write: if isAdmin(); }
     match /teachers/{document=**} {
       allow read: if isAuth();
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
-    // Teacher Attendance — admin & supervisor can mark, teachers can read
+    // ─── Students flat collection (legacy / lookup) ───────────────────────
+    match /students/{document=**} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ─── Student Lookup (uid → class/section cache) ───────────────────────
+    match /studentLookup/{uid} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ─── Academic / Content ────────────────────────────────────────────────
+    match /homework/{document=**}         { allow read: if isAuth();  allow write: if isTeacherOrAdmin(); }
+    match /attendance/{document=**}       { allow read: if isAuth();  allow write: if isTeacherOrAdmin(); }
+    match /notices/{document=**}          { allow read: if true;      allow write: if isTeacherOrAdmin(); }
+    match /gallery/{document=**}          { allow read: if true;      allow write: if isStaff(); }
+    match /hero-slides/{document=**}      { allow read: if true;      allow write: if isAdmin(); }
+    match /academic_info/{document=**}    { allow read: if true;      allow write: if isAdmin(); }
+    match /academic_programs/{document=**}{ allow read: if true;      allow write: if isAdmin(); }
+
+    // ─── Settings ──────────────────────────────────────────────────────────
+    match /settings/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ─── Classes / Subjects / Assignments ─────────────────────────────────
+    match /classes/{document=**}         { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /classSubjects/{document=**}   { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /class_teachers/{document=**}  { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /subjects/{document=**}        { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /teacherAssignments/{document=**} {
+      allow read: if isAuth();
+      allow write: if isTeacherOrAdmin();
+    }
+
+    // ─── Exams & Results ───────────────────────────────────────────────────
+    match /exams/{document=**}   { allow read: if isAuth(); allow write: if isTeacherOrAdmin(); }
+    match /results/{document=**} { allow read: if isAuth(); allow write: if isTeacherOrAdmin(); }
+
+    // ─── Teacher Attendance ────────────────────────────────────────────────
     match /teacherAttendance/{document=**} {
       allow read: if isAuth();
       allow write: if isAdminOrSupervisor();
     }
 
-    // Teacher Salary — admin writes, admin reads all, teacher reads own
+    // ─── Teacher Salary ────────────────────────────────────────────────────
+    // Specific (record-level): teacher reads own; admin full access
     match /teacherSalary/{year}/months/{month}/records/{recordId} {
       allow read: if isAdmin() || (isAuth() && resource.data.teacherId == request.auth.uid);
-      allow create: if isAdmin();
-      allow update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
-    // Parent doc paths (intermediate) need read for traversal
+    // Parent/intermediate traversal
     match /teacherSalary/{document=**} {
       allow read: if isAuth();
       allow write: if isAdmin();
     }
 
-    // Admissions — only accountant/admin can modify
-    match /admissions/{document=**} {
+    // ─── Fee Structure ─────────────────────────────────────────────────────
+    match /fees/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+    match /feeStructure/{document=**} {
       allow read: if isAuth();
       allow write: if isAccountantOrAdmin();
     }
 
-    // Admission Requests — public can submit (from website form), admin reads/writes
+    // ─── Monthly Fee Records (nested) ──────────────────────────────────────
+    match /feeRecords/{year}/months/{month}/classes/{classId}/records/{recordId} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+    // Parent traversal + collectionGroup("records")
+    match /feeRecords/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+
+    // ─── Annual Fee Records ────────────────────────────────────────────────
+    match /annualFeeRecords/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+
+    // ─── Transport ─────────────────────────────────────────────────────────
+    match /transport/{document=**} {
+      allow read: if isAuth();
+      allow write: if hasAny(['admin', 'supervisor', 'accountant']);
+    }
+    match /transport_buses/{document=**} {
+      allow read: if isAuth();
+      allow write: if hasAny(['admin', 'supervisor', 'accountant']);
+    }
+    match /transportFeeRecords/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+
+    // ─── Admissions ────────────────────────────────────────────────────────
+    match /admissions/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAccountantOrAdmin();
+    }
+    // Public submission from website
     match /admission_requests/{document=**} {
       allow read: if isAuth();
       allow create: if true;
-      allow update, delete: if isAuth() && getUserRole() == 'admin';
+      allow update, delete: if isAdmin();
     }
 
-    // Job Applications — public can submit, admin reads/manages
+    // ─── Job Applications (public submit) ──────────────────────────────────
     match /job_applications/{document=**} {
       allow read: if isAuth();
       allow create: if true;
-      allow update, delete: if isAuth() && getUserRole() == 'admin';
+      allow update, delete: if isAdmin();
     }
 
-    // Default — deny everything else
+    // ─── Default deny ──────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
