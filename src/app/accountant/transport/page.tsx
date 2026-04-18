@@ -222,7 +222,6 @@ export default function TransportAccountantPage() {
         let created = 0, skipped = 0, withArrears = 0;
         const session = getSessionYear(feeMonth, feeYear);
 
-        // ── PROCESS IN PARALLEL BATCHES (same as school fee) ──────────────────
         const BATCH_SIZE = 10;
         try {
             for (let i = 0; i < busStudents.length; i += BATCH_SIZE) {
