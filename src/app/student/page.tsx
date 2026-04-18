@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchStudentProfile } from "@/lib/utils/studentProfile";
+import { StaggerContainer, StaggerItem } from "@/components/ui/fade-in";
 
 export default function StudentDashboard() {
     const { user, role, loading: authLoading } = useAuth();
@@ -158,19 +159,21 @@ export default function StudentDashboard() {
                 </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {stats.map((stat, i) => (
-                    <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-md transition-all">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className={`w-10 h-10 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
-                                <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+            <StaggerContainer>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {stats.map((stat, i) => (
+                        <StaggerItem key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={`w-10 h-10 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
+                                    <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+                                </div>
                             </div>
-                        </div>
-                        <div className="text-2xl font-bold text-navy">{stat.value}</div>
-                        <div className="text-xs text-gray-400 mt-1">{stat.title} — {stat.desc}</div>
-                    </div>
-                ))}
-            </div>
+                            <div className="text-2xl font-bold text-navy">{stat.value}</div>
+                            <div className="text-xs text-gray-400 mt-1">{stat.title} — {stat.desc}</div>
+                        </StaggerItem>
+                    ))}
+                </div>
+            </StaggerContainer>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <div className="flex items-center justify-between mb-6">
