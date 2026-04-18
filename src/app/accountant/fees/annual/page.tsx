@@ -38,6 +38,8 @@ interface AnnualFeeRecord {
     balance: number;
     status: AnnualFeeStatus;
     payments: AnnualPayment[];
+    previousSessionDues?: number;
+    currentSessionFee?: number;
     generatedAt?: any;
 }
 
@@ -141,17 +143,35 @@ export default function AnnualFeesPage() {
                 const studentName = [student.firstName, student.middleName, student.lastName]
                     .filter(Boolean).join(" ") || student.name || "Unknown";
 
+                // Carry forward unpaid balance from previous session (if any)
+                const prevSession = String(Number(genSession) - 1);
+                let previousSessionDues = 0;
+                try {
+                    const prevRef = doc(db, `annualFeeRecords/${prevSession}/students/${studentId}`);
+                    const prevSnap = await getDoc(prevRef);
+                    if (prevSnap.exists()) {
+                        const prevData = prevSnap.data() as AnnualFeeRecord;
+                        if (prevData.status !== "paid" && (prevData.balance || 0) > 0) {
+                            previousSessionDues = prevData.balance;
+                        }
+                    }
+                } catch { /* ignore — no prev session */ }
+
+                const totalFee = annualFeeAmt + previousSessionDues;
+
                 await setDoc(ref, {
                     studentId,
                     studentName,
                     class: classId,
                     section: student.section || "",
                     session: genSession,
-                    totalFee: annualFeeAmt,
+                    totalFee,
                     amountPaid: 0,
-                    balance: annualFeeAmt,
+                    balance: totalFee,
                     status: "unpaid" as AnnualFeeStatus,
                     payments: [],
+                    previousSessionDues,
+                    currentSessionFee: annualFeeAmt,
                     generatedAt: Timestamp.now(),
                 });
                 created++;
