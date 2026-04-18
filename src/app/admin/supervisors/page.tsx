@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import {
     collection, doc, getDocs, setDoc, deleteDoc, updateDoc, getDoc,
@@ -84,11 +85,11 @@ export default function AdminSupervisorsPage() {
 
     const handleCreate = async () => {
         if (!newEmail.trim() || !newName.trim() || !newPassword.trim()) {
-            alert("Please fill all fields.");
+            toast.error("Please fill all fields.");
             return;
         }
         if (newPassword.length < 6) {
-            alert("Password must be at least 6 characters.");
+            toast.error("Password must be at least 6 characters.");
             return;
         }
         setIsCreating(true);
@@ -119,13 +120,13 @@ export default function AdminSupervisorsPage() {
                 createdAt: Date.now(),
             });
 
-            alert(`Supervisor "${newName}" created! You can now assign permissions.`);
+            toast.success(`Supervisor "${newName}" created! You can now assign permissions.`);
             setIsCreateOpen(false);
             setNewEmail(""); setNewName(""); setNewPassword("");
             fetchSupervisors();
         } catch (err: any) {
             console.error("Create error:", err);
-            alert("Error: " + err.message);
+            toast.error("Error: " + err.message);
         } finally {
             setIsCreating(false);
         }
@@ -162,11 +163,11 @@ export default function AdminSupervisorsPage() {
                 allowedPages: selectedPages,
                 updatedAt: Date.now(),
             });
-            alert("Permissions saved!");
+            toast.success("Permissions saved!");
             setIsPermOpen(false);
             fetchSupervisors();
         } catch (err: any) {
-            alert("Error: " + err.message);
+            toast.error("Error: " + err.message);
         } finally {
             setIsSavingPerm(false);
         }
@@ -190,7 +191,7 @@ export default function AdminSupervisorsPage() {
             await deleteDoc(doc(db, "users", sup.uid));
             fetchSupervisors();
         } catch (err: any) {
-            alert("Error deleting supervisor: " + err.message);
+            toast.error("Error deleting supervisor: " + err.message);
         }
     };
 
