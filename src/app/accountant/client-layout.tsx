@@ -3,7 +3,7 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
-    LayoutDashboard, Banknote, Settings2, ClipboardList, PlusCircle, Loader2, Bus, CreditCard, CalendarClock
+    LayoutDashboard, Banknote, Settings2, ClipboardList, PlusCircle, Loader2, Bus, CreditCard, CalendarClock, BarChart3
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
@@ -34,6 +34,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
         {
             section: "Fee Management",
             items: [
+                { href: "/accountant/fees/overview", label: "Fee Overview", icon: BarChart3 },
                 { href: "/accountant/fees", label: "Manage Fees", icon: Banknote },
                 { href: "/accountant/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
                 { href: "/accountant/fees/annual", label: "Annual Fees (Session)", icon: CalendarClock },
