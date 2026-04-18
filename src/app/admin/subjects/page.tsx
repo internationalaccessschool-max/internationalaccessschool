@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 import { Plus, Trash2, Save, BookOpen, Loader2, ChevronDown } from "lucide-react";
 
-const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
 const PRESET_SUBJECTS = [
     "Mathematics", "Physics", "Chemistry", "Biology", "English", "Hindi",
@@ -128,7 +128,7 @@ export default function ManageSubjectsPage() {
                                 className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all text-sm ${selectedClass === cls
                                     ? "bg-navy text-white font-semibold"
                                     : "hover:bg-gray-50 text-gray-600"}`}>
-                                <span>Class {cls}</span>
+                                <span>{cls}</span>
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${selectedClass === cls ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
                                     {allClassData[cls]?.length || 0} subjects
                                 </span>
@@ -141,7 +141,7 @@ export default function ManageSubjectsPage() {
                 <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="font-bold text-navy text-lg">Class {selectedClass} — Subjects</h2>
+                            <h2 className="font-bold text-navy text-lg">{selectedClass} — Subjects</h2>
                             <p className="text-xs text-gray-400 mt-0.5">{subjects.length} subjects configured</p>
                         </div>
                         <button onClick={saveSubjects} disabled={saving}
