@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect } from "react";
@@ -118,7 +119,7 @@ export default function AdminAccountantsPage() {
             setDeleting(null);
             fetchAccountants();
         } catch (err: any) {
-            alert("Error deleting accountant: " + err.message);
+            toast.error("Error deleting accountant: " + err.message);
         }
     };
 
