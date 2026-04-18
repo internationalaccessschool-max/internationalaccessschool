@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
@@ -166,11 +167,11 @@ export default function TeacherHomeworkPage() {
 
     const handlePost = async () => {
         if (!formData.className || !formData.subject || !formData.title || !formData.dueDate) {
-            alert("Please fill in all required fields.");
+            toast.error("Please fill in all required fields.");
             return;
         }
         if (formData.sections.length === 0) {
-            alert("Please select at least one section.");
+            toast.error("Please select at least one section.");
             return;
         }
         setSaving(true);
@@ -199,7 +200,7 @@ export default function TeacherHomeworkPage() {
             }, 2000);
         } catch (error) {
             console.error("Error posting homework:", error);
-            alert("Failed to post assignment. Please try again.");
+            toast.error("Failed to post assignment. Please try again.");
         } finally {
             setSaving(false);
         }
