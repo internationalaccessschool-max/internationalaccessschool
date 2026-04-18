@@ -17,42 +17,39 @@ import {
 import { ShieldCheck, Plus, Trash2, Settings2, Loader2, CheckSquare, Square } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
-// All pages a supervisor can potentially access — must match actual /supervisor/* routes
+// All pages a supervisor can potentially access — sections match /supervisor sidebar exactly
 const ALL_PAGES: { label: string; path: string; section: string }[] = [
     // ── Overview ─────────────────────────────────────────────────
     { label: "Dashboard", path: "/supervisor", section: "Overview" },
 
-    // ── People ───────────────────────────────────────────────────
-    { label: "Students", path: "/supervisor/students", section: "People" },
-    { label: "Teachers", path: "/supervisor/teachers", section: "People" },
-    { label: "Class Teachers", path: "/supervisor/class-teacher", section: "People" },
-
-    // ── Academic ─────────────────────────────────────────────────
-    { label: "Classes", path: "/supervisor/classes", section: "Academic" },
-    { label: "Attendance", path: "/supervisor/attendance", section: "Academic" },
-    { label: "Teacher Attendance", path: "/supervisor/teacher-attendance", section: "Academic" },
-    { label: "Homework", path: "/supervisor/homework", section: "Academic" },
-    { label: "Exams", path: "/supervisor/exams", section: "Academic" },
-    { label: "Class Subjects", path: "/supervisor/class-subjects", section: "Academic" },
-    { label: "Results", path: "/supervisor/results", section: "Academic" },
-    { label: "Marks Entry", path: "/supervisor/results/entry", section: "Academic" },
+    // ── Management ───────────────────────────────────────────────
+    { label: "Students", path: "/supervisor/students", section: "Management" },
+    { label: "Teachers", path: "/supervisor/teachers", section: "Management" },
+    { label: "Class Teachers", path: "/supervisor/class-teacher", section: "Management" },
+    { label: "Classes", path: "/supervisor/classes", section: "Management" },
+    { label: "Attendance", path: "/supervisor/attendance", section: "Management" },
+    { label: "Teacher Attendance", path: "/supervisor/teacher-attendance", section: "Management" },
+    { label: "Applications", path: "/supervisor/applications", section: "Management" },
+    { label: "Admissions", path: "/supervisor/admissions", section: "Management" },
 
     // ── Finance ───────────────────────────────────────────────────
     { label: "Fee Overview", path: "/supervisor/fees", section: "Finance" },
     { label: "Transport", path: "/supervisor/transport", section: "Finance" },
 
-    // ── Admissions ───────────────────────────────────────────────
-    { label: "Applications", path: "/supervisor/applications", section: "Admissions" },
-    { label: "Admissions", path: "/supervisor/admissions", section: "Admissions" },
-
     // ── Content ──────────────────────────────────────────────────
     { label: "Hero Slider", path: "/supervisor/hero", section: "Content" },
     { label: "Academics Page", path: "/supervisor/academics", section: "Content" },
+    { label: "Homework", path: "/supervisor/homework", section: "Content" },
     { label: "Notices", path: "/supervisor/notices", section: "Content" },
     { label: "Gallery", path: "/supervisor/gallery", section: "Content" },
+
+    // ── Examinations ─────────────────────────────────────────────
+    { label: "Exams", path: "/supervisor/exams", section: "Examinations" },
+    { label: "Class Subjects", path: "/supervisor/class-subjects", section: "Examinations" },
+    { label: "Marks Entry", path: "/supervisor/results/entry", section: "Examinations" },
 ];
 
-const SECTIONS = ["Overview", "People", "Academic", "Finance", "Admissions", "Content"];
+const SECTIONS = ["Overview", "Management", "Finance", "Content", "Examinations"];
 
 
 export default function AdminSupervisorsPage() {
