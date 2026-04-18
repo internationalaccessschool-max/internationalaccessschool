@@ -281,8 +281,7 @@ export default function TransportAccountantPage() {
                         if (!prevSnap.exists()) continue;
 
                         const prevData = prevSnap.data() as any;
-                        if (prevData.status === "paid") continue;
-                        if (prevData.status === "carried_forward") break;
+                        if (prevData.status === "paid" || prevData.status === "carried_forward") break;
 
                         if (prevData.status === "pending" || prevData.status === "overdue") {
                             const prevTotal = prevData.totalAmount || prevData.amount || 0;
