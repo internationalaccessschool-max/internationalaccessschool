@@ -197,7 +197,7 @@ export default function AdmissionsPage() {
                                     <FormSelect label="Enrollment For Class *" register={register("enrollmentClass")} error={errors.enrollmentClass}>
                                         <option value="">Select Class</option>
                                         {["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"].map(c => (
-                                            <option key={c} value={c}>{c === "NUR" ? "Nursery (NUR)" : c === "LKG" ? "Lower KG (LKG)" : c === "UKG" ? "Upper KG (UKG)" : `Class ${c}`}</option>
+                                            <option key={c} value={c}>{c}</option>
                                         ))}
                                     </FormSelect>
 
