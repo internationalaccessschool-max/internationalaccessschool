@@ -402,7 +402,7 @@ export default function AccountantDashboard() {
                                         <p className="text-xs text-gray-400">{schoolRecords.length} students</p>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-3 gap-4 mb-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                                         <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-2" />
                                         <div className="text-xl font-bold text-emerald-700">₹{schoolCollected.toLocaleString()}</div>
@@ -449,7 +449,7 @@ export default function AccountantDashboard() {
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="grid grid-cols-3 gap-4 mb-5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                                                 <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-2" />
                                                 <div className="text-xl font-bold text-emerald-700">₹{transportCollected.toLocaleString()}</div>
@@ -477,7 +477,7 @@ export default function AccountantDashboard() {
                             </div>
 
                             {/* Quick Links */}
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {[
                                     { label: "Fee Structure", href: "/accountant/fees/structure", desc: "Set monthly amounts per class" },
                                     { label: "Generate Monthly Fees", href: "/accountant/fees/generate", desc: "Create records for a month" },
@@ -501,7 +501,7 @@ export default function AccountantDashboard() {
             {/* ════════════ TODAY'S ACTIVITY TAB ════════════ */}
             {activeTab === "today" && (
                 <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
                             <TrendingUp className="w-5 h-5 text-emerald-600 mb-3" />
                             <div className="text-2xl font-bold text-emerald-700">
@@ -748,7 +748,7 @@ export default function AccountantDashboard() {
                                                                 {statusCfg.label}
                                                             </span>
                                                         </div>
-                                                        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
+                                                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:text-xs text-gray-500">
                                                             <span>Base Fee: <strong className="text-navy">₹{(r.amount || 0).toLocaleString()}</strong></span>
                                                             {(r.previousDues || 0) > 0 && (
                                                                 <span>Arrears: <strong className="text-rose-600">+₹{(r.previousDues || 0).toLocaleString()}</strong></span>
