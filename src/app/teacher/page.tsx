@@ -8,9 +8,11 @@ import {
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, query, where, orderBy, limit, getCountFromServer } from "firebase/firestore";
+import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { StaggerContainer, StaggerItem } from "@/components/ui/fade-in";
 import { getTimeAgo } from "@/lib/utils/date";
 
 const quickActions = [
@@ -157,20 +159,21 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Stat Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {stats.map((stat) => (
-                    <div key={stat.title} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 card-hover">
-                        <div className="flex items-start justify-between mb-4">
-                            <div className={`w-10 h-10 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
-                                <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+            <StaggerContainer>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {stats.map((stat) => (
+                        <StaggerItem key={stat.title} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 card-hover">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={`w-10 h-10 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
+                                    <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+                                </div>
                             </div>
-                        </div>
-                        <div className="text-2xl font-bold text-navy">{stat.value}</div>
-                        <div className="text-xs text-gray-400 mt-0.5 font-medium">{stat.title}</div>
-                        <div className="text-xs text-gray-300 mt-0.5">{stat.change}</div>
-                    </div>
-                ))}
-            </div>
+                            <h3 className="text-2xl font-bold text-navy">{stat.value}</h3>
+                            <p className="text-xs text-gray-400 mt-1">{stat.title} <span className="hidden sm:inline">— {stat.change}</span></p>
+                        </StaggerItem>
+                    ))}
+                </div>
+            </StaggerContainer>
 
             <div className="grid lg:grid-cols-5 gap-6">
                 {/* Recent Homework */}
