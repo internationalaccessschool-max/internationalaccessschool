@@ -676,7 +676,7 @@ ${resultRows ? `
                                 <>
                                     {/* Fee summary stats */}
                                     {feeRecords.some(r => r.status !== "not_generated") && (
-                                        <div className="grid grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                             {[
                                                 { label: "Paid", value: feeRecords.filter(r => r.status === "paid").length, color: "emerald" },
                                                 { label: "Pending/Overdue", value: feeRecords.filter(r => r.status !== "paid" && r.status !== "not_generated").length, color: "amber" },
@@ -829,7 +829,7 @@ ${resultRows ? `
                                     <p className="text-slate-400 text-xs">Upload documents from the student edit panel</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {docFields.map((doc, i) => (
                                         <a
                                             key={i}
