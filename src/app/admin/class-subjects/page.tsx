@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import {
     doc, getDoc, setDoc,
@@ -100,10 +101,10 @@ export default function ClassSubjectMappingPage() {
     }, [selectedClass]);
 
     const handleAddSubject = () => {
-        if (!newName.trim()) { alert("Enter a subject name."); return; }
+        if (!newName.trim()) { toast.error("Enter a subject name."); return; }
         const id = newName.trim().toLowerCase().replace(/\s+/g, "_");
         if (subjects.find(s => s.id === id)) {
-            alert("A subject with this name already exists for this class.");
+            toast.error("A subject with this name already exists for this class.");
             return;
         }
         setSubjects(prev => [...prev, { id, name: newName.trim(), type: newType, maxMarks: newMaxMarks }]);
@@ -117,7 +118,7 @@ export default function ClassSubjectMappingPage() {
     };
 
     const handleSave = async () => {
-        if (!selectedClass) { alert("Select a class first."); return; }
+        if (!selectedClass) { toast.error("Select a class first."); return; }
         setIsSaving(true);
         try {
             await setDoc(doc(db, "classSubjects", selectedClass), {
@@ -125,10 +126,10 @@ export default function ClassSubjectMappingPage() {
                 subjects,
                 updatedAt: Date.now(),
             });
-            alert(`Subjects saved for ${selectedClass}!`);
+            toast.success(`Subjects saved for ${selectedClass}!`);
         } catch (err: any) {
             console.error("Save error:", err);
-            alert("Failed to save: " + err.message);
+            toast.error("Failed to save: " + err.message);
         } finally {
             setIsSaving(false);
         }
