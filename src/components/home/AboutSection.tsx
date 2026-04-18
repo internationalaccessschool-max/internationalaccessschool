@@ -35,7 +35,7 @@ export function AboutSection() {
                             Our mission is to foster a lifelong love of learning and to develop leaders who make a positive impact on the world.
                         </p>
 
-                        <div className="grid grid-cols-3 gap-6 mb-10">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-10">
                             {stats.map((stat, idx) => (
                                 <div key={idx} className="flex flex-col items-center sm:items-start group">
                                     <div className="w-12 h-12 rounded-xl bg-navy/5 flex items-center justify-center text-navy group-hover:bg-navy group-hover:text-white transition-all duration-300 mb-3">
@@ -62,10 +62,10 @@ export function AboutSection() {
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.8 }}
-                        className="relative grid grid-cols-2 gap-4 h-[600px]"
+                        className="relative grid grid-cols-2 gap-2 sm:gap-4 h-[400px] sm:h-[600px] mt-10 lg:mt-0"
                     >
                         <div className="flex flex-col gap-4 mt-12">
-                            <div className="relative h-[280px] rounded-3xl overflow-hidden shadow-xl group">
+                            <div className="relative h-[200px] sm:h-[280px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop"
                                     alt="Students studying"
@@ -73,7 +73,7 @@ export function AboutSection() {
                                     className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
-                            <div className="relative h-[220px] rounded-3xl overflow-hidden shadow-xl group">
+                            <div className="relative h-[150px] sm:h-[220px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2132&auto=format&fit=crop"
                                     alt="School building"
@@ -83,7 +83,7 @@ export function AboutSection() {
                             </div>
                         </div>
                         <div className="flex flex-col gap-4 mb-12">
-                            <div className="relative h-[220px] rounded-3xl overflow-hidden shadow-xl group">
+                            <div className="relative h-[150px] sm:h-[220px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1544531586-fde5298cdd40?q=80&w=2070&auto=format&fit=crop"
                                     alt="Classroom"
@@ -91,7 +91,7 @@ export function AboutSection() {
                                     className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                             </div>
-                            <div className="relative h-[280px] rounded-3xl overflow-hidden shadow-xl group">
+                            <div className="relative h-[200px] sm:h-[280px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl group">
                                 <Image
                                     src="https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?q=80&w=2070&auto=format&fit=crop"
                                     alt="Library"
