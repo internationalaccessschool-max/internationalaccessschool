@@ -430,7 +430,6 @@ export default function TransferCertificatePage() {
               {field("bookNo", "Book No.")}
               {field("slNo", "Sl. No.")}
             </div>
-            {field("udise", "UDISE No.")}
             {field("studentName", "Student Name")}
             {field("pen", "PEN (Permanent Education Number)")}
             {field("motherName", "Mother's Name")}
