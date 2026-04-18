@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -78,10 +79,10 @@ export default function AdminSettingsPage() {
         setSaving(true);
         try {
             await setDoc(doc(db, "settings", "global"), settings);
-            alert("Settings saved successfully!");
+            toast.success("Settings saved successfully!");
         } catch (error) {
             console.error("Error saving settings:", error);
-            alert("Failed to save settings.");
+            toast.error("Failed to save settings.");
         } finally {
             setSaving(false);
         }
