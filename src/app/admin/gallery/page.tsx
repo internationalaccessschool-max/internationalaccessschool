@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -44,7 +45,7 @@ export default function GalleryAdminPage() {
             });
         } catch (error) {
             console.error("Error adding image:", error);
-            alert("Failed to save image reference");
+            toast.error("Failed to save image reference");
         }
     };
 
@@ -57,7 +58,7 @@ export default function GalleryAdminPage() {
     const handleAddYoutube = async () => {
         const videoId = extractYouTubeId(ytUrl);
         if (!videoId) {
-            alert("Invalid YouTube URL. Please enter a valid link.");
+            toast.error("Invalid YouTube URL. Please enter a valid link.");
             return;
         }
 
@@ -75,7 +76,7 @@ export default function GalleryAdminPage() {
             setYtUrl("");
         } catch (error) {
             console.error("Error adding youtube video:", error);
-            alert("Failed to save YouTube video");
+            toast.error("Failed to save YouTube video");
         } finally {
             setAddingYt(false);
         }
@@ -98,7 +99,7 @@ export default function GalleryAdminPage() {
             await updateDoc(doc(db, "gallery", id), { caption: editCaption.trim() });
             setEditingId(null);
         } catch (err) {
-            alert("Failed to update caption");
+            toast.error("Failed to update caption");
         } finally {
             setSavingId(null);
         }
