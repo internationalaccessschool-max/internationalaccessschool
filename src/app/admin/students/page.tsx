@@ -114,7 +114,7 @@ export default function AdminStudentsPage() {
                 const seen = new Set<string>();
                 data = data.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
                 setStudents(data);
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error(err); toast.error("Failed to load students."); }
             finally { setIsLoading(false); }
         };
         fetchStudents();
