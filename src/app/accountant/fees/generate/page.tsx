@@ -77,24 +77,21 @@ export default function GenerateFeesPage() {
                     const feeData = feeStructMap[classId];
                     if (!feeData) { skipped++; return; }
 
-                    const amount = feeData.monthly || 0;
                     const dueDay = feeData.dueDay || 10;
 
                     const breakdown = {
                         tuitionFee: feeData.tuitionFee || 0,
-                        // annualFee is NOT included in monthly generation.
-                        // It is managed separately via the Annual Fees page (once per session).
-                        registrationFee: feeData.registrationFee || 0,
-                        sportsFee: feeData.sportsFee || 0,
-                        miscFee: feeData.miscFee || 0,
+                        // annualFee → Annual Fees page (once per session)
+                        // admissionFee → collected at admission only
+                        // registrationFee, sportsFee, miscFee → not part of monthly bill
                     };
 
-                    // Monthly amount = tuition + registration + sports + misc (NO annual fee)
-                    const monthlyAmount =
-                        breakdown.tuitionFee +
-                        breakdown.registrationFee +
-                        breakdown.sportsFee +
-                        breakdown.miscFee;
+                    // Monthly = tuition fee only.
+                    // Fall back to feeData.monthly if tuitionFee is 0
+                    // (handles fee structures saved before breakdown fields were added).
+                    const monthlyAmount = breakdown.tuitionFee > 0
+                        ? breakdown.tuitionFee
+                        : (feeData.monthly || 0);
 
                     if (monthlyAmount === 0) { skipped++; return; }
 
@@ -186,7 +183,7 @@ export default function GenerateFeesPage() {
                         section: student.section || "",
                         parentEmail: student.notificationEmail || student.parentEmail || student.fatherEmail || student.email || "",
                         parentPhone: student.mobileNo || student.fatherMobile || student.phone || "",
-                        amount: monthlyAmount,       // current month fee (tuition+registration+sports+misc)
+                        amount: monthlyAmount,       // current month fee
                         previousDues,               // sum of unpaid previous months
                         totalAmount: monthlyAmount + previousDues, // what the parent must pay
                         arrearsDetails: carriedOverIds, // for reference
