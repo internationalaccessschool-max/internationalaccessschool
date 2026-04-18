@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect, useMemo } from "react";
 import { collection, doc, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
@@ -376,7 +377,7 @@ export default function AdminAttendancePage() {
             setTimeout(() => setSaved(false), 3000);
         } catch (err) {
             console.error("Error saving attendance:", err);
-            alert("Failed to save attendance. Please try again.");
+            toast.error("Failed to save attendance. Please try again.");
         } finally {
             setSaving(false);
         }
