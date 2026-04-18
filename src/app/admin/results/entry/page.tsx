@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect, useCallback } from "react";
 import {
     collection, getDocs, doc, getDoc, setDoc,
@@ -387,7 +388,7 @@ export default function AdminBulkMarksEntryPage() {
             setSaveSuccess(activeTab);
             setTimeout(() => setSaveSuccess(null), 3000);
         } catch (err: any) {
-            alert("Error saving marks: " + err.message);
+            toast.error("Error saving marks: " + err.message);
         } finally {
             setIsSaving(false);
         }
