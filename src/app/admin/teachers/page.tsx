@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import {
     Plus, Search, X, Loader2, User, Mail,
@@ -280,7 +281,7 @@ export default function AdminTeachersPage() {
             await deleteDoc(doc(db, "users", id));
         } catch (error: any) {
             console.error("Error deleting teacher:", error);
-            alert("Error deleting teacher: " + error.message);
+            toast.error("Error deleting teacher: " + error.message);
         }
     };
 
