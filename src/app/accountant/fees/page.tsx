@@ -405,37 +405,47 @@ export default function ManageFeesPage() {
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
-                // ── BACKWARD CASCADE (Auto-Mark Arrears as Paid) ──────────────
+                // ── FETCH ALL STUDENT RECORDS (class-change safe) ──────────────
+                // Single collectionGroup query finds records regardless of which
+                // class folder they live in — this matters after promotion when
+                // old class records (e.g. 6A) and new class records (7A) coexist.
+                let allStudentRecords: { ref: any; data: any; id: string }[] = [];
                 try {
-                    for (let offset = 1; offset <= 12; offset++) {
-                        let prevMonth = record.month - offset;
-                        let prevYear = record.year;
-                        while (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
-                        
-                        const pastColl = collection(db, `feeRecords/${prevYear}/months/${prevMonth}/classes/${record.class}/records`);
-                        const studentQ = query(pastColl, where("studentId", "==", studentUid));
-                        const pastSnaps = await getDocs(studentQ);
-                        
-                        for (const pastDoc of pastSnaps.docs) {
-                            const pastData = pastDoc.data() as any;
-                            if (pastData.status === "carried_forward") {
-                                await updateDoc(pastDoc.ref, {
-                                    status: "paid",
-                                    paidOn: new Date(),
-                                    receiptNo,
-                                    paymentMode,
-                                    markedBy: user?.uid || "",
-                                    totalAmountPaid: pastData.amount || 0,
-                                    note: `Auto-paid via consolidated bill ${receiptNo}`
-                                });
-                            }
-                        }
+                    const cgSnap = await getDocs(
+                        query(collectionGroup(db, "records"), where("studentId", "==", studentUid))
+                    );
+                    allStudentRecords = cgSnap.docs.map(d => ({ ref: d.ref, data: d.data() as any, id: d.id }));
+                } catch (e) {
+                    console.error("collectionGroup fetch failed, falling back to class-path scan:", e);
+                }
+
+                // ── BACKWARD CASCADE (Auto-Mark Arrears as Paid) ──────────────
+                // Marks every older `carried_forward` record of this student as paid,
+                // even if they belong to a different class path (promotion case).
+                try {
+                    const olderCF = allStudentRecords.filter(r => {
+                        if (r.data.status !== "carried_forward") return false;
+                        if (r.data.year < record.year) return true;
+                        if (r.data.year === record.year && r.data.month < record.month) return true;
+                        return false;
+                    });
+
+                    for (const past of olderCF) {
+                        await updateDoc(past.ref, {
+                            status: "paid",
+                            paidOn: new Date(),
+                            receiptNo,
+                            paymentMode,
+                            markedBy: user?.uid || "",
+                            totalAmountPaid: past.data.amount || 0,
+                            note: `Auto-paid via consolidated bill ${receiptNo}`
+                        });
                     }
                 } catch (e) {
                     console.error("School backward cascade failed", e);
                 }
 
-                // ── UNIFIED CASCADE DEDUCTION ─────────────────────────────────
+                // ── UNIFIED CASCADE DEDUCTION (Forward) ───────────────────────
                 // When any month is paid, scan FORWARD through the chain:
                 //   1. For each intermediate carried_forward month → clear its stale
                 //      previousDues so it shows only its own base fee (not stale total).
@@ -444,26 +454,20 @@ export default function ManageFeesPage() {
                 // Example: April paid → May(CF, fix dues→0) → June(pending, deduct) ✅
                 try {
                     const paidAmount = record.totalAmount || record.amount;
+                    const newerSorted = allStudentRecords
+                        .filter(r => {
+                            if (r.data.year > record.year) return true;
+                            if (r.data.year === record.year && r.data.month > record.month) return true;
+                            return false;
+                        })
+                        .sort((a, b) => (a.data.year - b.data.year) || (a.data.month - b.data.month));
 
-                    for (let offset = 1; offset <= 12; offset++) {
-                        let nextMonth = record.month + offset;
-                        let nextYear = record.year;
-                        while (nextMonth > 12) { nextMonth -= 12; nextYear += 1; }
-
-                        const nextRecordId = `${studentUid}_${nextYear}_${String(nextMonth).padStart(2, "0")}`;
-                        const nextRef = doc(db, `feeRecords/${nextYear}/months/${nextMonth}/classes/${record.class}/records`, nextRecordId);
-                        const nextSnap = await getDoc(nextRef);
-
-                        if (!nextSnap.exists()) break; // chain ends — no further records
-                        const nextData = nextSnap.data() as any;
-
+                    for (const next of newerSorted) {
+                        const nextData = next.data;
                         if (nextData.status === "paid") break; // already paid — stop
 
                         if (nextData.status === "carried_forward") {
                             // ── Fix stale CF record ──────────────────────────────────
-                            // This month's dues were absorbed into a later month.
-                            // Its previousDues reference the now-paid record — clear them
-                            // so the CF record accurately shows only its own base fee.
                             const oldPrev = nextData.previousDues || 0;
                             if (oldPrev > 0) {
                                 const newPrev = Math.max(0, oldPrev - paidAmount);
@@ -471,13 +475,13 @@ export default function ManageFeesPage() {
                                 const cfArrears: string[] = nextData.arrearsDetails || [];
                                 const newCfArrears = cfArrears.filter((id: string) => id !== record.id);
                                 try {
-                                    await updateDoc(nextRef, {
+                                    await updateDoc(next.ref, {
                                         previousDues: newPrev,
                                         totalAmount: newTotal,
                                         arrearsDetails: newCfArrears,
                                     });
                                     setRecords(prev => prev.map(r =>
-                                        r.id === nextRecordId
+                                        r.id === next.id
                                             ? { ...r, previousDues: newPrev, totalAmount: newTotal }
                                             : r
                                     ));
@@ -493,13 +497,13 @@ export default function ManageFeesPage() {
                             const nextArrears: string[] = nextData.arrearsDetails || [];
                             const newArrearsDetails = nextArrears.filter((id: string) => id !== record.id);
 
-                            await updateDoc(nextRef, {
+                            await updateDoc(next.ref, {
                                 previousDues: newPrevDues,
                                 totalAmount: newTotal,
                                 arrearsDetails: newArrearsDetails,
                             });
                             setRecords(prev => prev.map(r =>
-                                r.id === nextRecordId
+                                r.id === next.id
                                     ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
                                     : r
                             ));
