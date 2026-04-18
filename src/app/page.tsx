@@ -13,22 +13,53 @@ import { AdmissionsSection } from "@/components/home/AdmissionsSection";
 import { CareerSection } from "@/components/home/CareerSection";
 import { ContactSection } from "@/components/home/ContactSection";
 
+import { FadeIn } from "@/components/ui/fade-in";
+
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-off-white overflow-x-hidden">
       <Navbar />
 
       <main className="flex-1">
-        <HeroSlider />
-        <QuickStats />
-        <AboutSection />
-        <AcademicsSection />
-        <AdmissionsSection />
-        <FeaturesSection />
-        <GallerySection />
-        <TestimonialsSection />
-        <CareerSection />
-        <ContactSection />
+        <FadeIn direction="none">
+          <HeroSlider />
+        </FadeIn>
+        
+        <FadeIn delay={0.1}>
+          <QuickStats />
+        </FadeIn>
+        
+        <FadeIn>
+          <AboutSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <AcademicsSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <AdmissionsSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <FeaturesSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <GallerySection />
+        </FadeIn>
+        
+        <FadeIn>
+          <TestimonialsSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <CareerSection />
+        </FadeIn>
+        
+        <FadeIn>
+          <ContactSection />
+        </FadeIn>
       </main>
 
       <Footer />
