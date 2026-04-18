@@ -153,7 +153,7 @@ export default function HeroAdminPage() {
                             <X className="w-5 h-5" />
                         </button>
                     </div>
-                    <div className="p-6 grid md:grid-cols-2 gap-6">
+                    <div className="p-4 sm:p-6 grid md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <FormInput label="Title" value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} placeholder="e.g. Shaping Leaders of Tomorrow" />
                             <FormInput label="Subtitle" value={form.subtitle} onChange={v => setForm(f => ({ ...f, subtitle: v }))} placeholder="e.g. World-class education..." textarea />
@@ -227,15 +227,15 @@ export default function HeroAdminPage() {
                         return (
                             <div key={slide.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                 {/* Slide Row */}
-                                <div className="flex items-stretch gap-0">
+                                <div className="flex flex-col sm:flex-row items-stretch gap-0">
                                     {/* Order Controls */}
-                                    <div className="flex flex-col items-center justify-center gap-1 px-3 py-4 border-r border-gray-100 bg-gray-50/50">
+                                    <div className="flex sm:flex-col flex-row items-center justify-center gap-2 sm:gap-1 px-3 py-2 sm:py-4 border-b sm:border-b-0 sm:border-r border-gray-100 bg-gray-50/50">
                                         <button
                                             onClick={() => move(idx, -1)}
                                             disabled={idx === 0}
                                             className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 transition-colors"
                                         >
-                                            <ChevronUp className="w-4 h-4 text-navy" />
+                                            <ChevronUp className="w-4 h-4 text-navy sm:rotate-0 -rotate-90" />
                                         </button>
                                         <span className="text-xs font-bold text-gray-400">{idx + 1}</span>
                                         <button
@@ -243,12 +243,12 @@ export default function HeroAdminPage() {
                                             disabled={idx === slides.length - 1}
                                             className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 transition-colors"
                                         >
-                                            <ChevronDown className="w-4 h-4 text-navy" />
+                                            <ChevronDown className="w-4 h-4 text-navy sm:rotate-0 -rotate-90" />
                                         </button>
                                     </div>
 
                                     {/* Thumbnail */}
-                                    <div className="w-40 aspect-video relative shrink-0 bg-gray-100">
+                                    <div className="w-full sm:w-40 aspect-video relative shrink-0 bg-gray-100">
                                         <Image src={slide.imageUrl} alt={slide.title} fill className="object-cover" />
                                         <div className="absolute inset-0 bg-black/20" />
                                     </div>
@@ -303,7 +303,7 @@ export default function HeroAdminPage() {
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex flex-col items-center justify-center gap-2 px-3 border-l border-gray-100">
+                                    <div className="flex sm:flex-col flex-row items-center justify-center gap-2 px-3 py-2 sm:py-0 border-t sm:border-t-0 sm:border-l border-gray-100 bg-gray-50 sm:bg-transparent">
                                         {isEditing ? (
                                             <>
                                                 <button
