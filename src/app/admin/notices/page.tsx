@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -60,7 +61,7 @@ export default function NoticesPage() {
             closeForm();
         } catch (error) {
             console.error("Error saving notice:", error);
-            alert("Failed to save notice");
+            toast.error("Failed to save notice");
         }
     };
 
