@@ -115,6 +115,7 @@ export interface ReceiptData {
     lineItems: { label: string; amount: number }[];
     totalAmount: number;
     paymentMode?: "CASH" | "UPI" | "CHEQUE" | string;
+    arrearsMonths?: string[];
 }
 
 export function buildReceiptHTML(data: ReceiptData): string {
@@ -130,6 +131,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
         lineItems,
         totalAmount,
         paymentMode,
+        arrearsMonths,
     } = data;
 
     const fmt = (n: number) =>
@@ -184,6 +186,12 @@ export function buildReceiptHTML(data: ReceiptData): string {
     <div style="font-size:8px;color:#475569;margin-top:1px;">${classSection} &nbsp;|&nbsp; ${feeMonth}</div>
     ${extras ? `<div style="margin-top:2px;">${extras}</div>` : ""}
   </div>
+
+  ${arrearsMonths?.length ? `
+  <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:3px 6px;">
+    <span style="font-size:6.5px;font-weight:700;color:#be123c;text-transform:uppercase;letter-spacing:.05em;">Arrears included:</span>
+    <span style="font-size:7px;color:#9f1239;margin-left:3px;">${arrearsMonths.join(", ")}</span>
+  </div>` : ""}
 
   <!-- Line Items -->
   <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;flex:1;">
