@@ -20,10 +20,18 @@ export const metadata: Metadata = {
     icon: '/LOGO.png',
     apple: '/LOGO.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: "#0f1b3d",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
