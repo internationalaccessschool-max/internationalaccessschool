@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where, orderBy, limit, collectionGroup, getCountFromServer } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit, collectionGroup } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getTimeAgo } from "@/lib/utils/date";
 import Link from "next/link";
@@ -32,40 +32,44 @@ export default function AdminDashboard() {
     useEffect(() => {
         const fetchStats = async () => {
             // Each stat fetched independently so one failure doesn't zero out others
+            // Using getDocs instead of getCountFromServer — more reliable, no composite-index needs
 
-            // Total Students
+            // Students — Total + Active (counted from same snapshot, client-side filter)
             try {
-                const snap = await getCountFromServer(collectionGroup(db, "profiles"));
-                setTotalStudents(snap.data().count);
-            } catch (e) { console.warn("totalStudents:", e); }
-
-            // Active Students (total - LEFT)
-            try {
-                const [allSnap, leftSnap] = await Promise.all([
-                    getCountFromServer(collectionGroup(db, "profiles")),
-                    getCountFromServer(query(collectionGroup(db, "profiles"), where("status", "==", "LEFT"))),
-                ]);
-                setActiveStudents(allSnap.data().count - leftSnap.data().count);
-            } catch (e) { console.warn("activeStudents:", e); }
+                const snap = await getDocs(collectionGroup(db, "profiles"));
+                const total = snap.size;
+                const active = snap.docs.filter(d => {
+                    const s = (d.data().status ?? "ACTIVE").toString().toUpperCase();
+                    return s !== "LEFT";
+                }).length;
+                setTotalStudents(total);
+                setActiveStudents(active);
+            } catch (e) { console.warn("students:", e); }
 
             // Total Teachers — stored in "teachers" collection
             try {
-                const snap = await getCountFromServer(collection(db, "teachers"));
-                setTotalTeachers(snap.data().count);
+                const snap = await getDocs(collection(db, "teachers"));
+                setTotalTeachers(snap.size);
             } catch (e) { console.warn("totalTeachers:", e); }
 
             // Pending Admissions
             try {
-                const snap = await getCountFromServer(
+                const snap = await getDocs(
                     query(collection(db, "admission_requests"), where("status", "==", "pending"))
                 );
-                setPendingAdmissions(snap.data().count);
-            } catch (e) { console.warn("pendingAdmissions:", e); }
+                setPendingAdmissions(snap.size);
+            } catch (e) {
+                // Fallback: fetch all and filter client-side (avoids index issues)
+                try {
+                    const all = await getDocs(collection(db, "admission_requests"));
+                    setPendingAdmissions(all.docs.filter(d => d.data().status === "pending").length);
+                } catch (e2) { console.warn("pendingAdmissions:", e2); }
+            }
 
             // Total Homework
             try {
-                const snap = await getCountFromServer(collection(db, "homework"));
-                setTotalHomework(snap.data().count);
+                const snap = await getDocs(collection(db, "homework"));
+                setTotalHomework(snap.size);
             } catch (e) { console.warn("totalHomework:", e); }
 
             // Recent Activity
