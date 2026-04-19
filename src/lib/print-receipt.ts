@@ -1,6 +1,6 @@
 /**
- * printReceiptHTML — Opens a popup with 4 receipt copies on a single A4 sheet.
- * Cut along the dashed lines — saves 75% paper vs. full-page printing.
+ * printReceiptHTML — Opens a popup with 2 receipt copies on a single A4 sheet.
+ * Top half = Student Copy, Bottom half = Office Copy.
  */
 export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void {
     const popup = window.open("", "_blank", "width=900,height=700,scrollbars=yes");
@@ -9,17 +9,13 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
         return;
     }
 
-    // Resolve __SCHOOL_LOGO__ placeholder to absolute URL (popup is about:blank, relative paths fail)
     const logoUrl = window.location.origin + "/LOGO.png";
     const resolvedHTML = bodyHTML.replace(/__SCHOOL_LOGO__/g, logoUrl);
 
-    // 4 identical copies in 2×2 grid on one A4
-    const fourCopies = `
+    const twoCopies = `
 <div class="page">
-  <div class="slip">${resolvedHTML}</div>
-  <div class="slip">${resolvedHTML}</div>
-  <div class="slip">${resolvedHTML}</div>
-  <div class="slip">${resolvedHTML}</div>
+  <div class="slip student-copy">${resolvedHTML}<div class="copy-label">✂ STUDENT COPY</div></div>
+  <div class="slip office-copy">${resolvedHTML}<div class="copy-label">✂ OFFICE COPY</div></div>
 </div>`;
 
     popup.document.title = title;
@@ -34,51 +30,47 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
       min-height: 297mm;
       margin: 12px auto;
       background: #fff;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
+      display: flex;
+      flex-direction: column;
     }
 
     .slip {
-      width: 105mm;
+      width: 100%;
       height: 148.5mm;
-      padding: 5mm;
+      padding: 8mm 10mm 6mm;
       overflow: hidden;
-      border: 1px dashed #cbd5e1;
+      border-bottom: 2px dashed #94a3b8;
       position: relative;
     }
+    .slip:last-child { border-bottom: none; }
 
-    /* Watermark logo — centered, faded */
+    /* Watermark */
     .slip::before {
       content: '';
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 62%;
-      height: 62%;
+      width: 55%;
+      height: 55%;
       background-image: url('${logoUrl}');
       background-repeat: no-repeat;
       background-position: center;
       background-size: contain;
-      opacity: 0.06;
+      opacity: 0.05;
       pointer-events: none;
       z-index: 0;
     }
 
-    /* Ensure receipt content sits above watermark */
-    .slip > div { position: relative; z-index: 1; }
+    .slip > * { position: relative; z-index: 1; }
 
-    /* "OFFICE COPY" label on 2nd and 4th slip */
-    .slip:nth-child(2)::after,
-    .slip:nth-child(4)::after {
-      content: "OFFICE COPY";
+    .copy-label {
       position: absolute;
-      top: 3mm;
-      right: 4mm;
-      font-size: 6px;
-      font-weight: 700;
-      letter-spacing: .08em;
+      bottom: 3mm;
+      right: 5mm;
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: .1em;
       color: #94a3b8;
       text-transform: uppercase;
       z-index: 2;
@@ -86,27 +78,23 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
 
     @media print {
       body { background: #fff; }
-      .page { margin: 0; width: 210mm; min-height: 297mm; page-break-after: always; }
-      .slip { border: 1px dashed #cbd5e1; }
+      .page { margin: 0; width: 210mm; min-height: 297mm; }
+      .slip { border-bottom: 1.5px dashed #94a3b8; }
       @page { size: A4 portrait; margin: 0; }
     }
   </style>`;
-    popup.document.body.innerHTML = fourCopies;
+    popup.document.body.innerHTML = twoCopies;
     popup.onload = () => { popup.focus(); popup.print(); };
     setTimeout(() => {
         try { popup.focus(); popup.print(); } catch (_) { /* already printed */ }
     }, 600);
 }
 
-/**
- * buildReceiptHTML — Compact A6-sized receipt (fits 4 per A4).
- * Uses __SCHOOL_LOGO__ placeholder — resolved by printReceiptHTML at runtime.
- */
 export interface ReceiptData {
     title?: string;
-    accentColor?: string;
     receiptNo: string;
     studentName: string;
+    admissionNo?: string;
     classSection: string;
     rollNo?: string;
     extraInfo?: { label: string; value: string }[];
@@ -125,6 +113,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
         studentName,
         classSection,
         rollNo,
+        admissionNo,
         extraInfo = [],
         paidOn = "N/A",
         feeMonth,
@@ -134,93 +123,137 @@ export function buildReceiptHTML(data: ReceiptData): string {
         arrearsMonths,
     } = data;
 
+    const admNo = admissionNo || rollNo || "";
     const fmt = (n: number) =>
         n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const rows = lineItems.map((item, i) => `
-      <tr>
-        <td style="padding:2px 4px;color:#94a3b8;font-size:8px;">${i + 1}.</td>
-        <td style="padding:2px 4px;font-size:8px;color:#1e293b;">${item.label}</td>
-        <td style="padding:2px 4px;text-align:right;font-size:8px;color:#1e293b;">₹${fmt(item.amount)}</td>
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:4px 6px;color:#94a3b8;font-size:9px;text-align:center;">${i + 1}</td>
+        <td style="padding:4px 6px;font-size:9.5px;color:#1e293b;">${item.label}</td>
+        <td style="padding:4px 6px;text-align:right;font-size:9.5px;color:#1e293b;font-weight:600;">₹${fmt(item.amount)}</td>
       </tr>`).join("");
 
-    const extras = [
-        rollNo ? `<span style="font-size:7px;color:#64748b;">Adm#: <b>${rollNo}</b></span>` : "",
-        ...extraInfo.map(e => `<span style="font-size:7px;color:#64748b;">${e.label}: <b>${e.value}</b></span>`),
-    ].filter(Boolean).join(" &nbsp;|&nbsp; ");
+    const extraInfoRows = extraInfo.map(e =>
+        `<div style="display:flex;gap:6px;"><span style="font-size:8px;color:#94a3b8;min-width:60px;">${e.label}</span><span style="font-size:8px;font-weight:700;color:#1e293b;">${e.value}</span></div>`
+    ).join("");
+
+    const isTransport = title.toLowerCase().includes("transport");
+    const accentColor = isTransport ? "#4f46e5" : "#0f2044";
+    const accentLight = isTransport ? "#eef2ff" : "#eff6ff";
+    const accentBorder = isTransport ? "#c7d2fe" : "#bfdbfe";
+    const accentText = isTransport ? "#4338ca" : "#1d4ed8";
 
     return `
-<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;height:100%;display:flex;flex-direction:column;gap:4px;">
+<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;height:100%;display:flex;flex-direction:column;gap:0;">
 
-  <!-- Header: logo + school name -->
-  <div style="display:flex;align-items:center;gap:6px;border-bottom:1.5px solid #e2e8f0;padding-bottom:5px;">
-    <img src="__SCHOOL_LOGO__"
-         style="width:28px;height:28px;object-fit:contain;flex-shrink:0;"
-         alt="IAS Logo" />
-    <div style="flex:1;text-align:center;">
-      <div style="font-size:10px;font-weight:900;color:#0f2044;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">
+  <!-- School Header -->
+  <div style="display:flex;align-items:center;gap:8px;padding-bottom:6px;border-bottom:2px solid ${accentColor};margin-bottom:6px;">
+    <img src="__SCHOOL_LOGO__" style="width:42px;height:42px;object-fit:contain;flex-shrink:0;" alt="IAS Logo" />
+    <div style="flex:1;">
+      <div style="font-size:13px;font-weight:900;color:${accentColor};text-transform:uppercase;letter-spacing:.04em;line-height:1.2;">
         International Access School
       </div>
-      <div style="font-size:6.5px;color:#94a3b8;margin-top:1px;">Atarsua, Siwan, Bihar — +91 84060 00830</div>
-      <span style="display:inline-block;margin-top:2px;padding:1px 7px;background:#eff6ff;color:#1d4ed8;font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border:1px solid #bfdbfe;border-radius:999px;">
+      <div style="font-size:7.5px;color:#64748b;margin-top:1px;">
+        Affiliated to CBSE · Aff. No: 330691 &nbsp;|&nbsp; School Code: 65688
+      </div>
+      <div style="font-size:7.5px;color:#64748b;">
+        Siwan, Bihar – 841227 &nbsp;|&nbsp; Ph: +91 84060 00830 &nbsp;|&nbsp; info@iaschool.edu.in
+      </div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div style="display:inline-block;padding:2px 10px;background:${accentLight};color:${accentText};font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border:1px solid ${accentBorder};border-radius:999px;">
         ${title}
-      </span>
+      </div>
+      <div style="margin-top:4px;font-size:7.5px;color:#94a3b8;">ISO 9001·2005 Certified</div>
     </div>
   </div>
 
-  <!-- Receipt No + Date -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-    <div>
-      <div style="color:#94a3b8;font-size:6.5px;text-transform:uppercase;font-weight:700;">Receipt No</div>
-      <div style="font-family:monospace;font-size:10px;font-weight:700;color:#0f2044;">${receiptNo}</div>
+  <!-- Receipt No + Date row -->
+  <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;margin-bottom:6px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div>
+        <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Receipt No.</div>
+        <div style="font-family:monospace;font-size:11px;font-weight:900;color:${accentColor};">${receiptNo}</div>
+      </div>
+      <div style="width:1px;height:28px;background:#e2e8f0;"></div>
+      <div>
+        <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Fee Month</div>
+        <div style="font-size:9px;font-weight:700;color:#334155;">${feeMonth}</div>
+      </div>
     </div>
     <div style="text-align:right;">
-      <div style="color:#94a3b8;font-size:6.5px;text-transform:uppercase;font-weight:700;">Date</div>
-      <div style="font-weight:600;font-size:8px;">${paidOn}</div>
+      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Date of Payment</div>
+      <div style="font-size:9px;font-weight:700;color:#334155;">${paidOn}</div>
     </div>
   </div>
 
   <!-- Student Info -->
-  <div style="background:#f8fafc;border-radius:4px;padding:4px 6px;border:1px solid #e2e8f0;">
-    <div style="font-size:10px;font-weight:700;color:#0f2044;">${studentName}</div>
-    <div style="font-size:8px;color:#475569;margin-top:1px;">${classSection} &nbsp;|&nbsp; ${feeMonth}</div>
-    ${extras ? `<div style="margin-top:2px;">${extras}</div>` : ""}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;margin-bottom:6px;">
+    <div>
+      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Student Name</div>
+      <div style="font-size:11px;font-weight:800;color:#0f172a;margin-top:1px;">${studentName}</div>
+    </div>
+    <div>
+      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Admission No.</div>
+      <div style="font-size:11px;font-weight:800;color:${accentColor};margin-top:1px;font-family:monospace;">${admNo || "—"}</div>
+    </div>
+    <div style="margin-top:3px;">
+      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Class / Section</div>
+      <div style="font-size:9px;font-weight:600;color:#334155;margin-top:1px;">${classSection}</div>
+    </div>
+    <div style="margin-top:3px;">
+      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Payment Mode</div>
+      <div style="margin-top:1px;display:inline-block;padding:1px 8px;background:#dcfce7;color:#15803d;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;border:1px solid #bbf7d0;">
+        PAID · ${paymentMode || "CASH"}
+      </div>
+    </div>
+    ${extraInfoRows}
   </div>
 
   ${arrearsMonths?.length ? `
-  <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:3px 6px;">
-    <span style="font-size:6.5px;font-weight:700;color:#be123c;text-transform:uppercase;letter-spacing:.05em;">Arrears included:</span>
-    <span style="font-size:7px;color:#9f1239;margin-left:3px;">${arrearsMonths.join(", ")}</span>
+  <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:3px 8px;margin-bottom:4px;font-size:7.5px;">
+    <span style="font-weight:800;color:#be123c;text-transform:uppercase;letter-spacing:.05em;">Arrears included: </span>
+    <span style="color:#9f1239;">${arrearsMonths.join(", ")}</span>
   </div>` : ""}
 
-  <!-- Line Items -->
-  <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;flex:1;">
+  <!-- Fee Table -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;flex:1;">
     <thead>
-      <tr style="background:#f1f5f9;">
-        <th style="padding:3px 4px;font-size:6.5px;text-align:left;color:#94a3b8;font-weight:700;text-transform:uppercase;">#</th>
-        <th style="padding:3px 4px;font-size:6.5px;text-align:left;color:#94a3b8;font-weight:700;text-transform:uppercase;">Particulars</th>
-        <th style="padding:3px 4px;font-size:6.5px;text-align:right;color:#94a3b8;font-weight:700;text-transform:uppercase;">Amount</th>
+      <tr style="background:${accentColor};">
+        <th style="padding:5px 6px;font-size:7.5px;text-align:center;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;width:32px;">#</th>
+        <th style="padding:5px 6px;font-size:7.5px;text-align:left;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Particulars</th>
+        <th style="padding:5px 6px;font-size:7.5px;text-align:right;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Amount (₹)</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
-      <tr style="background:#f1f5f9;border-top:1.5px solid #e2e8f0;">
-        <td colspan="2" style="padding:4px 6px;font-size:9px;font-weight:900;color:#0f2044;text-align:right;text-transform:uppercase;">Total</td>
-        <td style="padding:4px 6px;font-size:11px;font-weight:900;color:#0f2044;text-align:right;">₹${fmt(totalAmount)}</td>
+      <tr style="background:#f1f5f9;border-top:2px solid ${accentColor};">
+        <td colspan="2" style="padding:6px 8px;font-size:10px;font-weight:900;color:${accentColor};text-align:right;text-transform:uppercase;letter-spacing:.04em;">
+          Total Amount Paid
+        </td>
+        <td style="padding:6px 8px;font-size:13px;font-weight:900;color:${accentColor};text-align:right;">
+          ₹${fmt(totalAmount)}
+        </td>
       </tr>
     </tfoot>
   </table>
 
-  <!-- Payment mode + signature -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:3px;border-top:1px dashed #cbd5e1;margin-top:auto;">
-    <div>
-      <span style="display:inline-block;padding:1px 7px;background:#dcfce7;color:#15803d;font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;border:1px solid #bbf7d0;">
-        PAID · ${paymentMode || "CASH"}
-      </span>
+  <!-- Footer -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:5px;margin-top:4px;border-top:1px dashed #cbd5e1;">
+    <div style="font-size:7px;color:#94a3b8;line-height:1.6;">
+      <div>This is a computer-generated receipt.</div>
+      <div>No signature required if stamped.</div>
     </div>
-    <div style="text-align:center;">
-      <div style="width:60px;border-bottom:1px solid #94a3b8;margin-bottom:2px;"></div>
-      <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Authorized Signatory</div>
+    <div style="display:flex;gap:16px;align-items:flex-end;">
+      <div style="text-align:center;">
+        <div style="width:48px;height:48px;border:1px solid #e2e8f0;border-radius:50%;margin:0 auto 2px;"></div>
+        <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Stamp</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="width:80px;border-bottom:1px solid #475569;margin-bottom:2px;"></div>
+        <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Authorized Signatory</div>
+      </div>
     </div>
   </div>
 
