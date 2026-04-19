@@ -16,6 +16,15 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December"
 ];
 
+function calcMonSatDays(year: number, month: number): number {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let count = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+        if (new Date(year, month - 1, d).getDay() !== 0) count++;
+    }
+    return count;
+}
+
 interface TeacherRow {
     id: string;
     name: string;
@@ -53,6 +62,7 @@ export default function GenerateTeacherSalaryPage() {
 
     // Attendance data for the selected month
     const [attMap, setAttMap] = useState<Record<string, AttStat>>({});
+    const [attDetectedDays, setAttDetectedDays] = useState(0);
     const [workingDays, setWorkingDays] = useState(0);
     const [attLoading, setAttLoading] = useState(false);
 
@@ -130,6 +140,12 @@ export default function GenerateTeacherSalaryPage() {
         fetchTeachers();
     }, [selectedMonth, selectedYear]);
 
+    // Reset working days when month/year changes
+    useEffect(() => {
+        setWorkingDays(calcMonSatDays(selectedYear, selectedMonth));
+        setAttDetectedDays(0);
+    }, [selectedMonth, selectedYear]);
+
     // Fetch attendance for selected month
     useEffect(() => {
         const fetchAtt = async () => {
@@ -140,11 +156,10 @@ export default function GenerateTeacherSalaryPage() {
                     collection(db, "teacherAttendance", String(selectedYear), "months", ymPrefix, "days")
                 );
                 const map: Record<string, AttStat> = {};
-                let wdays = 0;
+                let holidayCount = 0;
                 snap.docs.forEach(d => {
                     const data = d.data() as any;
-                    if (data.isHoliday) return;
-                    wdays++;
+                    if (data.isHoliday) { holidayCount++; return; }
                     const records: Record<string, string> = data.records || {};
                     for (const [tid, status] of Object.entries(records)) {
                         if (!map[tid]) map[tid] = { present: 0, absent: 0, leave: 0, late: 0 };
@@ -155,11 +170,16 @@ export default function GenerateTeacherSalaryPage() {
                     }
                 });
                 setAttMap(map);
-                setWorkingDays(wdays);
+                // Working days = Mon-Sat days in month - holidays marked in attendance
+                const monSat = calcMonSatDays(selectedYear, selectedMonth);
+                const calculatedWorkingDays = monSat - holidayCount;
+                setAttDetectedDays(holidayCount);
+                setWorkingDays(calculatedWorkingDays > 0 ? calculatedWorkingDays : monSat);
             } catch (e) {
                 console.warn("Attendance fetch failed:", e);
                 setAttMap({});
-                setWorkingDays(0);
+                setAttDetectedDays(0);
+                setWorkingDays(calcMonSatDays(selectedYear, selectedMonth));
             } finally {
                 setAttLoading(false);
             }
@@ -249,7 +269,7 @@ export default function GenerateTeacherSalaryPage() {
 
             {/* Period + Defaults */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
                             <Calendar className="w-3 h-3" /> Month
@@ -290,18 +310,31 @@ export default function GenerateTeacherSalaryPage() {
                             onChange={e => setEsicDefault(Number(e.target.value) || 0)}
                             className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm" placeholder="e.g. 0.75" />
                     </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" /> Working Days
+                            <span className="text-gray-400 font-normal">(Mon–Sat)</span>
+                        </label>
+                        <input type="number" min={1} max={31} value={workingDays}
+                            onChange={e => setWorkingDays(Number(e.target.value) || 1)}
+                            className="w-full px-4 py-2 border-2 border-indigo-300 rounded-xl text-sm font-bold text-indigo-700 focus:border-indigo-500 focus:outline-none" />
+                        <p className="text-[10px] text-gray-400 mt-1">
+                            Auto: {calcMonSatDays(selectedYear, selectedMonth)} Mon–Sat {attDetectedDays > 0 ? `− ${attDetectedDays} holiday = ${workingDays}` : "days"} · Edit if needed
+                        </p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                     <button onClick={applyDefaults}
                         className="text-xs px-3 py-1.5 rounded-lg bg-navy/5 text-navy font-semibold hover:bg-navy/10 transition-colors">
                         Apply Defaults to All
                     </button>
-                    {workingDays > 0 && (
-                        <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
-                            <Info className="w-3 h-3" />
-                            {workingDays} working days found in attendance · Rule: 3 absents = 1 day deduction
-                        </span>
-                    )}
+                    <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
+                        <Info className="w-3 h-3" />
+                        {calcMonSatDays(selectedYear, selectedMonth)} Mon–Sat days
+                        {attDetectedDays > 0 && <span className="text-red-500 ml-1">− {attDetectedDays} holiday{attDetectedDays > 1 ? "s" : ""}</span>}
+                        <span className="font-semibold text-indigo-600 ml-1">= {workingDays} working days</span>
+                        <span className="ml-2 text-gray-400">· Per day = Gross ÷ {workingDays}</span>
+                    </span>
                     {attLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                 </div>
             </div>
