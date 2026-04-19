@@ -263,7 +263,7 @@ export default function ClassTeacherPage() {
                                                     </div>
 
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-semibold text-gray-500 mb-1">Section {section}</p>
+                                                        <p className="text-xs font-semibold text-gray-500 mb-1">{section}</p>
                                                         <select
                                                             value={assigned?.teacherId || ""}
                                                             onChange={e => handleAssign(cls, section, e.target.value)}
