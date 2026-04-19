@@ -351,13 +351,13 @@ export default function TeacherAttendancePage() {
                                 >
                                     {assignedSections.map(seq => (
                                         <option key={`${seq.cls}-${seq.section}`} value={`${seq.cls}|${seq.section}`} className="text-navy">
-                                            {seq.cls} — Section {seq.section}
+                                            {seq.cls} — {seq.section}
                                         </option>
                                     ))}
                                 </select>
                             ) : (
                                 <p className="text-white/80 text-sm font-medium">
-                                    {assignedClass} — Section {assignedSection}
+                                    {assignedClass} — {assignedSection}
                                 </p>
                             )}
                             <span className="text-white/40 text-sm">• {students.length} students</span>
