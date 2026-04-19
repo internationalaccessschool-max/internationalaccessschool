@@ -8,7 +8,8 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import {
     Loader2, Search, CheckCircle2, Clock, AlertCircle,
-    ChevronDown, PlusCircle, FileText, X, UserPlus, Pencil, Trash2, Users2
+    ChevronDown, PlusCircle, FileText, X, UserPlus, Pencil, Trash2, Users2,
+    ChevronRight, Calendar, TrendingDown, IndianRupee
 } from "lucide-react";
 
 const MONTHS = [
@@ -50,9 +51,14 @@ interface SalaryRecord {
     da: number;
     otherAllowances: number;
     gross: number;
+    pfPct: number;
+    esicPct: number;
     pfDeduction: number;
     esicDeduction: number;
     otherDeductions: number;
+    absentDeduction: number;
+    deductibleDays: number;
+    perDayRate: number;
     totalDeductions: number;
     netSalary: number;
     status: "pending" | "paid";
@@ -63,6 +69,7 @@ interface SalaryRecord {
     presentDays?: number;
     absentDays?: number;
     leaveDays?: number;
+    lateDays?: number;
     holidayDays?: number;
 }
 
@@ -75,6 +82,7 @@ export default function AdminTeacherSalaryPage() {
     const [teachers, setTeachers] = useState<TeacherInfo[]>([]);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "unpaid">("all");
+    const [expandedId, setExpandedId] = useState<string | null>(null);
 
     // Staff management modal
     const [staffModalOpen, setStaffModalOpen] = useState(false);
@@ -98,7 +106,6 @@ export default function AdminTeacherSalaryPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // 1. Fetch all teachers
             const teacherSnap = await getDocs(query(collection(db, "teachers"), orderBy("createdAt", "desc")));
             const teacherList: TeacherInfo[] = teacherSnap.docs.map(d => {
                 const data = d.data() as any;
@@ -111,14 +118,12 @@ export default function AdminTeacherSalaryPage() {
                     name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || "Unknown",
                     email: data.email || "",
                     designation: data.designation || "Teacher",
-                    basicSalary: basic,
-                    hra, da, otherAllowances: other,
+                    basicSalary: basic, hra, da, otherAllowances: other,
                     gross: basic + hra + da + other,
                     staffType: "teacher" as const,
                 };
             });
 
-            // Fetch non-teaching staff
             const staffSnap = await getDocs(collection(db, "nonTeachingStaff"));
             const staffList: TeacherInfo[] = staffSnap.docs.map(d => {
                 const data = d.data() as any;
@@ -131,8 +136,7 @@ export default function AdminTeacherSalaryPage() {
                     name: data.name || "Unknown",
                     email: "",
                     designation: data.designation || "Staff",
-                    basicSalary: basic,
-                    hra, da, otherAllowances: other,
+                    basicSalary: basic, hra, da, otherAllowances: other,
                     gross: basic + hra + da + other,
                     staffType: "staff" as const,
                 };
@@ -142,7 +146,6 @@ export default function AdminTeacherSalaryPage() {
             allList.sort((a, b) => a.name.localeCompare(b.name));
             setTeachers(allList);
 
-            // 2. Fetch salary records for selected month
             const recSnap = await getDocs(collection(db, "teacherSalary", String(selectedYear), "months", String(selectedMonth), "records"));
             const recList: SalaryRecord[] = recSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
             setRecords(recList);
@@ -156,14 +159,10 @@ export default function AdminTeacherSalaryPage() {
 
     useEffect(() => { fetchData(); }, [selectedMonth, selectedYear]);
 
-    // Merge teachers + records into display list
     const displayList = useMemo(() => {
         return teachers.map(t => {
             const rec = records.find(r => r.teacherId === t.id);
-            return {
-                teacher: t,
-                record: rec || null,
-            };
+            return { teacher: t, record: rec || null };
         });
     }, [teachers, records]);
 
@@ -171,7 +170,6 @@ export default function AdminTeacherSalaryPage() {
         const matchSearch = teacher.name.toLowerCase().includes(search.toLowerCase()) ||
             teacher.email.toLowerCase().includes(search.toLowerCase());
         if (!matchSearch) return false;
-
         if (statusFilter === "unpaid") return !record;
         if (statusFilter === "paid") return record?.status === "paid";
         if (statusFilter === "pending") return record?.status === "pending";
@@ -184,8 +182,7 @@ export default function AdminTeacherSalaryPage() {
         const pending = records.filter(r => r.status === "pending").length;
         const notGenerated = teachers.length - generated;
         const totalPayable = records.reduce((sum, r) => sum + (r.status === "pending" ? r.netSalary : 0), 0);
-        const totalPaid = records.reduce((sum, r) => sum + (r.status === "paid" ? r.netSalary : 0), 0);
-        return { generated, paid, pending, notGenerated, totalPayable, totalPaid };
+        return { generated, paid, pending, notGenerated, totalPayable };
     }, [records, teachers]);
 
     const handlePay = async () => {
@@ -210,42 +207,27 @@ export default function AdminTeacherSalaryPage() {
             setPayRef("");
             fetchData();
         } catch (err: any) {
-            console.error(err);
             toast.error(err.message || "Failed to mark as paid");
         } finally {
             setPayLoading(false);
         }
     };
 
-    const openAddStaff = () => {
-        setEditingStaff(null);
-        setStaffForm(emptyForm);
-        setStaffModalOpen(true);
-    };
-
+    const openAddStaff = () => { setEditingStaff(null); setStaffForm(emptyForm); setStaffModalOpen(true); };
     const openEditStaff = (t: TeacherInfo) => {
         setEditingStaff(t);
-        setStaffForm({
-            name: t.name, designation: t.designation,
-            basicSalary: String(t.basicSalary), hra: String(t.hra),
-            da: String(t.da), otherAllowances: String(t.otherAllowances),
-        });
+        setStaffForm({ name: t.name, designation: t.designation, basicSalary: String(t.basicSalary), hra: String(t.hra), da: String(t.da), otherAllowances: String(t.otherAllowances) });
         setStaffModalOpen(true);
     };
 
     const handleSaveStaff = async () => {
-        if (!staffForm.name.trim() || !staffForm.designation.trim()) {
-            toast.error("Name and designation are required"); return;
-        }
+        if (!staffForm.name.trim() || !staffForm.designation.trim()) { toast.error("Name and designation are required"); return; }
         setStaffSaving(true);
         try {
             const payload = {
-                name: staffForm.name.trim(),
-                designation: staffForm.designation.trim(),
-                basicSalary: Number(staffForm.basicSalary) || 0,
-                hra: Number(staffForm.hra) || 0,
-                da: Number(staffForm.da) || 0,
-                otherAllowances: Number(staffForm.otherAllowances) || 0,
+                name: staffForm.name.trim(), designation: staffForm.designation.trim(),
+                basicSalary: Number(staffForm.basicSalary) || 0, hra: Number(staffForm.hra) || 0,
+                da: Number(staffForm.da) || 0, otherAllowances: Number(staffForm.otherAllowances) || 0,
                 updatedAt: Date.now(),
             };
             if (editingStaff) {
@@ -289,18 +271,16 @@ export default function AdminTeacherSalaryPage() {
                     <div>
                         <p className="text-white/50 text-sm font-medium">Admin Finance</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">💰 Teacher Salary</h1>
-                        <p className="text-white/40 text-sm mt-1">Generate, pay and track teacher salaries</p>
+                        <p className="text-white/40 text-sm mt-1">Attendance-linked · 3 absents = 1 day deduction</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={openAddStaff}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/20 transition-colors border border-white/20">
-                            <Users2 className="w-4 h-4" />
-                            Manage Staff
+                            <Users2 className="w-4 h-4" /> Manage Staff
                         </button>
                         <Link href="/admin/teacher-salary/generate"
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy font-semibold text-sm hover:bg-gold-light transition-colors shadow-md">
-                            <PlusCircle className="w-4 h-4" />
-                            Generate Salaries
+                            <PlusCircle className="w-4 h-4" /> Generate Salaries
                         </Link>
                     </div>
                 </div>
@@ -366,9 +346,9 @@ export default function AdminTeacherSalaryPage() {
                 </div>
             ) : (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="hidden md:grid grid-cols-[2fr_1.2fr_1fr_1.2fr_1fr_1.5fr] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
+                    <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1.2fr_0.8fr_1.4fr] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
                         <span>Teacher</span>
-                        <span>Gross</span>
+                        <span>Gross / Per Day</span>
                         <span>Deductions</span>
                         <span>Net Salary</span>
                         <span>Status</span>
@@ -379,71 +359,186 @@ export default function AdminTeacherSalaryPage() {
                             const gross = record?.gross ?? teacher.gross;
                             const deductions = record?.totalDeductions ?? 0;
                             const net = record?.netSalary ?? gross;
+                            const perDay = record?.perDayRate ?? 0;
+                            const isExpanded = expandedId === teacher.id;
 
                             return (
-                                <div key={teacher.id}
-                                    className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr_1fr_1.2fr_1fr_1.5fr] gap-2 px-5 py-4 items-center hover:bg-gray-50/50 transition-colors">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${teacher.staffType === "staff" ? "bg-orange-100 text-orange-700" : "bg-navy/10 text-navy"}`}>
-                                            {idx + 1}
-                                        </div>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
-                                                {teacher.staffType === "staff" && (
-                                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
-                                                )}
+                                <div key={teacher.id} className="border-b border-gray-50 last:border-0">
+                                    {/* Main row */}
+                                    <div
+                                        className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1.2fr_0.8fr_1.4fr] gap-2 px-5 py-4 items-center hover:bg-gray-50/50 transition-colors cursor-pointer"
+                                        onClick={() => record && setExpandedId(isExpanded ? null : teacher.id)}
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${teacher.staffType === "staff" ? "bg-orange-100 text-orange-700" : "bg-navy/10 text-navy"}`}>
+                                                {idx + 1}
                                             </div>
-                                            <p className="text-xs text-gray-400 truncate">{teacher.designation}</p>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                                    {teacher.staffType === "staff" && (
+                                                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-gray-400 truncate">{teacher.designation}</p>
+                                            </div>
+                                            {record && (
+                                                <ChevronRight className={`w-4 h-4 text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                            )}
+                                        </div>
+
+                                        {/* Gross + Per Day */}
+                                        <div>
+                                            <div className="text-sm text-gray-700 font-semibold">
+                                                <span className="md:hidden text-xs text-gray-400">Gross: </span>
+                                                ₹{gross.toLocaleString("en-IN")}
+                                            </div>
+                                            {perDay > 0 && (
+                                                <div className="text-xs text-indigo-500 font-medium mt-0.5">
+                                                    ₹{perDay.toLocaleString("en-IN")}/day
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Deductions */}
+                                        <div className="text-sm text-red-500 font-medium">
+                                            <span className="md:hidden text-xs text-gray-400">Deductions: </span>
+                                            ₹{deductions.toLocaleString("en-IN")}
+                                            {record?.absentDeduction ? (
+                                                <div className="text-xs text-red-400">incl. absent cut</div>
+                                            ) : null}
+                                        </div>
+
+                                        {/* Net */}
+                                        <div className="text-sm text-emerald-700 font-bold">
+                                            <span className="md:hidden text-xs text-gray-400">Net: </span>
+                                            ₹{net.toLocaleString("en-IN")}
+                                        </div>
+
+                                        {/* Status */}
+                                        <div onClick={e => e.stopPropagation()}>
+                                            {record ? <StatusBadge status={record.status} /> : <NotGeneratedBadge />}
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center justify-end gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
+                                            {teacher.staffType === "staff" && (
+                                                <>
+                                                    <button onClick={() => openEditStaff(teacher)}
+                                                        className="text-xs p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Edit staff">
+                                                        <Pencil className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button onClick={() => handleDeleteStaff(teacher)}
+                                                        className="text-xs p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Remove staff">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
+                                            )}
+                                            {record ? (
+                                                <>
+                                                    {record.status === "pending" && (
+                                                        <button onClick={() => { setPayModal(record); setPayRef(""); setPayMode("BANK_TRANSFER"); }}
+                                                            className="text-xs px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition-colors">
+                                                            Mark Paid
+                                                        </button>
+                                                    )}
+                                                    {record.status === "paid" && (
+                                                        <button onClick={() => openSlip(record)}
+                                                            className="flex items-center gap-1 text-xs px-3 py-1.5 bg-navy hover:bg-navy-light text-white rounded-lg font-semibold transition-colors">
+                                                            <FileText className="w-3 h-3" /> Slip
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">Not generated</span>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="text-sm text-gray-700 font-semibold">
-                                        <span className="md:hidden text-xs text-gray-400">Gross: </span>
-                                        ₹{gross.toLocaleString("en-IN")}
-                                    </div>
-                                    <div className="text-sm text-red-600 font-medium">
-                                        <span className="md:hidden text-xs text-gray-400">Deductions: </span>
-                                        ₹{deductions.toLocaleString("en-IN")}
-                                    </div>
-                                    <div className="text-sm text-emerald-700 font-bold">
-                                        <span className="md:hidden text-xs text-gray-400">Net: </span>
-                                        ₹{net.toLocaleString("en-IN")}
-                                    </div>
-                                    <div>
-                                        {record ? <StatusBadge status={record.status} /> : <NotGeneratedBadge />}
-                                    </div>
-                                    <div className="flex items-center justify-end gap-2 flex-wrap">
-                                        {teacher.staffType === "staff" && (
-                                            <>
-                                                <button onClick={() => openEditStaff(teacher)}
-                                                    className="text-xs p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Edit staff">
-                                                    <Pencil className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button onClick={() => handleDeleteStaff(teacher)}
-                                                    className="text-xs p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Remove staff">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
-                                        )}
-                                        {record ? (
-                                            <>
-                                                {record.status === "pending" && (
-                                                    <button onClick={() => { setPayModal(record); setPayRef(""); setPayMode("BANK_TRANSFER"); }}
-                                                        className="text-xs px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition-colors">
-                                                        Mark Paid
-                                                    </button>
-                                                )}
-                                                {record.status === "paid" && (
-                                                    <button onClick={() => openSlip(record)}
-                                                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-navy hover:bg-navy-light text-white rounded-lg font-semibold transition-colors">
-                                                        <FileText className="w-3 h-3" /> Slip
-                                                    </button>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <span className="text-xs text-gray-400 italic">Not generated yet</span>
-                                        )}
-                                    </div>
+
+                                    {/* Expanded daily breakdown */}
+                                    {isExpanded && record && (
+                                        <div className="mx-5 mb-4 rounded-2xl bg-slate-50 border border-slate-100 overflow-hidden">
+                                            {/* Attendance row */}
+                                            <div className="px-5 py-3 border-b border-slate-100">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                    <Calendar className="w-3 h-3" /> Attendance — {MONTHS[(record.month || 1) - 1]} {record.year}
+                                                </p>
+                                                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                                                    <AttBox label="Working Days" value={record.workingDays ?? "—"} color="text-slate-600" />
+                                                    <AttBox label="Present" value={record.presentDays ?? 0} color="text-emerald-600" />
+                                                    <AttBox label="CL" value={record.leaveDays ?? 0} color="text-blue-600" />
+                                                    <AttBox label="Holiday" value={record.holidayDays ?? 0} color="text-purple-600" />
+                                                    <AttBox label="Late" value={record.lateDays ?? 0} color="text-amber-600" />
+                                                    <AttBox label="Absent" value={record.absentDays ?? 0} color="text-red-600" />
+                                                </div>
+                                            </div>
+
+                                            {/* Per-day salary breakdown */}
+                                            <div className="px-5 py-3 border-b border-slate-100">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                    <IndianRupee className="w-3 h-3" /> Daily Salary Breakdown
+                                                </p>
+                                                <div className="space-y-1.5 text-xs">
+                                                    {/* Per day rate */}
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500">Per Day Rate  <span className="text-slate-400">(Gross ÷ Working Days)</span></span>
+                                                        <span className="font-bold text-indigo-600">₹{(record.perDayRate ?? 0).toLocaleString("en-IN")} / day</span>
+                                                    </div>
+                                                    {/* Paid days */}
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500 flex items-center gap-1">
+                                                            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                                                            Present ({record.presentDays ?? 0}) + CL ({record.leaveDays ?? 0}) + Holiday ({record.holidayDays ?? 0}) days <span className="text-slate-400">— all paid</span>
+                                                        </span>
+                                                        <span className="font-semibold text-emerald-600">
+                                                            ₹{(((record.presentDays ?? 0) + (record.leaveDays ?? 0) + (record.holidayDays ?? 0)) * (record.perDayRate ?? 0)).toLocaleString("en-IN")}
+                                                        </span>
+                                                    </div>
+                                                    {/* Absent rule */}
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500 flex items-center gap-1">
+                                                            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                                                            Late: {record.lateDays ?? 0} days → ÷3 = {record.lateToAbsent ?? Math.floor((record.lateDays ?? 0) / 3)} extra absent
+                                                        </span>
+                                                        <span className="text-amber-500 font-medium text-xs">counted as absent</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-500 flex items-center gap-1">
+                                                            <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+                                                            Effective Absent: {record.absentDays ?? 0} + {record.lateToAbsent ?? Math.floor((record.lateDays ?? 0) / 3)} = {record.effectiveAbsents ?? ((record.absentDays ?? 0) + Math.floor((record.lateDays ?? 0) / 3))} → ÷3 = {record.deductibleDays ?? 0} day(s) cut
+                                                        </span>
+                                                        <span className="font-semibold text-red-500">
+                                                            −₹{(record.absentDeduction ?? 0).toLocaleString("en-IN")}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Deductions summary */}
+                                            <div className="px-5 py-3">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                    <TrendingDown className="w-3 h-3" /> Deduction Summary
+                                                </p>
+                                                <div className="flex flex-wrap gap-4 text-xs">
+                                                    <DeductBox label={`PF (${record.pfPct ?? 0}%)`} value={record.pfDeduction ?? 0} />
+                                                    <DeductBox label={`ESIC (${record.esicPct ?? 0}%)`} value={record.esicDeduction ?? 0} />
+                                                    <DeductBox
+                                                        label={`Absent (${record.deductibleDays ?? 0} day${(record.deductibleDays ?? 0) !== 1 ? "s" : ""})`}
+                                                        value={record.absentDeduction ?? 0}
+                                                        highlight
+                                                    />
+                                                    <div className="ml-auto text-right">
+                                                        <div className="text-slate-400">Gross</div>
+                                                        <div className="font-bold text-navy">₹{record.gross.toLocaleString("en-IN")}</div>
+                                                        <div className="text-slate-400 mt-1">Total Deductions</div>
+                                                        <div className="font-bold text-red-500">−₹{record.totalDeductions.toLocaleString("en-IN")}</div>
+                                                        <div className="text-slate-400 mt-1">Net Salary</div>
+                                                        <div className="font-bold text-emerald-600 text-base">₹{record.netSalary.toLocaleString("en-IN")}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -469,7 +564,7 @@ export default function AdminTeacherSalaryPage() {
                         <div className="space-y-3">
                             {[
                                 { label: "Full Name *", key: "name", placeholder: "e.g. Ramesh Kumar" },
-                                { label: "Designation *", key: "designation", placeholder: "e.g. Peon, Guard, Clerk, Driver" },
+                                { label: "Designation *", key: "designation", placeholder: "e.g. Peon, Guard, Clerk" },
                             ].map(({ label, key, placeholder }) => (
                                 <div key={key}>
                                     <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
@@ -497,10 +592,8 @@ export default function AdminTeacherSalaryPage() {
                             </div>
                             <div className="bg-orange-50 rounded-xl px-4 py-2 text-sm font-bold text-orange-700">
                                 Gross: ₹{(
-                                    (Number(staffForm.basicSalary) || 0) +
-                                    (Number(staffForm.hra) || 0) +
-                                    (Number(staffForm.da) || 0) +
-                                    (Number(staffForm.otherAllowances) || 0)
+                                    (Number(staffForm.basicSalary) || 0) + (Number(staffForm.hra) || 0) +
+                                    (Number(staffForm.da) || 0) + (Number(staffForm.otherAllowances) || 0)
                                 ).toLocaleString("en-IN")}
                             </div>
                         </div>
@@ -580,6 +673,24 @@ function StatCard({ value, label, color, small }: { value: number | string; labe
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
             <div className={`${small ? "text-sm md:text-base" : "text-2xl"} font-bold ${color} truncate`}>{value}</div>
             <div className="text-xs text-gray-400">{label}</div>
+        </div>
+    );
+}
+
+function AttBox({ label, value, color }: { label: string; value: number | string; color: string }) {
+    return (
+        <div className="text-center">
+            <div className={`text-lg font-bold ${color}`}>{value}</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">{label}</div>
+        </div>
+    );
+}
+
+function DeductBox({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+    return (
+        <div className={`px-3 py-2 rounded-xl ${highlight ? "bg-red-50 border border-red-100" : "bg-white border border-slate-100"}`}>
+            <div className="text-slate-400">{label}</div>
+            <div className={`font-bold ${highlight ? "text-red-500" : "text-slate-600"}`}>−₹{value.toLocaleString("en-IN")}</div>
         </div>
     );
 }
