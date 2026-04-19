@@ -359,7 +359,7 @@ export default function AdminTeacherAttendancePage() {
                                 <StatCard value={dayPresent} label="Present" color="text-emerald-600" />
                                 <StatCard value={dayLate} label="Late" color="text-amber-600" />
                                 <StatCard value={dayAbsent} label="Absent" color="text-red-600" />
-                                <StatCard value={dayLeave} label="Leave" color="text-blue-600" />
+                                <StatCard value={dayLeave} label="CL" color="text-blue-600" />
                             </>
                         )}
                     </div>
@@ -430,7 +430,7 @@ export default function AdminTeacherAttendancePage() {
                                                 <StatusBtn active={teacher.status === "present"} onClick={() => setStatus(teacher.id, "present")} color="emerald" icon={<Check className="w-3.5 h-3.5" />} label="Present" />
                                                 <StatusBtn active={teacher.status === "late"} onClick={() => setStatus(teacher.id, "late")} color="amber" icon={<Clock className="w-3.5 h-3.5" />} label="Late" />
                                                 <StatusBtn active={teacher.status === "absent"} onClick={() => setStatus(teacher.id, "absent")} color="red" icon={<X className="w-3.5 h-3.5" />} label="Absent" />
-                                                <StatusBtn active={teacher.status === "leave"} onClick={() => setStatus(teacher.id, "leave")} color="blue" icon={<CalendarX className="w-3.5 h-3.5" />} label="Leave" />
+                                                <StatusBtn active={teacher.status === "leave"} onClick={() => setStatus(teacher.id, "leave")} color="blue" icon={<CalendarX className="w-3.5 h-3.5" />} label="CL" />
                                             </>
                                         )}
                                     </div>
@@ -485,7 +485,7 @@ export default function AdminTeacherAttendancePage() {
                                 <span className="text-center">Present</span>
                                 <span className="text-center">Late</span>
                                 <span className="text-center">Absent</span>
-                                <span className="text-center">Leave</span>
+                                <span className="text-center">CL</span>
                                 <span className="text-center">%</span>
                             </div>
                             <div className="divide-y divide-gray-50">
