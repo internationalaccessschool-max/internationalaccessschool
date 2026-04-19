@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
     Loader2, Search, CheckCircle2, Clock, AlertCircle,
-    ChevronDown, PlusCircle, FileText, X
+    ChevronDown, PlusCircle, FileText, X, UserPlus, Pencil, Trash2, Users2
 } from "lucide-react";
 
 const MONTHS = [
@@ -26,6 +26,16 @@ interface TeacherInfo {
     da: number;
     otherAllowances: number;
     gross: number;
+    staffType: "teacher" | "staff";
+}
+
+interface StaffForm {
+    name: string;
+    designation: string;
+    basicSalary: string;
+    hra: string;
+    da: string;
+    otherAllowances: string;
 }
 
 interface SalaryRecord {
@@ -66,6 +76,13 @@ export default function AdminTeacherSalaryPage() {
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "unpaid">("all");
 
+    // Staff management modal
+    const [staffModalOpen, setStaffModalOpen] = useState(false);
+    const [editingStaff, setEditingStaff] = useState<TeacherInfo | null>(null);
+    const [staffSaving, setStaffSaving] = useState(false);
+    const emptyForm: StaffForm = { name: "", designation: "", basicSalary: "", hra: "0", da: "0", otherAllowances: "0" };
+    const [staffForm, setStaffForm] = useState<StaffForm>(emptyForm);
+
     // Pay Modal
     const [payModal, setPayModal] = useState<SalaryRecord | null>(null);
     const [payMode, setPayMode] = useState<"CASH" | "BANK_TRANSFER" | "UPI" | "CHEQUE">("BANK_TRANSFER");
@@ -97,10 +114,33 @@ export default function AdminTeacherSalaryPage() {
                     basicSalary: basic,
                     hra, da, otherAllowances: other,
                     gross: basic + hra + da + other,
+                    staffType: "teacher" as const,
                 };
             });
-            teacherList.sort((a, b) => a.name.localeCompare(b.name));
-            setTeachers(teacherList);
+
+            // Fetch non-teaching staff
+            const staffSnap = await getDocs(collection(db, "nonTeachingStaff"));
+            const staffList: TeacherInfo[] = staffSnap.docs.map(d => {
+                const data = d.data() as any;
+                const basic = Number(data.basicSalary) || 0;
+                const hra = Number(data.hra) || 0;
+                const da = Number(data.da) || 0;
+                const other = Number(data.otherAllowances) || 0;
+                return {
+                    id: d.id,
+                    name: data.name || "Unknown",
+                    email: "",
+                    designation: data.designation || "Staff",
+                    basicSalary: basic,
+                    hra, da, otherAllowances: other,
+                    gross: basic + hra + da + other,
+                    staffType: "staff" as const,
+                };
+            });
+
+            const allList = [...teacherList, ...staffList];
+            allList.sort((a, b) => a.name.localeCompare(b.name));
+            setTeachers(allList);
 
             // 2. Fetch salary records for selected month
             const recSnap = await getDocs(collection(db, "teacherSalary", String(selectedYear), "months", String(selectedMonth), "records"));
@@ -177,6 +217,64 @@ export default function AdminTeacherSalaryPage() {
         }
     };
 
+    const openAddStaff = () => {
+        setEditingStaff(null);
+        setStaffForm(emptyForm);
+        setStaffModalOpen(true);
+    };
+
+    const openEditStaff = (t: TeacherInfo) => {
+        setEditingStaff(t);
+        setStaffForm({
+            name: t.name, designation: t.designation,
+            basicSalary: String(t.basicSalary), hra: String(t.hra),
+            da: String(t.da), otherAllowances: String(t.otherAllowances),
+        });
+        setStaffModalOpen(true);
+    };
+
+    const handleSaveStaff = async () => {
+        if (!staffForm.name.trim() || !staffForm.designation.trim()) {
+            toast.error("Name and designation are required"); return;
+        }
+        setStaffSaving(true);
+        try {
+            const payload = {
+                name: staffForm.name.trim(),
+                designation: staffForm.designation.trim(),
+                basicSalary: Number(staffForm.basicSalary) || 0,
+                hra: Number(staffForm.hra) || 0,
+                da: Number(staffForm.da) || 0,
+                otherAllowances: Number(staffForm.otherAllowances) || 0,
+                updatedAt: Date.now(),
+            };
+            if (editingStaff) {
+                await updateDoc(doc(db, "nonTeachingStaff", editingStaff.id), payload);
+                toast.success("Staff updated!");
+            } else {
+                await addDoc(collection(db, "nonTeachingStaff"), { ...payload, createdAt: Date.now() });
+                toast.success("Staff added!");
+            }
+            setStaffModalOpen(false);
+            fetchData();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to save");
+        } finally {
+            setStaffSaving(false);
+        }
+    };
+
+    const handleDeleteStaff = async (t: TeacherInfo) => {
+        if (!window.confirm(`Delete "${t.name}" from non-teaching staff?`)) return;
+        try {
+            await deleteDoc(doc(db, "nonTeachingStaff", t.id));
+            toast.success("Staff removed");
+            fetchData();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to delete");
+        }
+    };
+
     const openSlip = (record: SalaryRecord) => {
         window.open(`/admin/teacher-salary/slip?year=${record.year}&month=${record.month}&recordId=${record.id}`, "_blank");
     };
@@ -193,11 +291,18 @@ export default function AdminTeacherSalaryPage() {
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">💰 Teacher Salary</h1>
                         <p className="text-white/40 text-sm mt-1">Generate, pay and track teacher salaries</p>
                     </div>
-                    <Link href="/admin/teacher-salary/generate"
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy font-semibold text-sm hover:bg-gold-light transition-colors shadow-md">
-                        <PlusCircle className="w-4 h-4" />
-                        Generate Salaries
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <button onClick={openAddStaff}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/20 transition-colors border border-white/20">
+                            <Users2 className="w-4 h-4" />
+                            Manage Staff
+                        </button>
+                        <Link href="/admin/teacher-salary/generate"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy font-semibold text-sm hover:bg-gold-light transition-colors shadow-md">
+                            <PlusCircle className="w-4 h-4" />
+                            Generate Salaries
+                        </Link>
+                    </div>
                 </div>
             </div>
 
@@ -279,11 +384,16 @@ export default function AdminTeacherSalaryPage() {
                                 <div key={teacher.id}
                                     className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr_1fr_1.2fr_1fr_1.5fr] gap-2 px-5 py-4 items-center hover:bg-gray-50/50 transition-colors">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-8 h-8 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs shrink-0">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${teacher.staffType === "staff" ? "bg-orange-100 text-orange-700" : "bg-navy/10 text-navy"}`}>
                                             {idx + 1}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                                {teacher.staffType === "staff" && (
+                                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-gray-400 truncate">{teacher.designation}</p>
                                         </div>
                                     </div>
@@ -303,6 +413,18 @@ export default function AdminTeacherSalaryPage() {
                                         {record ? <StatusBadge status={record.status} /> : <NotGeneratedBadge />}
                                     </div>
                                     <div className="flex items-center justify-end gap-2 flex-wrap">
+                                        {teacher.staffType === "staff" && (
+                                            <>
+                                                <button onClick={() => openEditStaff(teacher)}
+                                                    className="text-xs p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Edit staff">
+                                                    <Pencil className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => handleDeleteStaff(teacher)}
+                                                    className="text-xs p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Remove staff">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
                                         {record ? (
                                             <>
                                                 {record.status === "pending" && (
@@ -325,6 +447,74 @@ export default function AdminTeacherSalaryPage() {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            )}
+
+            {/* Staff Management Modal */}
+            {staffModalOpen && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => !staffSaving && setStaffModalOpen(false)}>
+                    <div onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-5">
+                            <h3 className="text-lg font-bold text-navy flex items-center gap-2">
+                                <Users2 className="w-5 h-5 text-orange-500" />
+                                {editingStaff ? "Edit Staff Member" : "Add Non-Teaching Staff"}
+                            </h3>
+                            <button onClick={() => setStaffModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            {[
+                                { label: "Full Name *", key: "name", placeholder: "e.g. Ramesh Kumar" },
+                                { label: "Designation *", key: "designation", placeholder: "e.g. Peon, Guard, Clerk, Driver" },
+                            ].map(({ label, key, placeholder }) => (
+                                <div key={key}>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+                                    <input value={staffForm[key as keyof StaffForm]}
+                                        onChange={e => setStaffForm(p => ({ ...p, [key]: e.target.value }))}
+                                        placeholder={placeholder}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm" />
+                                </div>
+                            ))}
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { label: "Basic Salary (₹)", key: "basicSalary" },
+                                    { label: "HRA (₹)", key: "hra" },
+                                    { label: "DA (₹)", key: "da" },
+                                    { label: "Other Allowances (₹)", key: "otherAllowances" },
+                                ].map(({ label, key }) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+                                        <input type="number" min={0}
+                                            value={staffForm[key as keyof StaffForm]}
+                                            onChange={e => setStaffForm(p => ({ ...p, [key]: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm" />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="bg-orange-50 rounded-xl px-4 py-2 text-sm font-bold text-orange-700">
+                                Gross: ₹{(
+                                    (Number(staffForm.basicSalary) || 0) +
+                                    (Number(staffForm.hra) || 0) +
+                                    (Number(staffForm.da) || 0) +
+                                    (Number(staffForm.otherAllowances) || 0)
+                                ).toLocaleString("en-IN")}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-5">
+                            <button onClick={() => setStaffModalOpen(false)} disabled={staffSaving}
+                                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button onClick={handleSaveStaff} disabled={staffSaving}
+                                className="flex-1 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                                {staffSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingStaff ? <Pencil className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                                {editingStaff ? "Save Changes" : "Add Staff"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
