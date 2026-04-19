@@ -30,6 +30,7 @@ interface TeacherRow {
     esicPct: number;
     selected: boolean;
     alreadyGenerated: boolean;
+    staffType: "teacher" | "staff";
 }
 
 export default function GenerateTeacherSalaryPage() {
@@ -60,7 +61,7 @@ export default function GenerateTeacherSalaryPage() {
 
                 const existingIds = new Set(recSnap.docs.map(d => (d.data() as any).teacherId));
 
-                const list: TeacherRow[] = teacherSnap.docs.map(d => {
+                const teacherList: TeacherRow[] = teacherSnap.docs.map(d => {
                     const data = d.data() as any;
                     const basic = Number(data.basicSalary) || 0;
                     const hra = Number(data.hra) || 0;
@@ -79,8 +80,36 @@ export default function GenerateTeacherSalaryPage() {
                         esicPct: esicDefault,
                         selected: !already && basic + hra + da + other > 0,
                         alreadyGenerated: already,
+                        staffType: "teacher" as const,
                     };
                 });
+
+                // Include non-teaching staff
+                const staffSnap = await getDocs(collection(db, "nonTeachingStaff"));
+                const staffList: TeacherRow[] = staffSnap.docs.map(d => {
+                    const data = d.data() as any;
+                    const basic = Number(data.basicSalary) || 0;
+                    const hra = Number(data.hra) || 0;
+                    const da = Number(data.da) || 0;
+                    const other = Number(data.otherAllowances) || 0;
+                    const already = existingIds.has(d.id);
+                    return {
+                        id: d.id,
+                        name: data.name || "Unknown",
+                        email: "",
+                        designation: data.designation || "Staff",
+                        basicSalary: basic,
+                        hra, da, otherAllowances: other,
+                        gross: basic + hra + da + other,
+                        pfPct: pfDefault,
+                        esicPct: esicDefault,
+                        selected: !already && basic + hra + da + other > 0,
+                        alreadyGenerated: already,
+                        staffType: "staff" as const,
+                    };
+                });
+
+                const list = [...teacherList, ...staffList];
                 list.sort((a, b) => a.name.localeCompare(b.name));
                 setTeachers(list);
             } catch (err) {
@@ -258,8 +287,13 @@ export default function GenerateTeacherSalaryPage() {
                                                 onChange={() => toggleSelect(t.id)}
                                                 className="w-4 h-4 rounded border-gray-300 text-navy focus:ring-navy" />
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-sm font-semibold text-navy truncate">{t.name}</p>
-                                                <p className="text-xs text-gray-400 truncate">{t.designation} · {t.email}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-sm font-semibold text-navy truncate">{t.name}</p>
+                                                    {t.staffType === "staff" && (
+                                                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-gray-400 truncate">{t.designation}{t.email ? ` · ${t.email}` : ""}</p>
                                                 {t.alreadyGenerated && (
                                                     <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700">
                                                         <CheckCircle2 className="w-3 h-3" /> Already generated
