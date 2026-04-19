@@ -113,7 +113,7 @@ export default function ClassTeacherPage() {
                         if (otherCls === cls && otherSection === section) continue;
                         const teacher = teachers.find(t => t.id === teacherId);
                         const tName = teacher ? `${teacher.firstName} ${teacher.lastName}` : "This teacher";
-                        setConflictError(`${tName} is already Class Teacher of ${otherCls} – Section ${otherSection}. A teacher can only be Class Teacher of one section.`);
+                        setConflictError(`${tName} is already Class Teacher of ${otherCls} – ${otherSection}. A teacher can only be Class Teacher of one section.`);
                         return;
                     }
                 }
@@ -226,9 +226,7 @@ export default function ClassTeacherPage() {
                                         </div>
                                         <div>
                                             <p className="font-bold text-navy">
-                                                {["NUR","LKG","UKG"].includes(cls.toUpperCase())
-                                                    ? cls.toUpperCase()
-                                                    : `Class ${cls}`}
+                                                {cls.toUpperCase()}
                                             </p>
                                             <p className="text-xs text-gray-400">
                                                 {assignedInClass > 0
