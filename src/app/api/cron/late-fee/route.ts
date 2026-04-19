@@ -96,6 +96,35 @@ export async function GET(req: Request) {
 
                     totalProcessed++;
 
+                    // Propagate fine to next month's previousDues if already generated
+                    if (data.studentId) {
+                        try {
+                            let nextMonth = currentMonth + 1;
+                            let nextYear = currentYear;
+                            if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+
+                            const nextSnap = await adminDb.collectionGroup("records")
+                                .where("studentId", "==", data.studentId)
+                                .where("month", "==", nextMonth)
+                                .where("year", "==", nextYear)
+                                .limit(1)
+                                .get();
+
+                            if (!nextSnap.empty) {
+                                const nextDoc = nextSnap.docs[0];
+                                const nextData = nextDoc.data();
+                                if (nextData.status !== "paid") {
+                                    await nextDoc.ref.update({
+                                        previousDues: (nextData.previousDues || 0) + LATE_FINE_AMOUNT,
+                                        totalAmount: (nextData.totalAmount || 0) + LATE_FINE_AMOUNT,
+                                    });
+                                }
+                            }
+                        } catch (propErr) {
+                            console.warn("[LateFee Cron] Fine propagation failed for", data.studentId, propErr);
+                        }
+                    }
+
                     const admNo = data.rollNo || data.admissionNumber || data.studentId || "";
                     if (admNo) {
                         affectedStudents.push({
