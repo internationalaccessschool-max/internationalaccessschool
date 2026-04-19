@@ -72,12 +72,10 @@ export async function POST(req: NextRequest) {
                 const esicPct = Number(t.esicPct) || 0;
                 const pfDeduction = Math.round((gross * pfPct) / 100);
                 const esicDeduction = Math.round((gross * esicPct) / 100);
-                const totalDeductions = pfDeduction + esicDeduction;
-                const netSalary = gross - totalDeductions;
 
                 // Compute attendance summary
                 let presentDays = 0, absentDays = 0, leaveDays = 0, lateDays = 0;
-                for (const [date, data] of Object.entries(attendanceByDate)) {
+                for (const [, data] of Object.entries(attendanceByDate)) {
                     if ((data as any).isHoliday) continue;
                     const status = (data as any).records?.[t.id];
                     if (status === "present") presentDays++;
@@ -85,6 +83,16 @@ export async function POST(req: NextRequest) {
                     else if (status === "absent") absentDays++;
                     else if (status === "leave") leaveDays++;
                 }
+
+                // 3 late = 1 absent, then 3 absents = 1 day salary cut
+                const lateToAbsent = Math.floor(lateDays / 3);
+                const effectiveAbsents = absentDays + lateToAbsent;
+                const deductibleDays = Math.floor(effectiveAbsents / 3);
+                const perDayRate = workingDaysInMonth > 0 ? gross / workingDaysInMonth : 0;
+                const absentDeduction = Math.round(deductibleDays * perDayRate);
+
+                const totalDeductions = pfDeduction + esicDeduction + absentDeduction;
+                const netSalary = gross - totalDeductions;
 
                 await recordRef.set({
                     teacherId: t.id,
@@ -97,6 +105,11 @@ export async function POST(req: NextRequest) {
                     gross,
                     pfPct, esicPct,
                     pfDeduction, esicDeduction, otherDeductions: 0,
+                    absentDeduction,
+                    deductibleDays,
+                    lateToAbsent,
+                    effectiveAbsents,
+                    perDayRate: Math.round(perDayRate),
                     totalDeductions,
                     netSalary,
                     status: "pending",
