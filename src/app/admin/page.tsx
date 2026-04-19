@@ -22,6 +22,7 @@ const quickActions = [
 export default function AdminDashboard() {
     const { user } = useAuth();
     const [totalStudents, setTotalStudents] = useState(0);
+    const [activeStudents, setActiveStudents] = useState(0);
     const [totalTeachers, setTotalTeachers] = useState(0);
     const [pendingAdmissions, setPendingAdmissions] = useState(0);
     const [totalHomework, setTotalHomework] = useState(0);
@@ -33,7 +34,14 @@ export default function AdminDashboard() {
             try {
                 // Total Students via nested profiles count
                 const studentsSnap = await getCountFromServer(collectionGroup(db, "profiles"));
-                setTotalStudents(studentsSnap.data().count);
+                const total = studentsSnap.data().count;
+                setTotalStudents(total);
+
+                // Active Students = total minus those with status "LEFT"
+                const leftSnap = await getCountFromServer(
+                    query(collectionGroup(db, "profiles"), where("status", "==", "LEFT"))
+                );
+                setActiveStudents(total - leftSnap.data().count);
 
                 // Total Teachers count
                 const teachersSnap = await getCountFromServer(
@@ -116,6 +124,14 @@ export default function AdminDashboard() {
             iconColor: "text-blue-600",
         },
         {
+            title: "Active Students",
+            value: loading ? "..." : activeStudents.toLocaleString(),
+            desc: "Currently studying",
+            icon: Users,
+            iconBg: "bg-teal-100",
+            iconColor: "text-teal-600",
+        },
+        {
             title: "Total Teachers",
             value: loading ? "..." : totalTeachers.toString(),
             desc: "Active faculty",
@@ -162,7 +178,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Stat Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {stats.map((stat) => (
                     <div key={stat.title} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 card-hover">
                         <div className="flex items-start justify-between mb-4">
