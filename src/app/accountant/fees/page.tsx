@@ -1186,22 +1186,6 @@ export default function ManageFeesPage() {
                                                             Overdue
                                                         </button>
                                                     )}
-                                                    {/* Remind + WhatsApp — show if any fee (school or transport) is still unpaid */}
-                                                    {(!schoolPaid || (isBusStudent && !transportPaid)) && (
-                                                        <button
-                                                            onClick={() => handleSendReminder(record)}
-                                                            disabled={actionLoading === record.id + "_email"}
-                                                            title={record.parentEmail || "No email on file"}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
-                                                        >
-                                                            {actionLoading === record.id + "_email" ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <Mail className="w-3 h-3" />
-                                                            )}
-                                                            Remind
-                                                        </button>
-                                                    )}
                                                     {(!schoolPaid || (isBusStudent && !transportPaid)) && (
                                                         <a
                                                             href={`https://wa.me/91${record.parentPhone || ""}?text=${encodeURIComponent(
