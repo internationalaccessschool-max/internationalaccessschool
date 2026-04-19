@@ -334,7 +334,7 @@ export default function AdminStudentsPage() {
                         {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
                     </select>
                     <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
-                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Section ${s}`}</option>)}
+                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : s}</option>)}
                     </select>
                 </div>
             </div>
