@@ -31,84 +31,79 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         const fetchStats = async () => {
+            // Each stat fetched independently so one failure doesn't zero out others
+
+            // Total Students
             try {
-                // Total Students via nested profiles count
-                const studentsSnap = await getCountFromServer(collectionGroup(db, "profiles"));
-                const total = studentsSnap.data().count;
-                setTotalStudents(total);
+                const snap = await getCountFromServer(collectionGroup(db, "profiles"));
+                setTotalStudents(snap.data().count);
+            } catch (e) { console.warn("totalStudents:", e); }
 
-                // Active Students = total minus those with status "LEFT"
-                const leftSnap = await getCountFromServer(
-                    query(collectionGroup(db, "profiles"), where("status", "==", "LEFT"))
-                );
-                setActiveStudents(total - leftSnap.data().count);
+            // Active Students (total - LEFT)
+            try {
+                const [allSnap, leftSnap] = await Promise.all([
+                    getCountFromServer(collectionGroup(db, "profiles")),
+                    getCountFromServer(query(collectionGroup(db, "profiles"), where("status", "==", "LEFT"))),
+                ]);
+                setActiveStudents(allSnap.data().count - leftSnap.data().count);
+            } catch (e) { console.warn("activeStudents:", e); }
 
-                // Total Teachers count
-                const teachersSnap = await getCountFromServer(
-                    query(collection(db, "users"), where("role", "==", "teacher"))
-                );
-                setTotalTeachers(teachersSnap.data().count);
+            // Total Teachers — stored in "teachers" collection
+            try {
+                const snap = await getCountFromServer(collection(db, "teachers"));
+                setTotalTeachers(snap.data().count);
+            } catch (e) { console.warn("totalTeachers:", e); }
 
-                // Pending Admissions count
-                const admissionsSnap = await getCountFromServer(
+            // Pending Admissions
+            try {
+                const snap = await getCountFromServer(
                     query(collection(db, "admission_requests"), where("status", "==", "pending"))
                 );
-                setPendingAdmissions(admissionsSnap.data().count);
+                setPendingAdmissions(snap.data().count);
+            } catch (e) { console.warn("pendingAdmissions:", e); }
 
-                // Total Homework Posted count
-                const homeworkSnap = await getCountFromServer(collection(db, "homework"));
-                setTotalHomework(homeworkSnap.data().count);
+            // Total Homework
+            try {
+                const snap = await getCountFromServer(collection(db, "homework"));
+                setTotalHomework(snap.data().count);
+            } catch (e) { console.warn("totalHomework:", e); }
 
-                // Build recent activity from real data
-                const activityList: any[] = [];
-
-                // Recent admissions
-                try {
-                    const recentAdmissions = await getDocs(
-                        query(collection(db, "admission_requests"), orderBy("submittedAt", "desc"), limit(3))
-                    );
-                    recentAdmissions.docs.forEach(doc => {
-                        const d = doc.data();
-                        const time = d.submittedAt?.toDate
-                            ? getTimeAgo(d.submittedAt.toDate())
-                            : "Recently";
-                        activityList.push({
-                            icon: UserPlus,
-                            title: `Admission request: ${d.firstName || ""} ${d.lastName || ""}, Class ${d.enrollmentClass || "?"}`,
-                            time,
-                            color: d.status === "pending" ? "text-blue-500" : d.status === "rejected" ? "text-rose-500" : "text-emerald-500",
-                        });
+            // Recent Activity
+            const activityList: any[] = [];
+            try {
+                const recentAdmissions = await getDocs(
+                    query(collection(db, "admission_requests"), orderBy("submittedAt", "desc"), limit(3))
+                );
+                recentAdmissions.docs.forEach(doc => {
+                    const d = doc.data();
+                    const time = d.submittedAt?.toDate ? getTimeAgo(d.submittedAt.toDate()) : "Recently";
+                    activityList.push({
+                        icon: UserPlus,
+                        title: `Admission request: ${d.firstName || ""} ${d.lastName || ""}, Class ${d.enrollmentClass || "?"}`,
+                        time,
+                        color: d.status === "pending" ? "text-blue-500" : d.status === "rejected" ? "text-rose-500" : "text-emerald-500",
                     });
-                } catch (e) {
-                    // Index might not exist, that's okay
-                }
+                });
+            } catch (e) { }
 
-                // Recent homework
-                try {
-                    const recentHw = await getDocs(
-                        query(collection(db, "homework"), orderBy("createdAt", "desc"), limit(3))
-                    );
-                    recentHw.docs.forEach(doc => {
-                        const d = doc.data();
-                        const time = d.createdAt?.toDate
-                            ? getTimeAgo(d.createdAt.toDate())
-                            : "Recently";
-                        activityList.push({
-                            icon: PenLine,
-                            title: `Homework posted: ${d.title || "Assignment"} (${d.className || "?"}-${d.section || "?"})`,
-                            time,
-                            color: "text-amber-500",
-                        });
+            try {
+                const recentHw = await getDocs(
+                    query(collection(db, "homework"), orderBy("createdAt", "desc"), limit(3))
+                );
+                recentHw.docs.forEach(doc => {
+                    const d = doc.data();
+                    const time = d.createdAt?.toDate ? getTimeAgo(d.createdAt.toDate()) : "Recently";
+                    activityList.push({
+                        icon: PenLine,
+                        title: `Homework posted: ${d.title || "Assignment"} (${d.className || "?"}-${d.section || "?"})`,
+                        time,
+                        color: "text-amber-500",
                     });
-                } catch (e) { }
+                });
+            } catch (e) { }
 
-                // Sort by recency (approximated by parsing time strings / just keep insertion order)
-                setRecentActivity(activityList.slice(0, 6));
-            } catch (err) {
-                console.error("Dashboard fetch error:", err);
-            } finally {
-                setLoading(false);
-            }
+            setRecentActivity(activityList.slice(0, 6));
+            setLoading(false);
         };
 
         fetchStats();
