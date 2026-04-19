@@ -516,7 +516,6 @@ export function StudentFeeModal({ student, onClose }: Props) {
 
             parts.push(buildReceiptHTML({
                 title: "School Fee Receipt",
-                accentColor: "#0f2044",
                 receiptNo: schoolReceiptNo,
                 studentName,
                 classSection,
@@ -537,7 +536,6 @@ export function StudentFeeModal({ student, onClose }: Props) {
 
             parts.push(buildReceiptHTML({
                 title: "Transport Fee Receipt",
-                accentColor: "#7c3aed",
                 receiptNo: transportReceiptNo,
                 studentName,
                 classSection,
