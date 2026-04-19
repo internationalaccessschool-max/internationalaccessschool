@@ -123,7 +123,7 @@ export default function TeacherTimetablePage() {
                                                 <span className="text-gray-200">·</span>
                                                 <span className="flex items-center gap-1">
                                                     <Users className="w-3 h-3" />
-                                                    Section {entry.section}
+                                                    {entry.section}
                                                 </span>
                                             </div>
                                         </div>
