@@ -488,7 +488,7 @@ export default function TeacherMarksPage() {
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                         {myClass && (
                             <Badge variant="secondary" className="text-sm font-semibold px-3 py-1">
-                                Class {myClass.className} — Section {myClass.section}
+                                Class {myClass.className} — {myClass.section}
                             </Badge>
                         )}
                         <span className="text-muted-foreground text-sm">{students.length} students</span>
