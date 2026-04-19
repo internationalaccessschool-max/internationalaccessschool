@@ -10,7 +10,6 @@ function numberToWords(num: number): string {
     const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
         "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
     const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
     const toWords = (n: number): string => {
         if (n < 20) return ones[n];
         if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
@@ -25,13 +24,28 @@ function numberToWords(num: number): string {
 export function SalarySlip({ record, teacher }: { record: any; teacher: any }) {
     const monthName = MONTHS[(record.month || 1) - 1];
     const year = record.year;
-    const paidDate = record.paidOn?.toDate ? record.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "—";
+    const paidDate = record.paidOn?.toDate
+        ? record.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+        : "—";
+
+    const perDayRate: number = record.perDayRate ?? 0;
+    const presentDays: number = record.presentDays ?? 0;
+    const leaveDays: number = record.leaveDays ?? 0;
+    const holidayDays: number = record.holidayDays ?? 0;
+    const absentDays: number = record.absentDays ?? 0;
+    const lateToAbsent: number = record.lateToAbsent ?? Math.floor((record.lateDays ?? 0) / 3);
+    const effectiveAbsents: number = record.effectiveAbsents ?? (absentDays + lateToAbsent);
+    const deductibleDays: number = record.deductibleDays ?? Math.floor(effectiveAbsents / 3);
+    const absentDeduction: number = record.absentDeduction ?? 0;
+    const workingDays: number = record.workingDays ?? 0;
+    const paidDays = presentDays + leaveDays + holidayDays;
 
     return (
         <div className="bg-white shadow-lg rounded-xl p-8 print:shadow-none print:rounded-none print:p-6 border border-gray-200">
             {/* Header */}
             <div className="flex items-center justify-between border-b-2 border-navy pb-4 mb-6">
                 <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/LOGO.png" alt="Logo" className="w-14 h-14" />
                     <div>
                         <h1 className="text-xl font-bold text-navy">International Access School</h1>
@@ -58,15 +72,71 @@ export function SalarySlip({ record, teacher }: { record: any; teacher: any }) {
             </div>
 
             {/* Attendance Summary */}
-            {record.workingDays !== undefined && (
-                <div className="bg-navy/5 rounded-xl p-3 mb-6">
-                    <p className="text-xs font-semibold text-navy mb-2">ATTENDANCE</p>
-                    <div className="grid grid-cols-5 gap-2 text-xs">
-                        <div><span className="text-gray-400">Working Days:</span> <strong className="text-navy">{record.workingDays}</strong></div>
-                        <div><span className="text-gray-400">Present:</span> <strong className="text-emerald-600">{record.presentDays || 0}</strong></div>
-                        <div><span className="text-gray-400">Late:</span> <strong className="text-amber-600">{record.lateDays || 0}</strong></div>
-                        <div><span className="text-gray-400">Absent:</span> <strong className="text-red-600">{record.absentDays || 0}</strong></div>
-                        <div><span className="text-gray-400">Leave:</span> <strong className="text-blue-600">{record.leaveDays || 0}</strong></div>
+            {workingDays > 0 && (
+                <div className="bg-navy/5 rounded-xl p-4 mb-4">
+                    <p className="text-xs font-bold text-navy mb-2 uppercase tracking-wide">Attendance — {monthName} {year}</p>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 text-center text-xs">
+                        <div>
+                            <div className="font-bold text-slate-700 text-base">{workingDays}</div>
+                            <div className="text-gray-400">Working Days</div>
+                        </div>
+                        <div>
+                            <div className="font-bold text-emerald-600 text-base">{presentDays}</div>
+                            <div className="text-gray-400">Present</div>
+                        </div>
+                        <div>
+                            <div className="font-bold text-blue-600 text-base">{leaveDays}</div>
+                            <div className="text-gray-400">CL</div>
+                        </div>
+                        <div>
+                            <div className="font-bold text-purple-600 text-base">{holidayDays}</div>
+                            <div className="text-gray-400">Holiday</div>
+                        </div>
+                        <div>
+                            <div className="font-bold text-amber-600 text-base">{record.lateDays ?? 0}</div>
+                            <div className="text-gray-400">Late</div>
+                        </div>
+                        <div>
+                            <div className="font-bold text-red-600 text-base">{absentDays}</div>
+                            <div className="text-gray-400">Absent</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Per-Day Breakdown */}
+            {perDayRate > 0 && (
+                <div className="border border-indigo-100 bg-indigo-50/50 rounded-xl p-4 mb-4">
+                    <p className="text-xs font-bold text-indigo-700 mb-2 uppercase tracking-wide">Daily Salary Breakdown</p>
+                    <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Per Day Rate <span className="text-slate-400">(₹{(record.gross || 0).toLocaleString("en-IN")} ÷ {workingDays} days)</span></span>
+                            <span className="font-bold text-indigo-600">₹{perDayRate.toLocaleString("en-IN")} / day</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">
+                                Paid Days: Present ({presentDays}) + CL ({leaveDays}) + Holiday ({holidayDays}) = {paidDays} days
+                            </span>
+                            <span className="font-semibold text-emerald-600">₹{(paidDays * perDayRate).toLocaleString("en-IN")}</span>
+                        </div>
+                        {(absentDays > 0 || lateToAbsent > 0) && (
+                            <>
+                                {lateToAbsent > 0 && (
+                                    <div className="flex justify-between">
+                                        <span className="text-amber-600">
+                                            Late: {record.lateDays ?? 0} days ÷ 3 = {lateToAbsent} extra absent count
+                                        </span>
+                                        <span className="text-amber-500 font-medium">+{lateToAbsent} absent</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between">
+                                    <span className="text-red-500">
+                                        Effective Absent: {absentDays} + {lateToAbsent} = {effectiveAbsents} → ÷3 = {deductibleDays} day(s) cut × ₹{perDayRate.toLocaleString("en-IN")}
+                                    </span>
+                                    <span className="font-semibold text-red-500">−₹{absentDeduction.toLocaleString("en-IN")}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -91,7 +161,16 @@ export function SalarySlip({ record, teacher }: { record: any; teacher: any }) {
                     <div className="space-y-1.5 text-sm">
                         <PayRow label={`PF (${record.pfPct || 0}%)`} value={record.pfDeduction || 0} />
                         <PayRow label={`ESIC (${record.esicPct || 0}%)`} value={record.esicDeduction || 0} />
-                        <PayRow label="Other" value={record.otherDeductions || 0} />
+                        {absentDeduction > 0 && (
+                            <PayRow
+                                label={`Absent Cut (${deductibleDays} day${deductibleDays !== 1 ? "s" : ""})`}
+                                value={absentDeduction}
+                                highlight
+                            />
+                        )}
+                        {(record.otherDeductions || 0) > 0 && (
+                            <PayRow label="Other" value={record.otherDeductions || 0} />
+                        )}
                         <div className="flex justify-between font-bold text-red-600 pt-2 border-t border-gray-200">
                             <span>Total Deductions</span>
                             <span>₹{(record.totalDeductions || 0).toLocaleString("en-IN")}</span>
@@ -146,11 +225,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     );
 }
 
-function PayRow({ label, value }: { label: string; value: number }) {
+function PayRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
     return (
         <div className="flex justify-between">
-            <span className="text-gray-600">{label}</span>
-            <span className="font-medium text-navy">₹{value.toLocaleString("en-IN")}</span>
+            <span className={highlight ? "text-red-500 font-medium" : "text-gray-600"}>{label}</span>
+            <span className={`font-medium ${highlight ? "text-red-500" : "text-navy"}`}>₹{value.toLocaleString("en-IN")}</span>
         </div>
     );
 }
