@@ -114,7 +114,7 @@ const defaultTC = (): TCData => ({
 
 // ─── Print generator (fully self-contained HTML) ────────────────────────────
 
-function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string): string {
+function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string, udiseSchool: string = "IAS", udiseCode: string = "10161506306"): string {
   const rows: [string, string, string, string][] = [
     ["1.", "Name of the Student", tc.studentName, ""],
     ["1a.", "Permanent Education Number (PEN)", tc.pen || "—", ""],
@@ -202,9 +202,9 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string): string {
   <table style="width:100%;margin-bottom:2px">
     <tr>
       <td style="font-size:10px">Book No. <b>${tc.bookNo}</b> &nbsp;&nbsp; Sl. No. <b>${tc.slNo}</b></td>
-      <td style="font-size:10px;text-align:right">Admission No.: IAS – <b>${admNo}</b></td>
+      <td style="font-size:10px;text-align:right">Admission No.: ${udiseSchool} – <b>${admNo}</b></td>
     </tr>
-    <tr><td colspan="2" style="font-size:10px;font-weight:bold;text-align:right">IPA: 10161202003 &nbsp;&nbsp; IAS: 10161506306</td></tr>
+    <tr><td colspan="2" style="font-size:10px;font-weight:bold;text-align:right">${udiseSchool}: ${udiseCode}</td></tr>
   </table>
 
   <!-- Title -->
@@ -251,12 +251,18 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const UDISE_CODES: Record<string, string> = {
+  IAS: "10161506306",
+  IPS: "10161202003",
+};
+
 export default function TransferCertificatePage() {
   const [enr, setEnr] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [student, setStudent] = useState<Student | null>(null);
   const [tcData, setTcData] = useState<TCData>(defaultTC());
   const [notFound, setNotFound] = useState(false);
+  const [udiseSchool, setUdiseSchool] = useState<"IAS" | "IPS">("IAS");
 
   const handleSearch = async () => {
     const trimmed = enr.trim();
@@ -338,7 +344,7 @@ export default function TransferCertificatePage() {
     if (!student) return;
     // Build absolute logo URL from current origin
     const logoUrl = `${window.location.origin}/LOGO.png`;
-    const html = buildPrintHTML(tcData, student.admissionNumber, logoUrl);
+    const html = buildPrintHTML(tcData, student.admissionNumber, logoUrl, udiseSchool, UDISE_CODES[udiseSchool]);
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) { toast.error("Pop-up blocked — please allow pop-ups."); return; }
     win.document.open();
@@ -430,6 +436,17 @@ export default function TransferCertificatePage() {
               {field("bookNo", "Book No.")}
               {field("slNo", "Sl. No.")}
             </div>
+            <div className="mb-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-0.5">UDISE School</label>
+              <select
+                value={udiseSchool}
+                onChange={e => setUdiseSchool(e.target.value as "IAS" | "IPS")}
+                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20"
+              >
+                <option value="IAS">IAS — {UDISE_CODES.IAS}</option>
+                <option value="IPS">IPS — {UDISE_CODES.IPS}</option>
+              </select>
+            </div>
             {field("studentName", "Student Name")}
             {field("pen", "PEN (Permanent Education Number)")}
             {field("motherName", "Mother's Name")}
@@ -511,9 +528,9 @@ export default function TransferCertificatePage() {
                 <tbody>
                   <tr>
                     <td style={{ fontSize: "10px" }}>Book No. <b>{tcData.bookNo}</b> &nbsp; Sl. No. <b>{tcData.slNo}</b></td>
-                    <td style={{ fontSize: "10px", textAlign: "right" }}>Admission No.: IAS – <b>{student.admissionNumber}</b></td>
+                    <td style={{ fontSize: "10px", textAlign: "right" }}>Admission No.: {udiseSchool} – <b>{student.admissionNumber}</b></td>
                   </tr>
-                  <tr><td colSpan={2} style={{ fontSize: "10px", fontWeight: "bold", textAlign: "right" }}>IPA: 10161202003 &nbsp;&nbsp; IAS: 10161506306</td></tr>
+                  <tr><td colSpan={2} style={{ fontSize: "10px", fontWeight: "bold", textAlign: "right" }}>{udiseSchool}: {UDISE_CODES[udiseSchool]}</td></tr>
                 </tbody>
               </table>
 
