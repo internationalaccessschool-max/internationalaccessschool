@@ -678,7 +678,7 @@ export default function AdvanceFeePage() {
                             >
                                 <option value="">All Sections</option>
                                 {allSections.map(s => (
-                                    <option key={s} value={s}>Section {s}</option>
+                                    <option key={s} value={s}>{s}</option>
                                 ))}
                             </select>
                         </div>
@@ -697,7 +697,7 @@ export default function AdvanceFeePage() {
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                             <span className="font-semibold">{filteredStudents.length}</span> student{filteredStudents.length !== 1 ? "s" : ""} found
                             {filterClass && <span className="px-2 py-0.5 rounded-full bg-navy/10 text-navy font-semibold">Class {filterClass}</span>}
-                            {filterSection && <span className="px-2 py-0.5 rounded-full bg-navy/10 text-navy font-semibold">Section {filterSection}</span>}
+                            {filterSection && <span className="px-2 py-0.5 rounded-full bg-navy/10 text-navy font-semibold">{filterSection}</span>}
                         </div>
                     )}
 
