@@ -353,7 +353,7 @@ th:not(:first-child){text-align:right;}
                         <SelectContent>
                             <SelectItem value="all">All Sections</SelectItem>
                             {availableSections.map(sec => (
-                                <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
+                                <SelectItem key={sec} value={sec}>{sec}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
