@@ -58,6 +58,8 @@ interface SalaryRecord {
     otherDeductions: number;
     absentDeduction: number;
     deductibleDays: number;
+    lateToAbsent: number;
+    effectiveAbsents: number;
     perDayRate: number;
     totalDeductions: number;
     netSalary: number;
