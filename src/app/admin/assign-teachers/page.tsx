@@ -201,7 +201,7 @@ export default function AssignTeachersPage() {
                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                 <span className="text-xs text-gray-500">{a.subject}</span>
                                                 <span className="text-gray-200">•</span>
-                                                <span className="text-xs text-gray-400">Section {a.section}</span>
+                                                <span className="text-xs text-gray-400">{a.section}</span>
                                                 <span className="text-gray-200">•</span>
                                                 <span className="text-xs text-gray-400">{a.periodsPerWeek} periods/week</span>
                                             </div>
@@ -253,7 +253,7 @@ export default function AssignTeachersPage() {
                                     <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Section</label>
                                     <select value={selSection} onChange={e => setSelSection(e.target.value)} className={selectCls}>
                                         <option value="">Section...</option>
-                                        {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                                        {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
                             </div>
