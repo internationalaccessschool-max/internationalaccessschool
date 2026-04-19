@@ -458,7 +458,7 @@ export default function AdminAttendancePage() {
                                 onChange={e => setSelectedSection(e.target.value)}
                                 className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[100px]"
                             >
-                                {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                                {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                             <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                         </div>
