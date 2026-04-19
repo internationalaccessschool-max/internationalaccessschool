@@ -43,6 +43,7 @@ interface TeacherInfo {
     email: string;
     designation: string;
     status: AttendanceStatus;
+    staffType: "teacher" | "staff";
 }
 
 interface AttendanceDoc {
@@ -80,7 +81,7 @@ export default function AdminTeacherAttendancePage() {
         const fetchTeachers = async () => {
             try {
                 const snap = await getDocs(query(collection(db, "teachers"), orderBy("createdAt", "desc")));
-                const list: TeacherInfo[] = snap.docs.map(d => {
+                const teacherList: TeacherInfo[] = snap.docs.map(d => {
                     const data = d.data() as any;
                     return {
                         id: d.id,
@@ -88,10 +89,27 @@ export default function AdminTeacherAttendancePage() {
                         email: data.email || "",
                         designation: data.designation || "Teacher",
                         status: "present" as AttendanceStatus,
+                        staffType: "teacher" as const,
                     };
                 });
-                list.sort((a, b) => a.name.localeCompare(b.name));
-                setTeachers(list);
+
+                // Fetch non-teaching staff
+                const staffSnap = await getDocs(collection(db, "nonTeachingStaff"));
+                const staffList: TeacherInfo[] = staffSnap.docs.map(d => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        name: data.name || "Unknown",
+                        email: "",
+                        designation: data.designation || "Staff",
+                        status: "present" as AttendanceStatus,
+                        staffType: "staff" as const,
+                    };
+                });
+
+                const allList = [...teacherList, ...staffList];
+                allList.sort((a, b) => a.name.localeCompare(b.name));
+                setTeachers(allList);
             } catch (err) {
                 console.error("Error fetching teachers:", err);
                 setTeachers([]);
@@ -392,8 +410,13 @@ export default function AdminTeacherAttendancePage() {
                                             {idx + 1}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
-                                            <p className="text-xs text-gray-400">{teacher.designation} · {teacher.email}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                                {teacher.staffType === "staff" && (
+                                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-400">{teacher.designation}{teacher.email ? ` · ${teacher.email}` : ""}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 self-end sm:self-auto ml-11 sm:ml-0 flex-wrap justify-end">
@@ -471,7 +494,12 @@ export default function AdminTeacherAttendancePage() {
                                     return (
                                         <div key={teacher.id} className="grid grid-cols-[1fr_60px_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
                                             <div>
-                                                <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
+                                                    {teacher.staffType === "staff" && (
+                                                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">Staff</span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-gray-400 truncate">{teacher.designation}</p>
                                             </div>
                                             <span className="text-center text-sm font-bold text-emerald-600">{s.present}</span>
