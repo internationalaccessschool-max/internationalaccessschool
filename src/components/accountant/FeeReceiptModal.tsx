@@ -146,7 +146,8 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
             title: isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt",
             receiptNo: displayReceiptNo,
             studentName: record.studentName || "—",
-            classSection: `Class ${record.class || "—"}${record.section ? ` - ${record.section}` : ""}`,
+            classSection: `${record.class || "—"}${record.section ? ` - ${record.section}` : ""}`,
+            admissionNo: record.rollNo || undefined,
             rollNo: record.rollNo || undefined,
             paidOn: displayPaidOn,
             feeMonth: feeMonthLabel,
@@ -209,7 +210,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                             <InfoRow label="Admission No" value={
                                 <span className="font-bold text-navy">{record.rollNo || "—"}</span>
                             } highlight />
-                            <InfoRow label="Class / Section" value={`Class ${record.class}${record.section ? ` - ${record.section}` : ""}`} />
+                            <InfoRow label="Class / Section" value={`${record.class}${record.section ? ` - ${record.section}` : ""}`} />
                             {isTransportReceipt && record.busNumber && record.busNumber !== "—" && (
                                 <InfoRow label="Bus No." value={`${record.busNumber}${record.routeDetails ? ` — ${record.routeDetails}` : ""}`} />
                             )}
