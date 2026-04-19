@@ -240,7 +240,7 @@ export default function AdminClassesPage() {
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-semibold text-navy">
-                                                            Class {row.cls} — Section {row.section}
+                                                            Class {row.cls} — {row.section}
                                                         </p>
                                                         <p className="text-xs text-gray-400">
                                                             Class Teacher:{" "}
@@ -279,7 +279,7 @@ export default function AdminClassesPage() {
                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                             <div>
                                 <h3 className="font-bold text-navy">Edit Class Teacher</h3>
-                                <p className="text-xs text-gray-400 mt-0.5">Class {editModal.cls} — Section {editModal.section}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">Class {editModal.cls} — {editModal.section}</p>
                             </div>
                             <button onClick={() => setEditModal(null)}
                                 className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
