@@ -5,9 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Loader2, Clock, BookOpen, User, CalendarDays } from "lucide-react";
-
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
 
 const PERIOD_COLORS = [
     "bg-indigo-50 border-indigo-200 text-indigo-700",
@@ -52,9 +50,9 @@ export default function StudentTimetablePage() {
         return () => unsub();
     }, []);
 
-    const daySlots = PERIODS.map(p => ({
-        period: p,
-        slot: slots[`${selectedDay}-${p}`] || null,
+    const daySlots = TIMETABLE_PERIODS.map(timing => ({
+        timing,
+        slot: timing.isBreak ? null : slots[`${selectedDay}-${timing.period}`] || null,
     }));
 
     const filledToday = daySlots.filter(d => d.slot?.subjectName).length;
@@ -110,7 +108,7 @@ export default function StudentTimetablePage() {
                     {/* Day tabs */}
                     <div className="flex gap-2 flex-wrap">
                         {DAYS.map((day, idx) => {
-                            const count = PERIODS.filter(p => slots[`${day}-${p}`]?.subjectName).length;
+                            const count = TIMETABLE_PERIODS.filter(p => !p.isBreak && slots[`${day}-${p.period}`]?.subjectName).length;
                             const isToday = day === DAYS[new Date().getDay() === 0 ? 0 : new Date().getDay() - 1];
                             return (
                                 <button key={day} onClick={() => setSelectedDay(day)}
@@ -137,16 +135,27 @@ export default function StudentTimetablePage() {
 
                     {/* Period cards for selected day */}
                     <div className="space-y-3">
-                        {daySlots.map(({ period, slot }) => {
+                        {daySlots.map(({ timing, slot }, idx) => {
+                            if (timing.isBreak) {
+                                return (
+                                    <div key={`break-${idx}`} className="bg-amber-50 rounded-2xl border border-amber-200/60 shadow-sm flex items-center justify-center py-4">
+                                        <span className="font-bold text-amber-700 uppercase tracking-[0.2em] text-[11px]">
+                                            {timing.label || "BREAK"} — <span className="opacity-70 normal-case tracking-normal">{timing.start} to {timing.end}</span>
+                                        </span>
+                                    </div>
+                                );
+                            }
+
+                            const period = timing.period;
                             const colorCls = PERIOD_COLORS[(period - 1) % PERIOD_COLORS.length];
                             return (
                                 <div key={period}
                                     className={`bg-white rounded-2xl border shadow-sm flex items-center gap-4 px-5 py-4 transition-all ${slot?.subjectName ? "border-gray-100" : "border-gray-50 opacity-40"}`}
                                 >
                                     {/* Period badge */}
-                                    <div className={`w-12 h-12 rounded-xl border-2 flex flex-col items-center justify-center shrink-0 ${slot?.subjectName ? colorCls : "bg-gray-50 border-gray-100 text-gray-300"}`}>
-                                        <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">Per</span>
-                                        <span className="text-lg font-bold leading-none">{period}</span>
+                                    <div className={`w-14 h-14 rounded-xl border-2 flex flex-col items-center justify-center shrink-0 ${slot?.subjectName ? colorCls : "bg-gray-50 border-gray-100 text-gray-400"}`}>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">P{period}</span>
+                                        <span className="text-[10px] font-bold leading-none mt-1">{timing.start.replace(' AM','').replace(' PM','')}</span>
                                     </div>
 
                                     {slot?.subjectName ? (
