@@ -61,7 +61,7 @@ export default function AdminClassesPage() {
                     ctMap[`${cls}-${section}`] = { teacherName: teacherName || null, teacherId: teacherId || null };
                 });
 
-                // 2. Get student counts per class-section
+                // 2. Get student counts per class-section (only Active, exclude LEFT)
                 const countMap: Record<string, number> = {};
                 await Promise.all(CLASS_LIST.map(async cls => {
                     await Promise.all(SECTIONS.map(async section => {
@@ -69,7 +69,11 @@ export default function AdminClassesPage() {
                             const snap = await getDocs(
                                 collection(db, "users", "classes", cls, "sections", section, "students", "profiles")
                             );
-                            if (snap.size > 0) countMap[`${cls}-${section}`] = snap.size;
+                            const activeCount = snap.docs.filter(d => {
+                                const status = (d.data().status || "").toString().toUpperCase();
+                                return status !== "LEFT";
+                            }).length;
+                            if (activeCount > 0) countMap[`${cls}-${section}`] = activeCount;
                         } catch { /* section may not exist */ }
                     }));
                 }));
