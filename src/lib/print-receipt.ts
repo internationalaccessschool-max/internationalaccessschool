@@ -1,17 +1,36 @@
 /**
+ * Fetch the school logo and return it as a base64 data URI so it is
+ * embedded in the popup HTML — no separate network request needed at
+ * print time, which is why logos disappear without this.
+ */
+async function logoAsDataURI(): Promise<string> {
+    try {
+        const res = await fetch(window.location.origin + "/LOGO.png");
+        const blob = await res.blob();
+        return await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+        });
+    } catch {
+        return window.location.origin + "/LOGO.png"; // fallback to URL
+    }
+}
+
+/**
  * printReceiptHTML — Opens a popup with 2 receipt copies on a single A5 landscape sheet.
  * Left half = Student Copy, Right half = Office Copy.
- * This takes exactly half the height of an A4 page, making each receipt A6 size (1/4th of A4).
  */
-export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void {
+export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): Promise<void> {
     const popup = window.open("", "_blank", "width=900,height=600,scrollbars=yes");
     if (!popup) {
         alert("Please allow popups for this website to print/download receipts.");
         return;
     }
 
-    const logoUrl = window.location.origin + "/LOGO.png";
-    const resolvedHTML = bodyHTML.replace(/__SCHOOL_LOGO__/g, logoUrl);
+    // Embed logo as base64 so it always renders in print (no network call needed)
+    const logoDataURI = await logoAsDataURI();
+    const resolvedHTML = bodyHTML.replace(/__SCHOOL_LOGO__/g, logoDataURI);
 
     const twoCopies = `
 <div class="page">
@@ -46,7 +65,7 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
     }
     .slip:last-child { border-right: none; }
 
-    /* Watermark */
+    /* Watermark — uses embedded base64 logo */
     .slip::before {
       content: '';
       position: absolute;
@@ -55,7 +74,7 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
       transform: translate(-50%, -50%);
       width: 55%;
       height: 55%;
-      background-image: url('${logoUrl}');
+      background-image: url('${logoDataURI}');
       background-repeat: no-repeat;
       background-position: center;
       background-size: contain;
@@ -79,17 +98,36 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
     }
 
     @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
       body { background: #fff; }
       .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; }
       .slip { border-right: 1.5px dashed #94a3b8; }
-      @page { size: A4 portrait; margin: 0; }
+      @page { size: A4 landscape; margin: 0; }
     }
   </style>`;
+
     popup.document.body.innerHTML = twoCopies;
-    popup.onload = () => { popup.focus(); popup.print(); };
+
+    // Wait for all images to load before triggering print
+    popup.document.addEventListener("DOMContentLoaded", () => {
+        const imgs = Array.from(popup.document.images);
+        if (imgs.length === 0) { popup.focus(); popup.print(); return; }
+        let loaded = 0;
+        const tryPrint = () => { if (++loaded >= imgs.length) { popup.focus(); popup.print(); } };
+        imgs.forEach(img => {
+            if (img.complete) tryPrint();
+            else { img.onload = tryPrint; img.onerror = tryPrint; }
+        });
+    });
+
+    // Fallback — fire print after a safe delay regardless
     setTimeout(() => {
         try { popup.focus(); popup.print(); } catch (_) { /* already printed */ }
-    }, 600);
+    }, 1200);
 }
 
 export interface ReceiptData {
