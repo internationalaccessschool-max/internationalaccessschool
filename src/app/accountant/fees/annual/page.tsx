@@ -191,7 +191,7 @@ export default function AnnualFeesPage() {
 
 
     // ── Print Annual Fee Receipt ───────────────────────────────────────────────
-    const printAnnualReceipt = (record: AnnualFeeRecord, payment: AnnualPayment) => {
+    const printAnnualReceipt = async (record: AnnualFeeRecord, payment: AnnualPayment) => {
         const paidOn = new Date(payment.date).toLocaleDateString("en-IN", {
             day: "numeric", month: "long", year: "numeric"
         });
@@ -208,7 +208,7 @@ export default function AnnualFeesPage() {
             totalAmount: payment.amount,
             paymentMode: payment.paymentMode,
         });
-        printReceiptHTML(html, `Annual Fee Receipt — ${record.studentName}`);
+        await printReceiptHTML(html, `Annual Fee Receipt — ${record.studentName}`);
     };
 
     // ── Record a Payment ──────────────────────────────────────────────────────
