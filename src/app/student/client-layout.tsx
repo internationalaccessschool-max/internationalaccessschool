@@ -2,7 +2,7 @@
 
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
-import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus, Bell, X } from "lucide-react";
+import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus, Bell, X, CalendarRange } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 
 import { useAuth } from "@/context/AuthContext";
@@ -70,6 +70,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 { href: "/student/attendance", label: "Attendance", icon: CalendarCheck },
                 { href: "/student/results", label: "Report Cards", icon: FileText },
                 { href: "/student/admit-card", label: "Admit Cards", icon: FileCheck },
+                { href: "/student/timetable", label: "My Timetable", icon: CalendarRange },
                 { href: "/student/homework", label: "Homework", icon: ClipboardList },
                 { href: "/student/fees", label: "My Fees", icon: Banknote },
                 { href: "/student/fees/transport", label: "Transport Fees", icon: Bus },
