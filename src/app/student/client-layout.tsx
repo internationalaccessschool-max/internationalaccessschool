@@ -109,7 +109,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <div className="print:hidden">
                 <MobileSidebar title="Student Portal" links={links} />
             </div>
-            <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8 print:p-0 print:m-0 print:overflow-visible relative">
+            <main className="flex-1 min-w-0 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8 print:p-0 print:m-0 print:overflow-visible relative">
                 <div className="max-w-7xl mx-auto print:max-w-none">
                     {children}
                 </div>
