@@ -64,7 +64,7 @@ export function CloudinaryUpload({
     subFolder = "",
     onUpload,
     acceptedFileTypes = "all",
-    maxSizeMB = 10,
+    maxSizeMB = 1,
     label,
     multiple = false,
 }: CloudinaryUploadProps) {
