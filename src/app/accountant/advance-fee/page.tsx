@@ -545,7 +545,7 @@ export default function AdvanceFeePage() {
     };
 
     // ─── Print combined receipt ───────────────────────────────────────────
-    const handlePrintSummaryReceipt = () => {
+    const handlePrintSummaryReceipt = async () => {
         if (!paidResult || !selectedStudent) return;
 
         const lineItems: { label: string; amount: number }[] = [];
@@ -577,7 +577,7 @@ export default function AdvanceFeePage() {
             paymentMode,
         });
 
-        printReceiptHTML(html, "Advance Fee Receipt");
+        await printReceiptHTML(html, "Advance Fee Receipt");
     };
 
     // ─── Reset everything ─────────────────────────────────────────────────
