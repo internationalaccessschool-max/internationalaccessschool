@@ -5,13 +5,12 @@ import {
     doc, getDoc, setDoc, getDocs, collection, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, Save, AlertTriangle, Clock, CheckCircle2, RefreshCw } from "lucide-react";
+import { Loader2, Save, AlertTriangle, Clock, CheckCircle2, RefreshCw, Printer } from "lucide-react";
 import toast from "react-hot-toast";
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
 
 const CLASS_LIST = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 interface Slot { subjectId: string; subjectName: string; teacherId: string; teacherName: string; }
 type TimetableSlots = Record<string, Slot>; // key: "Monday-1"
@@ -135,12 +134,12 @@ export default function AdminTimetablePage() {
     };
 
     const filledCount = Object.values(slots).filter(s => s.subjectId || s.teacherId).length;
-    const totalSlots = DAYS.length * PERIODS.length;
+    const totalSlots = DAYS.length * TIMETABLE_PERIODS.filter(p => !p.isBreak).length;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 print:m-0 print:p-0">
             {/* Header */}
-            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden">
+            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden print:hidden">
                 <div className="absolute inset-0 opacity-10"
                     style={{ backgroundImage: `radial-gradient(circle at 80% 50%, rgba(200,169,81,0.2) 0%, transparent 50%)` }} />
                 <div className="relative z-10">
@@ -153,7 +152,7 @@ export default function AdminTimetablePage() {
             </div>
 
             {/* Class + Section selector */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 print:hidden">
                 <div className="flex flex-wrap gap-4 items-end">
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1.5">Class</label>
@@ -180,6 +179,9 @@ export default function AdminTimetablePage() {
                                 {saving ? "Saving..." : "Save Timetable"}
                             </button>
                         )}
+                        <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors">
+                            <Printer className="w-4 h-4" /> Print
+                        </button>
                     </div>
                 </div>
             </div>
@@ -204,11 +206,29 @@ export default function AdminTimetablePage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {PERIODS.map(period => (
-                                    <tr key={period} className="border-t border-gray-50 hover:bg-gray-50/30">
-                                        <td className="px-4 py-2">
-                                            <div className="w-9 h-9 rounded-xl bg-navy/8 flex items-center justify-center">
-                                                <span className="text-xs font-bold text-navy">P{period}</span>
+                                {TIMETABLE_PERIODS.map((timing, idx) => {
+                                    if (timing.isBreak) {
+                                        return (
+                                            <tr key={`break-${idx}`} className="bg-amber-50">
+                                                <td colSpan={DAYS.length + 1} className="px-4 py-3 text-center border-y border-amber-200/60">
+                                                    <span className="font-bold text-amber-700 uppercase tracking-[0.2em] text-xs">
+                                                        {timing.label || "BREAK"} <span className="opacity-70 ml-2">({timing.start} - {timing.end})</span>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
+                                    const period = timing.period;
+                                    return (
+                                    <tr key={period} className="border-t border-gray-100 hover:bg-gray-50/30">
+                                        <td className="px-4 py-3 align-middle border-r border-gray-100 bg-gray-50/50">
+                                            <div className="flex flex-col items-center justify-center text-center">
+                                                <div className="w-9 h-9 mb-1.5 rounded-xl bg-navy flex items-center justify-center shadow-sm">
+                                                    <span className="text-xs font-bold text-white">P{period}</span>
+                                                </div>
+                                                <div className="text-[10px] font-bold text-gray-500 leading-tight">
+                                                    {timing.start}<br/><span className="opacity-50">-</span><br/>{timing.end}
+                                                </div>
                                             </div>
                                         </td>
                                         {DAYS.map(day => {
@@ -216,7 +236,7 @@ export default function AdminTimetablePage() {
                                             const conflict = slot.teacherId ? getConflict(day, period, slot.teacherId) : null;
                                             return (
                                                 <td key={day} className="px-2 py-2">
-                                                    <div className={`rounded-xl border p-2 space-y-1.5 min-w-[130px] transition-colors ${conflict ? "border-amber-300 bg-amber-50/60" : slot.subjectId ? "border-emerald-200 bg-emerald-50/40" : "border-gray-100 bg-gray-50/40"}`}>
+                                                    <div className={`rounded-xl border p-2 space-y-1.5 min-w-[130px] transition-colors ${conflict ? "border-amber-300 bg-amber-50/60" : slot.subjectId ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
                                                         {/* Subject */}
                                                         <select
                                                             value={slot.subjectId}
@@ -241,9 +261,9 @@ export default function AdminTimetablePage() {
                                                         </select>
                                                         {/* Conflict warning */}
                                                         {conflict && (
-                                                            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-semibold">
+                                                            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-semibold mt-1">
                                                                 <AlertTriangle className="w-3 h-3 shrink-0" />
-                                                                Already in {conflict.cls}-{conflict.section}
+                                                                Busy: {conflict.cls}-{conflict.section}
                                                             </div>
                                                         )}
                                                     </div>
@@ -251,7 +271,7 @@ export default function AdminTimetablePage() {
                                             );
                                         })}
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>
