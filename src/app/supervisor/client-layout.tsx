@@ -192,7 +192,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
             <MobileSidebar title="Supervisor Console" links={groupedNav} />
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8">
+            <main className="flex-1 min-w-0 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8">
                 <div className="max-w-7xl mx-auto">
                     {children}
                 </div>
