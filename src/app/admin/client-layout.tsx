@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
@@ -36,6 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             section: "Management",
             items: [
                 { href: "/admin/students", label: "Students", icon: GraduationCap },
+                { href: "/admin/students/promote", label: "Promote / Transfer", icon: ArrowLeftRight },
                 { href: "/admin/teachers", label: "Teachers", icon: Users },
                 { href: "/admin/subjects", label: "Manage Subjects", icon: Tags },
                 { href: "/admin/class-teacher", label: "Class Teachers", icon: School },
@@ -119,7 +120,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Sidebar title="Admin Console" links={links} />
             </aside>
             <MobileSidebar title="Admin Console" links={links} />
-            <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8">
+            <main className="flex-1 min-w-0 overflow-y-auto pt-20 pb-4 px-4 md:py-8 md:px-8">
                 <div className="max-w-7xl mx-auto">
                     {children}
                 </div>
