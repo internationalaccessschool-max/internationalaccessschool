@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Lock, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info } from "lucide-react";
+import { Bell, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info, ImageIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { subscribeToNotifications, unsubscribeFromNotifications, isSubscribed, getNotificationPermission } from "@/lib/onesignal";
 import { useAuth } from "@/context/AuthContext";
@@ -11,7 +11,6 @@ import toast from "react-hot-toast";
 const sections = [
     { id: "profile", label: "Profile", icon: User },
     { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "security", label: "Security", icon: Lock },
     { id: "privacy", label: "Privacy", icon: Shield },
     { id: "appearance", label: "Appearance", icon: Palette },
 ];
@@ -255,31 +254,44 @@ export default function StudentSettingsPage() {
                 <div className="md:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                     {active === "profile" && (
                         <div className="space-y-6">
-                            <h2 className="font-bold text-navy text-lg">Profile Information</h2>
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-2xl bg-navy/10 flex items-center justify-center">
-                                    <User className="w-7 h-7 text-navy/40" />
-                                </div>
-                                <button className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-navy hover:bg-gray-50 transition-colors">
-                                    Change Photo
-                                </button>
+                            <div>
+                                <h2 className="font-bold text-navy text-lg">Profile</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    Apna photo ya documents upload karo. Name aur details change karne ke liye admin se contact karo.
+                                </p>
                             </div>
-                            <div className="grid sm:grid-cols-2 gap-4">
-                                {[
-                                    { label: "First Name", placeholder: "Enter first name" },
-                                    { label: "Last Name", placeholder: "Enter last name" },
-                                    { label: "Email", placeholder: "Enter email" },
-                                    { label: "Phone", placeholder: "Enter phone number" },
-                                ].map((f) => (
-                                    <div key={f.label}>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{f.label}</label>
-                                        <input
-                                            type="text"
-                                            placeholder={f.placeholder}
-                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-navy focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
-                                        />
-                                    </div>
-                                ))}
+
+                            {/* Info notice */}
+                            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                                <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                <p className="text-xs text-amber-700 font-medium">
+                                    Personal details (name, class, section) sirf admin change kar sakta hai. Koi bhi update chahiye to school office se contact karo.
+                                </p>
+                            </div>
+
+                            {/* Photo Upload */}
+                            <div className="p-5 rounded-2xl border border-gray-100 bg-gray-50 space-y-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <ImageIcon className="w-4 h-4 text-navy" />
+                                    <p className="text-sm font-semibold text-navy">Profile Photo</p>
+                                </div>
+                                <p className="text-xs text-gray-400">Apni photo upload karo (Max 1MB, JPG/PNG)</p>
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                                    onChange={e => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        if (file.size > 1 * 1024 * 1024) {
+                                            toast.error("File 1MB se badi nahi honi chahiye");
+                                            e.target.value = "";
+                                            return;
+                                        }
+                                        toast.success("Photo upload ke liye admin portal use karo ya school se contact karo.");
+                                        e.target.value = "";
+                                    }}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-navy file:text-white hover:file:bg-navy/90 cursor-pointer"
+                                />
                             </div>
                         </div>
                     )}
@@ -479,26 +491,6 @@ export default function StudentSettingsPage() {
                         </div>
                     )}
 
-                    {active === "security" && (
-                        <div className="space-y-6">
-                            <h2 className="font-bold text-navy text-lg">Security Settings</h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Current Password</label>
-                                    <input type="password" placeholder="Enter current password" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">New Password</label>
-                                    <input type="password" placeholder="Enter new password" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Confirm New Password</label>
-                                    <input type="password" placeholder="Confirm new password" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10" />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {(active === "privacy" || active === "appearance") && (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
@@ -509,8 +501,8 @@ export default function StudentSettingsPage() {
                         </div>
                     )}
 
-                    {/* Save Button — only show for profile/security */}
-                    {(active === "profile" || active === "security") && (
+                    {/* Save Button — unused now, kept for notifications email save */}
+                    {false && (
                         <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
                             <button
                                 id="save-settings-btn"
