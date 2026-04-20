@@ -485,7 +485,7 @@ export function StudentFeeModal({ student, onClose }: Props) {
 
     // ─── Print Receipt ──────────────────────────────────────────────────────
 
-    const printCombinedReceipt = (
+    const printCombinedReceipt = async (
         rec: MonthRecord,
         schoolReceiptNo: string | null,
         transportReceiptNo: string | null,
@@ -553,7 +553,7 @@ export function StudentFeeModal({ student, onClose }: Props) {
         const combined = parts.join(`
 <div style="page-break-before:always;margin:60px 0 40px;border-top:2px dashed #d1d5db;"></div>
 `);
-        printReceiptHTML(combined, `Fee Receipt — ${MONTHS_SHORT[rec.month - 1]} ${selectedYear}`);
+        await printReceiptHTML(combined, `Fee Receipt — ${MONTHS_SHORT[rec.month - 1]} ${selectedYear}`);
     };
 
     const printExistingReceipt = (rec: MonthRecord) => {
