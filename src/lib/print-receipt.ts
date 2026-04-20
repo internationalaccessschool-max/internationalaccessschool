@@ -1,9 +1,10 @@
 /**
- * printReceiptHTML — Opens a popup with 2 receipt copies on a single A4 sheet.
- * Top half = Student Copy, Bottom half = Office Copy.
+ * printReceiptHTML — Opens a popup with 2 receipt copies on a single A5 landscape sheet.
+ * Left half = Student Copy, Right half = Office Copy.
+ * This takes exactly half the height of an A4 page, making each receipt A6 size (1/4th of A4).
  */
 export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void {
-    const popup = window.open("", "_blank", "width=900,height=700,scrollbars=yes");
+    const popup = window.open("", "_blank", "width=900,height=600,scrollbars=yes");
     if (!popup) {
         alert("Please allow popups for this website to print/download receipts.");
         return;
@@ -27,22 +28,23 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
 
     .page {
       width: 210mm;
-      min-height: 297mm;
-      margin: 12px auto;
+      height: 148.5mm;
+      margin: 20px auto;
       background: #fff;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     }
 
     .slip {
-      width: 100%;
-      height: 148.5mm;
-      padding: 8mm 10mm 6mm;
+      width: 50%;
+      height: 100%;
+      padding: 8mm 8mm;
       overflow: hidden;
-      border-bottom: 2px dashed #94a3b8;
+      border-right: 1.5px dashed #94a3b8;
       position: relative;
     }
-    .slip:last-child { border-bottom: none; }
+    .slip:last-child { border-right: none; }
 
     /* Watermark */
     .slip::before {
@@ -66,9 +68,9 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
 
     .copy-label {
       position: absolute;
-      bottom: 3mm;
-      right: 5mm;
-      font-size: 7px;
+      bottom: 2mm;
+      right: 3mm;
+      font-size: 6.5px;
       font-weight: 800;
       letter-spacing: .1em;
       color: #94a3b8;
@@ -78,8 +80,8 @@ export function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): void 
 
     @media print {
       body { background: #fff; }
-      .page { margin: 0; width: 210mm; min-height: 297mm; }
-      .slip { border-bottom: 1.5px dashed #94a3b8; }
+      .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; }
+      .slip { border-right: 1.5px dashed #94a3b8; }
       @page { size: A4 portrait; margin: 0; }
     }
   </style>`;
@@ -129,13 +131,13 @@ export function buildReceiptHTML(data: ReceiptData): string {
 
     const rows = lineItems.map((item, i) => `
       <tr style="border-bottom:1px solid #f1f5f9;">
-        <td style="padding:4px 6px;color:#94a3b8;font-size:9px;text-align:center;">${i + 1}</td>
-        <td style="padding:4px 6px;font-size:9.5px;color:#1e293b;">${item.label}</td>
-        <td style="padding:4px 6px;text-align:right;font-size:9.5px;color:#1e293b;font-weight:600;">₹${fmt(item.amount)}</td>
+        <td style="padding:3px 4px;color:#94a3b8;font-size:7px;text-align:center;">${i + 1}</td>
+        <td style="padding:3px 4px;font-size:7.5px;color:#1e293b;">${item.label}</td>
+        <td style="padding:3px 4px;text-align:right;font-size:8px;color:#1e293b;font-weight:600;">₹${fmt(item.amount)}</td>
       </tr>`).join("");
 
     const extraInfoRows = extraInfo.map(e =>
-        `<div style="display:flex;gap:6px;"><span style="font-size:8px;color:#94a3b8;min-width:60px;">${e.label}</span><span style="font-size:8px;font-weight:700;color:#1e293b;">${e.value}</span></div>`
+        `<div style="display:flex;gap:4px;"><span style="font-size:6.5px;color:#94a3b8;min-width:45px;">${e.label}</span><span style="font-size:7px;font-weight:700;color:#1e293b;">${e.value}</span></div>`
     ).join("");
 
     const isTransport = title.toLowerCase().includes("transport");
@@ -148,91 +150,90 @@ export function buildReceiptHTML(data: ReceiptData): string {
 <div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;height:100%;display:flex;flex-direction:column;gap:0;">
 
   <!-- School Header -->
-  <div style="display:flex;align-items:center;gap:8px;padding-bottom:6px;border-bottom:2px solid ${accentColor};margin-bottom:6px;">
-    <img src="__SCHOOL_LOGO__" style="width:42px;height:42px;object-fit:contain;flex-shrink:0;" alt="IAS Logo" />
+  <div style="display:flex;align-items:center;gap:6px;padding-bottom:5px;border-bottom:2px solid ${accentColor};margin-bottom:6px;">
+    <img src="__SCHOOL_LOGO__" style="width:36px;height:36px;object-fit:contain;flex-shrink:0;" alt="IAS Logo" />
     <div style="flex:1;">
-      <div style="font-size:13px;font-weight:900;color:${accentColor};text-transform:uppercase;letter-spacing:.04em;line-height:1.2;">
+      <div style="font-size:10.5px;font-weight:900;color:${accentColor};text-transform:uppercase;letter-spacing:.02em;line-height:1.1;">
         International Access School
       </div>
-      <div style="font-size:7.5px;color:#64748b;margin-top:1px;">
-        Affiliated to CBSE · Aff. No: 330691 &nbsp;|&nbsp; School Code: 65688
+      <div style="font-size:6px;color:#64748b;margin-top:2px;">
+        Affiliated to CBSE · Aff. No: 330691 | Code: 65688
       </div>
-      <div style="font-size:7.5px;color:#64748b;">
-        Siwan, Bihar – 841227 &nbsp;|&nbsp; Ph: +91 84060 00830 &nbsp;|&nbsp; info@iaschool.edu.in
+      <div style="font-size:6px;color:#64748b;">
+        Siwan, Bihar – 841227 | Ph: +91 84060 00830
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0;">
-      <div style="display:inline-block;padding:2px 10px;background:${accentLight};color:${accentText};font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border:1px solid ${accentBorder};border-radius:999px;">
+  </div>
+  
+  <div style="text-align:center;margin-bottom:6px;margin-top:-2px;">
+      <div style="display:inline-block;padding:2px 8px;background:${accentLight};color:${accentText};font-size:6.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border:1px solid ${accentBorder};border-radius:999px;">
         ${title}
       </div>
-      <div style="margin-top:4px;font-size:7.5px;color:#94a3b8;">ISO 9001·2005 Certified</div>
-    </div>
   </div>
 
   <!-- Receipt No + Date row -->
-  <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;margin-bottom:6px;">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <div>
-        <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Receipt No.</div>
-        <div style="font-family:monospace;font-size:11px;font-weight:900;color:${accentColor};">${receiptNo}</div>
-      </div>
-      <div style="width:1px;height:28px;background:#e2e8f0;"></div>
-      <div>
-        <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Fee Month</div>
-        <div style="font-size:9px;font-weight:700;color:#334155;">${feeMonth}</div>
-      </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;margin-bottom:6px;">
+    <div>
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Receipt No.</div>
+      <div style="font-family:monospace;font-size:8px;font-weight:900;color:${accentColor};">${receiptNo}</div>
     </div>
+    <div style="width:1px;height:16px;background:#e2e8f0;"></div>
+    <div>
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Month</div>
+      <div style="font-size:7.5px;font-weight:700;color:#334155;">${feeMonth}</div>
+    </div>
+    <div style="width:1px;height:16px;background:#e2e8f0;"></div>
     <div style="text-align:right;">
-      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Date of Payment</div>
-      <div style="font-size:9px;font-weight:700;color:#334155;">${paidOn}</div>
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Date</div>
+      <div style="font-size:7.5px;font-weight:700;color:#334155;">${paidOn}</div>
     </div>
   </div>
 
   <!-- Student Info -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;margin-bottom:6px;">
-    <div>
-      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Student Name</div>
-      <div style="font-size:11px;font-weight:800;color:#0f172a;margin-top:1px;">${studentName}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:5px 6px;margin-bottom:6px;">
+    <div style="grid-column:1 / span 2;">
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Student Name</div>
+      <div style="font-size:9.5px;font-weight:800;color:#0f172a;margin-top:1px;">${studentName}</div>
     </div>
     <div>
-      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Admission No.</div>
-      <div style="font-size:11px;font-weight:800;color:${accentColor};margin-top:1px;font-family:monospace;">${admNo || "—"}</div>
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Adm No.</div>
+      <div style="font-size:8.5px;font-weight:800;color:${accentColor};margin-top:1px;font-family:monospace;">${admNo || "—"}</div>
     </div>
-    <div style="margin-top:3px;">
-      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Class / Section</div>
-      <div style="font-size:9px;font-weight:600;color:#334155;margin-top:1px;">${classSection}</div>
+    <div>
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;">Class / Sec</div>
+      <div style="font-size:8px;font-weight:600;color:#334155;margin-top:1px;">${classSection}</div>
     </div>
-    <div style="margin-top:3px;">
-      <div style="color:#94a3b8;font-size:7px;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">Payment Mode</div>
-      <div style="margin-top:1px;display:inline-block;padding:1px 8px;background:#dcfce7;color:#15803d;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;border:1px solid #bbf7d0;">
+    <div style="grid-column:1 / span 2;">
+      <div style="color:#94a3b8;font-size:6px;text-transform:uppercase;font-weight:700;margin-bottom:2px;">Payment Mode</div>
+      <div style="display:inline-block;padding:1.5px 6px;background:#dcfce7;color:#15803d;font-size:6.5px;font-weight:800;text-transform:uppercase;border-radius:999px;border:1px solid #bbf7d0;">
         PAID · ${paymentMode || "CASH"}
       </div>
     </div>
-    ${extraInfoRows}
+    ${extraInfoRows ? `<div style="grid-column:1 / span 2;">${extraInfoRows}</div>` : ""}
   </div>
 
   ${arrearsMonths?.length ? `
-  <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:3px 8px;margin-bottom:4px;font-size:7.5px;">
-    <span style="font-weight:800;color:#be123c;text-transform:uppercase;letter-spacing:.05em;">Arrears included: </span>
+  <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:3px 6px;margin-bottom:6px;font-size:6.5px;">
+    <span style="font-weight:800;color:#be123c;text-transform:uppercase;">Arrears: </span>
     <span style="color:#9f1239;">${arrearsMonths.join(", ")}</span>
   </div>` : ""}
 
   <!-- Fee Table -->
-  <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;flex:1;">
+  <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;flex:1;">
     <thead>
       <tr style="background:${accentColor};">
-        <th style="padding:5px 6px;font-size:7.5px;text-align:center;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;width:32px;">#</th>
-        <th style="padding:5px 6px;font-size:7.5px;text-align:left;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Particulars</th>
-        <th style="padding:5px 6px;font-size:7.5px;text-align:right;color:rgba(255,255,255,0.8);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Amount (₹)</th>
+        <th style="padding:4px;font-size:6px;text-align:center;color:#fff;font-weight:700;text-transform:uppercase;width:24px;">#</th>
+        <th style="padding:4px;font-size:6px;text-align:left;color:#fff;font-weight:700;text-transform:uppercase;">Particulars</th>
+        <th style="padding:4px;font-size:6px;text-align:right;color:#fff;font-weight:700;text-transform:uppercase;">Amount (₹)</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
-      <tr style="background:#f1f5f9;border-top:2px solid ${accentColor};">
-        <td colspan="2" style="padding:6px 8px;font-size:10px;font-weight:900;color:${accentColor};text-align:right;text-transform:uppercase;letter-spacing:.04em;">
-          Total Amount Paid
+      <tr style="background:#f1f5f9;border-top:1px solid ${accentColor};">
+        <td colspan="2" style="padding:5px 6px;font-size:8.5px;font-weight:900;color:${accentColor};text-align:right;text-transform:uppercase;">
+          Total Paid
         </td>
-        <td style="padding:6px 8px;font-size:13px;font-weight:900;color:${accentColor};text-align:right;">
+        <td style="padding:5px 6px;font-size:10.5px;font-weight:900;color:${accentColor};text-align:right;">
           ₹${fmt(totalAmount)}
         </td>
       </tr>
@@ -240,19 +241,19 @@ export function buildReceiptHTML(data: ReceiptData): string {
   </table>
 
   <!-- Footer -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:5px;margin-top:4px;border-top:1px dashed #cbd5e1;">
-    <div style="font-size:7px;color:#94a3b8;line-height:1.6;">
-      <div>This is a computer-generated receipt.</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:6px;margin-top:6px;border-top:1px dashed #cbd5e1;">
+    <div style="font-size:5.5px;color:#94a3b8;line-height:1.4;">
+      <div>Computer-generated receipt.</div>
       <div>No signature required if stamped.</div>
     </div>
     <div style="display:flex;gap:16px;align-items:flex-end;">
       <div style="text-align:center;">
-        <div style="width:48px;height:48px;border:1px solid #e2e8f0;border-radius:50%;margin:0 auto 2px;"></div>
-        <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Stamp</div>
+        <div style="width:36px;height:36px;border:1px solid #e2e8f0;border-radius:50%;margin:0 auto 2px;"></div>
+        <div style="font-size:6px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Stamp</div>
       </div>
       <div style="text-align:center;">
-        <div style="width:80px;border-bottom:1px solid #475569;margin-bottom:2px;"></div>
-        <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Authorized Signatory</div>
+        <div style="width:64px;border-bottom:1px solid #475569;margin-bottom:2px;"></div>
+        <div style="font-size:6px;color:#94a3b8;text-transform:uppercase;font-weight:700;">Auth. Signatory</div>
       </div>
     </div>
   </div>
