@@ -106,33 +106,40 @@ export default function TeacherHomeworkPage() {
         const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
             if (!user) { setLoadingAssigned(false); return; }
             try {
-                const { doc, getDoc } = await import("firebase/firestore");
-                const teacherDoc = await getDoc(doc(db, "teachers", user.uid));
-                if (teacherDoc.exists()) {
-                    const data = teacherDoc.data();
-                    let cs: Record<string, string[]> = {};
+                const { collection, getDocs } = await import("firebase/firestore");
+                let cs: Record<string, string[]> = {};
+                
+                const ttSnap = await getDocs(collection(db, "timetable"));
+                ttSnap.docs.forEach(d => {
+                    const data = d.data();
+                    const clsNameRaw = data.cls;
+                    const section = data.section;
+                    const slots = data.slots || {};
                     
-                    const periodSchedule = data?.periodSchedule || {};
-                    Object.values(periodSchedule).forEach((period: any) => {
-                        if (period.className && period.section) {
-                            const clsName = period.className.startsWith("Class") 
-                                ? period.className 
-                                : `Class ${period.className}`;
-                            if (!cs[clsName]) {
-                                cs[clsName] = [];
-                            }
-                            if (!cs[clsName].includes(period.section)) {
-                                cs[clsName].push(period.section);
-                            }
-                        }
+                    let isAssigned = false;
+                    Object.values(slots).forEach((slot: any) => {
+                        if (slot.teacherId === user.uid) isAssigned = true;
                     });
-
-                    if (Object.keys(cs).length === 0) {
-                        cs = data?.assignment?.classSections || {};
-                    }
                     
-                    setAssignedClassSections(cs);
+                    if (isAssigned && clsNameRaw && section) {
+                        const clsName = clsNameRaw.startsWith("Class") ? clsNameRaw : `Class ${clsNameRaw}`;
+                        if (!cs[clsName]) cs[clsName] = [];
+                        if (!cs[clsName].includes(section)) {
+                            cs[clsName].push(section);
+                        }
+                    }
+                });
+
+                // Fallback: Check if teacher doc has manual assignment field as last resort
+                if (Object.keys(cs).length === 0) {
+                    const { doc, getDoc } = await import("firebase/firestore");
+                    const teacherDoc = await getDoc(doc(db, "teachers", user.uid));
+                    if (teacherDoc.exists()) {
+                        cs = teacherDoc.data()?.assignment?.classSections || {};
+                    }
                 }
+                
+                setAssignedClassSections(cs);
             } catch (err) {
                 console.error("Failed to load assigned classes:", err);
             } finally {
