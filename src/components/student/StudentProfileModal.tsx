@@ -46,6 +46,7 @@ interface Student {
     previousSchool?: string;
     udise?: string;
     rollNo?: string;
+    rollNumber?: string;
     house?: string;
     fatherOccupation?: string;
     annualIncome?: string;
@@ -410,7 +411,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;font-siz
     <div class="info-item"><label>Aadhar No.</label><span>${student.aadharNo || "—"}</span></div>
     <div class="info-item"><label>PEN No.</label><span>${student.pen || "—"}</span></div>
     <div class="info-item"><label>APAAR ID</label><span>${student.aparId || "—"}</span></div>
-    <div class="info-item"><label>Roll No.</label><span>${student.rollNo || "—"}</span></div>
+    <div class="info-item"><label>Roll No.</label><span>${student.rollNumber || student.rollNo || "—"}</span></div>
     <div class="info-item"><label>House</label><span>${student.house || "—"}</span></div>
     <div class="info-item"><label>Transport</label><span>${student.transport || "—"}</span></div>
     <div class="info-item"><label>Date of Admission</label><span>${fmtDate(student.dateOfAdmission)}</span></div>
@@ -602,7 +603,7 @@ ${resultRows ? `
                                     <InfoItem label="Session" value={student.session} />
                                     <InfoItem label="Current Class" value={cls} />
                                     <InfoItem label="Section" value={sec} />
-                                    <InfoItem label="Roll No." value={student.rollNo} />
+                                    <InfoItem label="Roll No." value={student.rollNumber || student.rollNo} />
                                     <InfoItem label="Class at Admission" value={student.classAtAdmission} />
                                     <InfoItem label="Aadhar No." value={student.aadharNo} mono />
                                     <InfoItem label="PEN No." value={student.pen} mono />
