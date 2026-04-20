@@ -343,16 +343,16 @@ export default function AdminStudentsPage() {
 
             {/* Table */}
             <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col">
-                <div className="w-full overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                <div className="w-full overflow-auto max-h-[calc(100vh-280px)] min-h-[300px] pb-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent relative">
                     <table className="w-full text-sm whitespace-nowrap">
-                        <thead className="bg-slate-50/80 border-b border-slate-200/60">
+                        <thead className="bg-slate-50 border-b border-slate-200/60 sticky top-0 z-20 shadow-sm">
                             <tr>
                                 {activeTab === "active"
                                     ? ["S.N", "Student", "ENR", "Class & Sec", "Father's Name", "Mobile", "Actions"].map(h => (
-                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
+                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right sticky right-0 z-30 bg-slate-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100" : ""}`}>{h}</th>
                                     ))
                                     : ["S.N", "Student", "ENR", "Last Class", "Left Year", "Last Date", "Branch", "Remarks", "Actions"].map(h => (
-                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
+                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right sticky right-0 z-30 bg-slate-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100" : ""}`}>{h}</th>
                                     ))
                                 }
                             </tr>
@@ -402,7 +402,7 @@ export default function AdminStudentsPage() {
                                             <td className="px-5 py-4 text-slate-400 text-xs max-w-[150px] truncate">{safeStr(student.remarks) || "—"}</td>
                                         </>
                                     )}
-                                    <td className="px-5 py-4 text-right">
+                                    <td className="px-5 py-4 text-right sticky right-0 bg-white shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.02)] z-10 group-hover:bg-slate-50 transition-colors border-l border-slate-100">
                                         <div className="flex items-center justify-end gap-2.5 transition-opacity">
                                             <button onClick={() => setViewProfileStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-emerald-300">
                                                 <Eye className="w-3.5 h-3.5" strokeWidth={2.5} /> View
