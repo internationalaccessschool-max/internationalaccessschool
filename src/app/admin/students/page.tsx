@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
     Plus, Search, Filter, Loader2, Pencil, UserCircle2,
-    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet, Eye
+    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet, Eye, ArrowLeftRight
 } from "lucide-react";
 import {
     collectionGroup, getDocs, doc, updateDoc
@@ -14,6 +14,7 @@ import Link from "next/link";
 import { StudentEditModal } from "@/components/student/StudentEditModal";
 import { StudentFeeModal } from "@/components/student/StudentFeeModal";
 import { StudentProfileModal } from "@/components/student/StudentProfileModal";
+import { ChangeClassModal } from "@/components/student/ChangeClassModal";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
 import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
@@ -79,6 +80,7 @@ export default function AdminStudentsPage() {
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [viewFeeStudent, setViewFeeStudent] = useState<Student | null>(null);
     const [viewProfileStudent, setViewProfileStudent] = useState<Student | null>(null);
+    const [changeClassStudent, setChangeClassStudent] = useState<Student | null>(null);
     const [activeTab, setActiveTab] = useState<"active" | "left">("active");
 
     // Disable dialog state
@@ -411,6 +413,11 @@ export default function AdminStudentsPage() {
                                             <button onClick={() => setViewFeeStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 ring-1 ring-indigo-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-300">
                                                 <Wallet className="w-3.5 h-3.5" strokeWidth={2.5} /> Fee Record
                                             </button>
+                                            {activeTab === "active" && (
+                                                <button onClick={() => setChangeClassStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 ring-1 ring-violet-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-300">
+                                                    <ArrowLeftRight className="w-3.5 h-3.5" strokeWidth={2.5} /> Transfer
+                                                </button>
+                                            )}
                                             {activeTab === "active" ? (
                                                 <button onClick={() => openDisableModal(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-white hover:bg-red-50 ring-1 ring-slate-200 hover:ring-red-200 shadow-sm transition-all focus:outline-none">
                                                     <PowerOff className="w-3.5 h-3.5" strokeWidth={2.5} /> Disable
@@ -452,6 +459,15 @@ export default function AdminStudentsPage() {
                     role="admin"
                     onClose={() => setEditingStudent(null)}
                     onSaved={updated => { handleSaved(updated); }}
+                />
+            )}
+
+            {/* Change Class / Section / Roll No Modal */}
+            {changeClassStudent && (
+                <ChangeClassModal
+                    student={changeClassStudent}
+                    onClose={() => setChangeClassStudent(null)}
+                    onSaved={updated => { handleSaved(updated); setChangeClassStudent(null); }}
                 />
             )}
 
