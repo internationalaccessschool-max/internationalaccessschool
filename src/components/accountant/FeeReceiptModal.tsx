@@ -138,7 +138,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
         ? record.paidOn.toDate().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
         : "N/A";
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
         const printItems = lineItems.map(({ label, amount }) => ({ label, amount }));
         const allArrearsMonths = isTransportReceipt ? transportArrearsMonths : arrearsMonths;
 
@@ -159,7 +159,7 @@ export default function FeeReceiptModal({ record, onClose }: FeeReceiptModalProp
                 ? [{ label: "Bus No.", value: `${record.busNumber}${record.routeDetails ? ` — ${record.routeDetails}` : ""}` }]
                 : [],
         });
-        printReceiptHTML(html, isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt");
+        await printReceiptHTML(html, isTransportReceipt ? "Transport Fee Receipt" : "School Fee Receipt");
     };
 
     const fmtAmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
