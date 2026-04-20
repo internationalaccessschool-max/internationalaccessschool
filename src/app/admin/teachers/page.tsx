@@ -67,13 +67,7 @@ export default function AdminTeachersPage() {
     const [showPass, setShowPass] = useState(false);
     const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
 
-    const [assigningTeacher, setAssigningTeacher] = useState<Teacher | null>(null);
-    // periodSchedule: { "1": { className, section, subject }, "2": {...}, ... }
-    const [periodSchedule, setPeriodSchedule] = useState<Record<string, { className: string; section: string; subject: string }>>({});
-    const [activePeriod, setActivePeriod] = useState<string>("1");
-    const [periodClassSubjects, setPeriodClassSubjects] = useState<string[]>([]);
-    const [loadingPeriodSubjects, setLoadingPeriodSubjects] = useState(false);
-    const [savingAssign, setSavingAssign] = useState(false);
+
 
     // Edit Teacher
     const EMPTY_EDIT = {
@@ -285,56 +279,7 @@ export default function AdminTeachersPage() {
         }
     };
 
-    // ── Period Schedule helpers ────────────────────────────────────────────
-    const startAssign = (teacher: Teacher) => {
-        setAssigningTeacher(teacher);
-        const ps = (teacher as any).periodSchedule || {};
-        setPeriodSchedule(ps);
-        setActivePeriod("1");
-        // Load subjects for period 1's class if already set
-        const p1 = ps["1"];
-        if (p1?.className) loadPeriodSubjects(p1.className);
-        else setPeriodClassSubjects([]);
-    };
 
-    const loadPeriodSubjects = (className: string) => {
-        if (!className) { setPeriodClassSubjects([]); return; }
-        setLoadingPeriodSubjects(true);
-        import("firebase/firestore").then(({ doc: fsDoc, getDoc }) =>
-            getDoc(fsDoc(db, "classSubjects", className)).then(snap => {
-                if (snap.exists()) {
-                    const rawSubjects = snap.data().subjects || [];
-                    const subjectNames: string[] = rawSubjects.map((s: any) =>
-                        typeof s === "string" ? s : (s.name || s.id || "")
-                    ).filter(Boolean);
-                    setPeriodClassSubjects(subjectNames);
-                } else {
-                    setPeriodClassSubjects([]);
-                }
-                setLoadingPeriodSubjects(false);
-            })
-        );
-    };
-
-    const updatePeriodField = (period: string, field: "className" | "section" | "subject", value: string) => {
-        setPeriodSchedule(prev => {
-            const entry = { ...(prev[period] || { className: "", section: "", subject: "" }), [field]: value };
-            if (field === "className") { entry.section = ""; entry.subject = ""; loadPeriodSubjects(value); }
-            if (field === "section") { entry.subject = ""; }
-            return { ...prev, [period]: entry };
-        });
-    };
-
-    const saveAssignment = async () => {
-        if (!assigningTeacher) return;
-        setSavingAssign(true);
-        await updateDoc(doc(db, "teachers", assigningTeacher.id), { periodSchedule });
-        await updateDoc(doc(db, "users", assigningTeacher.id), { periodSchedule });
-        setSavingAssign(false);
-        setAssigningTeacher(null);
-    };
-
-    const assignedPeriodsCount = Object.values(periodSchedule).filter(p => p?.className && p?.subject).length;
 
     const filtered = teachers.filter(t =>
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
@@ -427,25 +372,11 @@ export default function AdminTeachersPage() {
                                     {teacher.qualification && <div className="flex items-center gap-2"><GraduationCap className="w-3.5 h-3.5 shrink-0" />{teacher.qualification}</div>}
                                 </div>
 
-                                {/* Period summary chips on card */}
-                                <div className="flex flex-wrap gap-1.5 mb-4 min-h-[24px]">
-                                    {(() => {
-                                        const ps = (teacher as any).periodSchedule || {};
-                                        const filled = Object.entries(ps).filter(([, v]: any) => v?.className && v?.subject);
-                                        if (filled.length === 0) return <span className="text-[11px] text-gray-300 italic">No periods assigned yet</span>;
-                                        return filled.slice(0, 3).map(([period, v]: any) => (
-                                            <span key={period} className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                                                P{period}: {v.subject} · {v.className}-{v.section}
-                                            </span>
-                                        ));
-                                    })()}
-                                </div>
-
                                 <div className="flex gap-2 pt-3 border-t border-gray-50">
-                                    <button onClick={() => startAssign(teacher)}
+                                    <Link href="/admin/timetable"
                                         className="flex-1 py-2 rounded-xl text-xs font-semibold bg-navy text-white hover:bg-navy/90 flex items-center justify-center gap-1.5">
-                                        <Pencil className="w-3.5 h-3.5" /> Assign
-                                    </button>
+                                        <BookOpen className="w-3.5 h-3.5" /> View Timetable
+                                    </Link>
                                     <button onClick={() => openEdit(teacher)}
                                         className="py-2 px-3 rounded-xl text-gray-400 hover:text-navy hover:bg-navy/5 border border-gray-100 hover:border-navy/10 transition-colors" title="Edit Profile">
                                         <BookOpen className="w-3.5 h-3.5" />
@@ -519,146 +450,6 @@ export default function AdminTeachersPage() {
                     </div>
                 </div>
             )}
-
-            {/* ── Period-Based Assignment Modal ─────────────────────────────── */}
-            {assigningTeacher && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setAssigningTeacher(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {/* Header */}
-                        <div className="gradient-navy px-6 py-5 flex items-center justify-between shrink-0">
-                            <div>
-                                <h2 className="font-bold text-white text-lg">Assign Periods — {assigningTeacher.firstName} {assigningTeacher.lastName}</h2>
-                                <p className="text-white/50 text-xs mt-0.5">{assignedPeriodsCount}/8 periods assigned · Click a period tab then set Class, Section, Subject</p>
-                            </div>
-                            <button onClick={() => setAssigningTeacher(null)} className="text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
-                        </div>
-
-                        {/* Period tabs */}
-                        <div className="flex border-b border-gray-100 shrink-0 px-4 pt-3 gap-1 overflow-x-auto">
-                            {["1", "2", "3", "4", "5", "6", "7", "8"].map(p => {
-                                const entry = periodSchedule[p];
-                                const filled = entry?.className && entry?.subject;
-                                return (
-                                    <button key={p} onClick={() => { setActivePeriod(p); if (entry?.className) loadPeriodSubjects(entry.className); }}
-                                        className={`relative flex-shrink-0 min-w-[64px] px-3 pb-3 text-sm font-bold rounded-t-xl transition-all ${activePeriod === p
-                                            ? "bg-navy text-white"
-                                            : "text-gray-400 hover:text-navy hover:bg-gray-50"
-                                            }`}>
-                                        Period {p}
-                                        {filled && (
-                                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400" />
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        {/* Period editor */}
-                        <div className="flex-1 overflow-y-auto p-6">
-                            {["1", "2", "3", "4", "5", "6", "7", "8"].map(p => {
-                                if (p !== activePeriod) return null;
-                                const entry = periodSchedule[p] || { className: "", section: "", subject: "" };
-                                return (
-                                    <div key={p} className="space-y-5">
-                                        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
-                                            <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Period {p} Assignment</p>
-                                            {entry.className && entry.subject ? (
-                                                <p className="text-sm text-indigo-800 mt-1 font-medium">
-                                                    Class {entry.className} – Sec {entry.section} · {entry.subject}
-                                                </p>
-                                            ) : (
-                                                <p className="text-xs text-indigo-400 mt-1">Not assigned yet</p>
-                                            )}
-                                        </div>
-
-                                        {/* Step 1: Class */}
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">1. Select Class</label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"].map(cls => (
-                                                    <button key={cls} type="button"
-                                                        onClick={() => updatePeriodField(p, "className", cls)}
-                                                        className={`px-3 h-11 rounded-xl text-sm font-bold border transition-all ${entry.className === cls
-                                                            ? "bg-navy text-white border-navy"
-                                                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-navy/30"
-                                                            }`}>
-                                                        {cls}
-                                                    </button>
-                                                ))}
-                                                {entry.className && (
-                                                    <button type="button" onClick={() => updatePeriodField(p, "className", "")}
-                                                        className="w-11 h-11 rounded-xl text-xs text-red-400 border border-red-100 hover:bg-red-50">✕</button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Step 2: Section */}
-                                        {entry.className && (
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">2. Select Section</label>
-                                                <div className="flex gap-2">
-                                                    {["A", "B", "C", "D", "E"].map(sec => (
-                                                        <button key={sec} type="button"
-                                                            onClick={() => updatePeriodField(p, "section", sec)}
-                                                            className={`w-11 h-11 rounded-xl text-sm font-bold border transition-all ${entry.section === sec
-                                                                ? "bg-indigo-600 text-white border-indigo-600"
-                                                                : "bg-gray-50 text-gray-500 border-gray-200 hover:border-indigo-300"
-                                                                }`}>
-                                                            {sec}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Step 3: Subject */}
-                                        {entry.className && (
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">3. Select Subject</label>
-                                                {loadingPeriodSubjects ? (
-                                                    <div className="flex items-center gap-2 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading subjects...</div>
-                                                ) : periodClassSubjects.length === 0 ? (
-                                                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
-                                                        ⚠️ No subjects configured for Class {entry.className}. Go to <strong>Manage Subjects</strong> first.
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {periodClassSubjects.map(subj => (
-                                                            <button key={subj} type="button"
-                                                                onClick={() => updatePeriodField(p, "subject", subj)}
-                                                                className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${entry.subject === subj
-                                                                    ? "bg-emerald-600 text-white border-emerald-600"
-                                                                    : "bg-gray-50 text-gray-500 border-gray-200 hover:border-emerald-300"
-                                                                    }`}>
-                                                                {entry.subject === subj && "✓ "}{subj}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
-                            <p className="text-xs text-gray-400">{assignedPeriodsCount} of 8 periods configured</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setAssigningTeacher(null)} className="px-5 py-2.5 rounded-xl border text-sm text-gray-500">Cancel</button>
-                                <button onClick={saveAssignment} disabled={savingAssign}
-                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60">
-                                    {savingAssign ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    {savingAssign ? "Saving..." : "Save Schedule"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-
             {/* ── Edit Teacher Modal ── */}
             {
                 editingTeacher && (
