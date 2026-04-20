@@ -281,7 +281,7 @@ export default function StudentFeesPage() {
                         <div className="sticky top-0 bg-gray-50/90 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-2xl">
                             <h2 className="text-lg font-bold text-navy">Fee Receipt</h2>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => {
+                                <button onClick={async () => {
                                     const items = getBreakdownItems(receiptRecord);
                                     const html = buildReceiptHTML({
                                         title: "School Fee Receipt",
@@ -300,7 +300,7 @@ export default function StudentFeesPage() {
                                     if(receiptRecord.paymentMode) {
                                       // Note: we can visually add the Payment Mode in the UI too
                                     }
-                                    printReceiptHTML(html, "School Fee Receipt");
+                                    await printReceiptHTML(html, "School Fee Receipt");
                                 }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-xl hover:bg-opacity-90 transition-colors shadow-sm">
                                     <Printer className="w-4 h-4" />Print / Download PDF
