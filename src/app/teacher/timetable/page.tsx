@@ -4,10 +4,8 @@ import { useState, useEffect } from "react";
 import { getDocs, collection } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { Loader2, Clock, BookOpen, Users, CalendarDays } from "lucide-react";
-
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+import { Loader2, Clock, BookOpen, Users, CalendarDays, Printer } from "lucide-react";
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
 
 const DAY_COLORS: Record<string, string> = {
     Monday: "bg-indigo-50 border-indigo-200 text-indigo-700",
@@ -78,9 +76,9 @@ export default function TeacherTimetablePage() {
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 print:m-0 print:p-0">
             {/* Header */}
-            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden">
+            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden print:hidden">
                 <div className="absolute inset-0 opacity-10"
                     style={{ backgroundImage: `radial-gradient(circle at 80% 50%, rgba(200,169,81,0.2) 0%, transparent 50%)` }} />
                 <div className="relative z-10">
@@ -115,29 +113,34 @@ export default function TeacherTimetablePage() {
                 </div>
             ) : (
                 <>
-                    {/* Day tabs */}
-                    <div className="flex gap-2 flex-wrap">
-                        {DAYS.map(day => {
-                            const hasPeriods = Object.keys(mySchedule[day] || {}).length > 0;
-                            return (
-                                <button key={day}
-                                    onClick={() => setSelectedDay(day)}
-                                    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${selectedDay === day
-                                        ? "bg-navy text-white border-navy"
-                                        : hasPeriods
-                                            ? "bg-white text-navy border-navy/20 hover:border-navy/40"
-                                            : "bg-white text-gray-300 border-gray-100"
-                                    }`}
-                                >
-                                    {day.slice(0, 3)}
-                                    {hasPeriods && (
-                                        <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${selectedDay === day ? "bg-white/20" : "bg-navy/10 text-navy"}`}>
-                                            {Object.keys(mySchedule[day]).length}
-                                        </span>
-                                    )}
-                                </button>
-                            );
-                        })}
+                    {/* Day tabs & Print */}
+                    <div className="flex gap-2 flex-wrap items-center justify-between w-full print:hidden">
+                        <div className="flex gap-2 flex-wrap">
+                            {DAYS.map(day => {
+                                const hasPeriods = Object.keys(mySchedule[day] || {}).length > 0;
+                                return (
+                                    <button key={day}
+                                        onClick={() => setSelectedDay(day)}
+                                        className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${selectedDay === day
+                                            ? "bg-navy text-white border-navy"
+                                            : hasPeriods
+                                                ? "bg-white text-navy border-navy/20 hover:border-navy/40"
+                                                : "bg-white text-gray-300 border-gray-100"
+                                        }`}
+                                    >
+                                        {day.slice(0, 3)}
+                                        {hasPeriods && (
+                                            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${selectedDay === day ? "bg-white/20" : "bg-navy/10 text-navy"}`}>
+                                                {Object.keys(mySchedule[day]).length}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors hidden sm:inline-flex">
+                            <Printer className="w-4 h-4" /> Print
+                        </button>
                     </div>
 
                     {/* Periods for selected day */}
@@ -149,24 +152,35 @@ export default function TeacherTimetablePage() {
                             </p>
                         </div>
                         <div className="divide-y divide-gray-50">
-                            {PERIODS.map(period => {
+                            {TIMETABLE_PERIODS.map((timing, idx) => {
+                                if (timing.isBreak) {
+                                    return (
+                                        <div key={`break-${idx}`} className="bg-amber-50 flex items-center justify-center py-4 border-y border-amber-200/60">
+                                            <span className="font-bold text-amber-700 uppercase tracking-[0.2em] text-[11px]">
+                                                {timing.label || "BREAK"} — <span className="opacity-70 normal-case tracking-normal">{timing.start} to {timing.end}</span>
+                                            </span>
+                                        </div>
+                                    );
+                                }
+                                const period = timing.period;
                                 const entry = mySchedule[selectedDay]?.[period];
                                 const dayColor = DAY_COLORS[selectedDay];
                                 return (
                                     <div key={period} className={`flex items-center gap-4 px-5 py-3.5 ${!entry ? "opacity-35" : ""}`}>
-                                        <div className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center shrink-0 font-bold text-sm ${entry ? dayColor : "bg-gray-50 border-gray-100 text-gray-300"}`}>
-                                            P{period}
+                                        <div className={`w-14 h-14 rounded-xl border-2 flex flex-col items-center justify-center shrink-0 ${entry ? dayColor : "bg-gray-50 border-gray-100 text-gray-400"}`}>
+                                            <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">P{period}</span>
+                                            <span className="text-[10px] font-bold leading-none mt-1">{timing.start.replace(' AM','').replace(' PM','')}</span>
                                         </div>
                                         {entry ? (
                                             <div className="flex-1">
-                                                <p className="font-bold text-navy">{entry.subjectName}</p>
+                                                <p className="font-bold text-navy text-base">{entry.subjectName}</p>
                                                 <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
                                                     <BookOpen className="w-3 h-3" />
                                                     Class {entry.cls} – {entry.section}
                                                 </p>
                                             </div>
                                         ) : (
-                                            <p className="text-sm text-gray-300 font-medium">Period {period} — Free</p>
+                                            <p className="text-sm text-gray-300 font-medium flex-1">Period {period} — Free</p>
                                         )}
                                         {entry && (
                                             <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${dayColor}`}>
