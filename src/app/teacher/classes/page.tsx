@@ -36,30 +36,36 @@ export default function TeacherClassesPage() {
 
             let classSections: Record<string, string[]> = {};
 
-            // Method 1: Direct doc lookup by UID (most reliable, matches homework page)
+            // Master Method: Read assigned classes directly from the Timetable collection
             try {
-                const { doc: fsDoc, getDoc: fsGetDoc } = await import("firebase/firestore");
-                const teacherDoc = await fsGetDoc(fsDoc(db, "teachers", user.uid));
-                if (teacherDoc.exists()) {
-                    const data = teacherDoc.data();
-
-                    // Try periodSchedule first (timetable-based assignment)
-                    const periodSchedule = data?.periodSchedule || {};
-                    Object.values(periodSchedule).forEach((period: any) => {
-                        if (period.className && period.section) {
-                            const clsName = period.className.startsWith("Class")
-                                ? period.className
-                                : `Class ${period.className}`;
-                            if (!classSections[clsName]) classSections[clsName] = [];
-                            if (!classSections[clsName].includes(period.section)) {
-                                classSections[clsName].push(period.section);
-                            }
-                        }
+                const { collection, getDocs } = await import("firebase/firestore");
+                const ttSnap = await getDocs(collection(db, "timetable"));
+                ttSnap.docs.forEach(d => {
+                    const data = d.data();
+                    const clsNameRaw = data.cls;
+                    const section = data.section;
+                    const slots = data.slots || {};
+                    
+                    let isAssigned = false;
+                    Object.values(slots).forEach((slot: any) => {
+                        if (slot.teacherId === user.uid) isAssigned = true;
                     });
+                    
+                    if (isAssigned && clsNameRaw && section) {
+                        const clsName = clsNameRaw.startsWith("Class") ? clsNameRaw : `Class ${clsNameRaw}`;
+                        if (!classSections[clsName]) classSections[clsName] = [];
+                        if (!classSections[clsName].includes(section)) {
+                            classSections[clsName].push(section);
+                        }
+                    }
+                });
 
-                    // Fallback: assignment.classSections
-                    if (Object.keys(classSections).length === 0) {
-                        const a = data?.assignment;
+                // Fallback: If no timetable assigned, check teacher doc's manual assignment
+                if (Object.keys(classSections).length === 0) {
+                    const { doc: fsDoc, getDoc: fsGetDoc } = await import("firebase/firestore");
+                    const teacherDoc = await fsGetDoc(fsDoc(db, "teachers", user.uid));
+                    if (teacherDoc.exists()) {
+                        const a = teacherDoc.data()?.assignment;
                         if (a?.classSections && Object.keys(a.classSections).length > 0) {
                             classSections = a.classSections;
                         } else if (a?.classes?.length) {
@@ -72,26 +78,7 @@ export default function TeacherClassesPage() {
             } catch (err) {
                 console.error("[Teacher] direct doc lookup failed:", err);
             }
-
-            // Method 2: Fallback — where("uid", "==") query
-            if (Object.keys(classSections).length === 0) {
-                try {
-                    const teacherSnap = await getDocs(query(collection(db, "teachers"), where("uid", "==", user.uid)));
-                    if (!teacherSnap.empty) {
-                        const data = teacherSnap.docs[0].data();
-                        const a = data.assignment;
-                        if (a?.classSections) classSections = a.classSections;
-                        else if (a?.classes?.length) {
-                            (a.classes as string[]).forEach((c: string) => {
-                                classSections[c] = a.sections || [];
-                            });
-                        }
-                    }
-                } catch (err) {
-                    console.error("[Teacher] where lookup failed:", err);
-                }
-            }
-
+            
             setTeacherAssignment({ classSections });
 
             // ── Fetch students ─────────────────────────────────────────────
