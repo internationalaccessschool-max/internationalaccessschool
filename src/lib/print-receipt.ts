@@ -106,7 +106,7 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
       body { background: #fff; }
       .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; }
       .slip { border-right: 1.5px dashed #94a3b8; }
-      @page { size: A4 landscape; margin: 0; }
+      @page { size: 210mm 148.5mm; margin: 0; }
     }
   </style>`;
 
