@@ -333,7 +333,7 @@ export default function AdminStudentsPage() {
                 <div className="flex items-center gap-2.5 shrink-0">
                     <Filter className="w-5 h-5 text-slate-400 hidden sm:block ml-2" />
                     <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
-                        {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
+                        {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : c}</option>)}
                     </select>
                     <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
                         {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : s}</option>)}
