@@ -262,7 +262,7 @@ export default function PromotePage() {
                             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-navy outline-none bg-white"
                         >
                             <option value="">— All Classes —</option>
-                            {CLASS_LIST.map(c => <option key={c} value={c}>Class {c}</option>)}
+                            {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
 
