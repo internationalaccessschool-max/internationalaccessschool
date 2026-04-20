@@ -410,9 +410,6 @@ export default function AdminStudentsPage() {
                                             <button onClick={() => setEditingStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 ring-1 ring-slate-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300">
                                                 <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} /> Edit
                                             </button>
-                                            <button onClick={() => setViewFeeStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 ring-1 ring-indigo-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                                                <Wallet className="w-3.5 h-3.5" strokeWidth={2.5} /> Fee Record
-                                            </button>
                                             {activeTab === "active" && (
                                                 <button onClick={() => setChangeClassStudent(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 ring-1 ring-violet-200 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-300">
                                                     <ArrowLeftRight className="w-3.5 h-3.5" strokeWidth={2.5} /> Transfer
