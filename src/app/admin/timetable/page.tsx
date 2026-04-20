@@ -117,11 +117,38 @@ export default function AdminTimetablePage() {
         setSaving(true);
         const key = `${cls}-${section}`;
         try {
+            let conflictMsg = "";
+            let hasConflict = false;
+            
+            // Check for conflicts across all days/periods
+            for (const day of DAYS) {
+                for (const timing of TIMETABLE_PERIODS) {
+                    if (timing.isBreak) continue;
+                    const slot = getSlot(day, timing.period);
+                    if (slot.teacherId) {
+                        const conflict = getConflict(day, timing.period, slot.teacherId);
+                        if (conflict) {
+                            hasConflict = true;
+                            conflictMsg = `Cannot save! Teacher ${slot.teacherName} is busy in Class ${conflict.cls}-${conflict.section} on ${day} Period ${timing.period}.`;
+                            break;
+                        }
+                    }
+                }
+                if (hasConflict) break;
+            }
+
+            if (hasConflict) {
+                toast.error(conflictMsg, { duration: 5000 });
+                setSaving(false);
+                return;
+            }
+
             // Clean empty slots before saving
             const cleanSlots: TimetableSlots = {};
             Object.entries(slots).forEach(([k, v]) => {
                 if (v.subjectId || v.teacherId) cleanSlots[k] = v;
             });
+            
             await setDoc(doc(db, "timetable", key), {
                 cls, section, slots: cleanSlots, updatedAt: serverTimestamp()
             });
