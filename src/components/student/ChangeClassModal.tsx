@@ -59,6 +59,11 @@ export function ChangeClassModal({ student, onClose, onSaved }: Props) {
                     { merge: true }
                 );
                 await deleteDoc(oldDocRef);
+                // Keep studentLookup in sync — timetable/attendance/fees depend on this
+                await setDoc(doc(db, "studentLookup", student.id), {
+                    className: newClass,
+                    section: newSection,
+                }, { merge: true });
             } else {
                 // Only roll number changed — simple in-place update
                 await setDoc(oldDocRef, { rollNumber: newRollNo }, { merge: true });
