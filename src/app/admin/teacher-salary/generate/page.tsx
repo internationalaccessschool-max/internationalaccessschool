@@ -16,13 +16,8 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December"
 ];
 
-function calcMonSatDays(year: number, month: number): number {
-    const daysInMonth = new Date(year, month, 0).getDate();
-    let count = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-        if (new Date(year, month - 1, d).getDay() !== 0) count++;
-    }
-    return count;
+function getDaysInMonth(year: number, month: number): number {
+    return new Date(year, month, 0).getDate();
 }
 
 interface TeacherRow {
@@ -47,6 +42,7 @@ interface AttStat {
     absent: number;
     leave: number;
     late: number;
+    halfDay: number;
 }
 
 export default function GenerateTeacherSalaryPage() {
@@ -142,7 +138,7 @@ export default function GenerateTeacherSalaryPage() {
 
     // Reset working days when month/year changes
     useEffect(() => {
-        setWorkingDays(calcMonSatDays(selectedYear, selectedMonth));
+        setWorkingDays(getDaysInMonth(selectedYear, selectedMonth));
         setAttDetectedDays(0);
     }, [selectedMonth, selectedYear]);
 
@@ -162,24 +158,25 @@ export default function GenerateTeacherSalaryPage() {
                     if (data.isHoliday) { holidayCount++; return; }
                     const records: Record<string, string> = data.records || {};
                     for (const [tid, status] of Object.entries(records)) {
-                        if (!map[tid]) map[tid] = { present: 0, absent: 0, leave: 0, late: 0 };
+                        if (!map[tid]) map[tid] = { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0 };
                         if (status === "present") map[tid].present++;
                         else if (status === "late") { map[tid].present++; map[tid].late++; }
                         else if (status === "absent") map[tid].absent++;
                         else if (status === "leave") map[tid].leave++;
+                        else if (status === "half_day") map[tid].halfDay++;
                     }
                 });
                 setAttMap(map);
-                // Working days = Mon-Sat days in month - holidays marked in attendance
-                const monSat = calcMonSatDays(selectedYear, selectedMonth);
-                const calculatedWorkingDays = monSat - holidayCount;
+                // Working days = total calendar days - holidays marked in attendance
+                const totalCal = getDaysInMonth(selectedYear, selectedMonth);
+                const calculatedWorkingDays = totalCal - holidayCount;
                 setAttDetectedDays(holidayCount);
-                setWorkingDays(calculatedWorkingDays > 0 ? calculatedWorkingDays : monSat);
+                setWorkingDays(calculatedWorkingDays > 0 ? calculatedWorkingDays : totalCal);
             } catch (e) {
                 console.warn("Attendance fetch failed:", e);
                 setAttMap({});
                 setAttDetectedDays(0);
-                setWorkingDays(calcMonSatDays(selectedYear, selectedMonth));
+                setWorkingDays(getDaysInMonth(selectedYear, selectedMonth));
             } finally {
                 setAttLoading(false);
             }
@@ -214,6 +211,7 @@ export default function GenerateTeacherSalaryPage() {
             const payload = {
                 year: selectedYear,
                 month: selectedMonth,
+                workingDays,
                 teachers: selectedTeachers.map(t => ({
                     id: t.id, name: t.name, designation: t.designation,
                     basicSalary: t.basicSalary, hra: t.hra, da: t.da,
@@ -240,13 +238,14 @@ export default function GenerateTeacherSalaryPage() {
     };
 
     const totalPayout = selectedTeachers.reduce((sum, t) => {
-        const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0 };
+        const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0 };
         const pf = Math.round((t.gross * t.pfPct) / 100);
         const esic = Math.round((t.gross * t.esicPct) / 100);
         const perDay = workingDays > 0 ? t.gross / workingDays : 0;
         const effective = att.absent + Math.floor(att.late / 3);
         const absentCut = Math.round(Math.floor(effective / 3) * perDay);
-        return sum + (t.gross - pf - esic - absentCut);
+        const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);
+        return sum + (t.gross - pf - esic - absentCut - halfDayCut);
     }, 0);
 
     return (
@@ -313,13 +312,12 @@ export default function GenerateTeacherSalaryPage() {
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
                             <Calendar className="w-3 h-3" /> Working Days
-                            <span className="text-gray-400 font-normal">(Mon–Sat)</span>
                         </label>
                         <input type="number" min={1} max={31} value={workingDays}
                             onChange={e => setWorkingDays(Number(e.target.value) || 1)}
                             className="w-full px-4 py-2 border-2 border-indigo-300 rounded-xl text-sm font-bold text-indigo-700 focus:border-indigo-500 focus:outline-none" />
                         <p className="text-[10px] text-gray-400 mt-1">
-                            Auto: {calcMonSatDays(selectedYear, selectedMonth)} Mon–Sat {attDetectedDays > 0 ? `− ${attDetectedDays} holiday = ${workingDays}` : "days"} · Edit if needed
+                            Auto: {getDaysInMonth(selectedYear, selectedMonth)} calendar days {attDetectedDays > 0 ? `− ${attDetectedDays} holiday = ${workingDays}` : ""} · Edit if needed
                         </p>
                     </div>
                 </div>
@@ -330,7 +328,7 @@ export default function GenerateTeacherSalaryPage() {
                     </button>
                     <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
                         <Info className="w-3 h-3" />
-                        {calcMonSatDays(selectedYear, selectedMonth)} Mon–Sat days
+                        {getDaysInMonth(selectedYear, selectedMonth)} calendar days
                         {attDetectedDays > 0 && <span className="text-red-500 ml-1">− {attDetectedDays} holiday{attDetectedDays > 1 ? "s" : ""}</span>}
                         <span className="font-semibold text-indigo-600 ml-1">= {workingDays} working days</span>
                         <span className="ml-2 text-gray-400">· Per day = Gross ÷ {workingDays}</span>
@@ -364,15 +362,16 @@ export default function GenerateTeacherSalaryPage() {
 
                         <div className="divide-y divide-gray-50">
                             {teachers.map(t => {
-                                const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0 };
+                                const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0 };
                                 const perDay = workingDays > 0 ? t.gross / workingDays : 0;
                                 const lateToAbsent = Math.floor(att.late / 3);
                                 const effectiveAbsents = att.absent + lateToAbsent;
                                 const deductDays = Math.floor(effectiveAbsents / 3);
                                 const absentCut = Math.round(deductDays * perDay);
+                                const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);
                                 const pfAmt = Math.round((t.gross * t.pfPct) / 100);
                                 const esicAmt = Math.round((t.gross * t.esicPct) / 100);
-                                const netAmt = t.gross - pfAmt - esicAmt - absentCut;
+                                const netAmt = t.gross - pfAmt - esicAmt - absentCut - halfDayCut;
 
                                 return (
                                     <div key={t.id} className={`px-5 py-4 hover:bg-gray-50/40 transition-colors ${t.alreadyGenerated ? "opacity-60" : ""}`}>
@@ -441,6 +440,15 @@ export default function GenerateTeacherSalaryPage() {
                                                             <span className="text-gray-400">CL</span>
                                                             <span className="font-bold text-blue-500">{att.leave}</span>
                                                         </span>
+                                                        {att.halfDay > 0 && (
+                                                            <>
+                                                                <span className="text-gray-200">·</span>
+                                                                <span className="flex flex-col items-center">
+                                                                    <span className="text-gray-400">½ Day</span>
+                                                                    <span className="font-bold text-purple-500">{att.halfDay}</span>
+                                                                </span>
+                                                            </>
+                                                        )}
                                                     </>
                                                 )}
                                             </div>
@@ -448,11 +456,12 @@ export default function GenerateTeacherSalaryPage() {
                                             {/* Absent Cut */}
                                             <div className="hidden md:block text-xs text-center shrink-0 w-28">
                                                 <div className="text-gray-400">Cut</div>
-                                                {deductDays > 0 ? (
+                                                {deductDays > 0 || halfDayCut > 0 ? (
                                                     <div className="font-bold text-red-500">
-                                                        {deductDays} day{deductDays > 1 ? "s" : ""}
+                                                        {deductDays > 0 && <span>{deductDays} day{deductDays > 1 ? "s" : ""}</span>}
                                                         {lateToAbsent > 0 && <span className="block text-[10px] text-amber-500">(+{lateToAbsent} from late)</span>}
-                                                        <span className="text-[10px]">-₹{absentCut.toLocaleString("en-IN")}</span>
+                                                        {halfDayCut > 0 && <span className="block text-[10px] text-purple-500">½ day ×{att.halfDay}</span>}
+                                                        <span className="text-[10px]">-₹{(absentCut + halfDayCut).toLocaleString("en-IN")}</span>
                                                     </div>
                                                 ) : (
                                                     <div className="text-gray-300">None</div>
