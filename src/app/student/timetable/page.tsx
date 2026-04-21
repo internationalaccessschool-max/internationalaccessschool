@@ -60,7 +60,7 @@ export default function StudentTimetablePage() {
         return () => unsub();
     }, []);
 
-    const daySlots = TIMETABLE_PERIODS.map(timing => ({
+    const daySlots = periods.map(timing => ({
         timing,
         slot: timing.isBreak ? null : slots[`${selectedDay}-${timing.period}`] || null,
     }));
@@ -118,7 +118,7 @@ export default function StudentTimetablePage() {
                     {/* Day tabs */}
                     <div className="flex gap-2 flex-wrap">
                         {DAYS.map((day, idx) => {
-                            const count = TIMETABLE_PERIODS.filter(p => !p.isBreak && slots[`${day}-${p.period}`]?.subjectName).length;
+                            const count = periods.filter(p => !p.isBreak && slots[`${day}-${p.period}`]?.subjectName).length;
                             const isToday = day === DAYS[new Date().getDay() === 0 ? 0 : new Date().getDay() - 1];
                             return (
                                 <button key={day} onClick={() => setSelectedDay(day)}
