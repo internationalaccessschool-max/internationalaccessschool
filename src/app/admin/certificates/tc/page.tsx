@@ -530,7 +530,7 @@ export default function TransferCertificatePage() {
                     <td style={{ fontSize: "10px" }}>Book No. <b>{tcData.bookNo}</b> &nbsp; Sl. No. <b>{tcData.slNo}</b></td>
                     <td style={{ fontSize: "10px", textAlign: "right" }}>Admission No.: {udiseSchool} – <b>{student.admissionNumber}</b></td>
                   </tr>
-                  <tr><td colSpan={2} style={{ fontSize: "10px", fontWeight: "bold", textAlign: "right" }}>{udiseSchool}: {UDISE_CODES[udiseSchool]}</td></tr>
+                  <tr><td colSpan={2} style={{ fontSize: "10px", fontWeight: "bold", textAlign: "right" }}>UDISE – {udiseSchool} – {UDISE_CODES[udiseSchool]}</td></tr>
                 </tbody>
               </table>
 
