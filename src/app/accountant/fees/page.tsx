@@ -223,9 +223,9 @@ export default function ManageFeesPage() {
             }
 
             merged.sort((a, b) => {
-                const cmp = (a.class || "").localeCompare(b.class || "", undefined, { numeric: true });
-                if (cmp !== 0) return cmp;
-                return (a.studentName || "").localeCompare(b.studentName || "");
+                const an = parseInt(a.admissionNumber || "0");
+                const bn = parseInt(b.admissionNumber || "0");
+                return an - bn;
             });
 
             setRecords(merged);
