@@ -5,7 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Loader2, Clock, BookOpen, User, CalendarDays } from "lucide-react";
-import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS, PeriodTiming } from "@/lib/timetable-config";
 
 const PERIOD_COLORS = [
     "bg-indigo-50 border-indigo-200 text-indigo-700",
