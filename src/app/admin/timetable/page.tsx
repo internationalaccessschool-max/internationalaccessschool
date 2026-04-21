@@ -5,7 +5,7 @@ import {
     doc, getDoc, setDoc, getDocs, collection, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, Save, AlertTriangle, Clock, Settings, X, Plus, Trash2, Printer } from "lucide-react";
+import { Loader2, Save, AlertTriangle, Clock, Settings, X, Plus, Trash2, Printer, ChevronUp, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS, PeriodTiming } from "@/lib/timetable-config";
 
@@ -184,6 +184,16 @@ export default function AdminTimetablePage() {
 
     const removeDraft = (i: number) =>
         setConfigDraft(prev => prev.filter((_, idx) => idx !== i));
+
+    const moveDraft = (i: number, dir: -1 | 1) => {
+        const j = i + dir;
+        setConfigDraft(prev => {
+            if (j < 0 || j >= prev.length) return prev;
+            const next = [...prev];
+            [next[i], next[j]] = [next[j], next[i]];
+            return next;
+        });
+    };
 
     const addPeriod = () => {
         const nonBreaks = configDraft.filter(p => !p.isBreak);
@@ -401,6 +411,16 @@ export default function AdminTimetablePage() {
                                     <input type="time" value={to24h(item.end)}
                                         onChange={e => updateDraft(i, "end", to12h(e.target.value))}
                                         className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:border-navy w-[90px]" />
+                                    <div className="flex flex-col gap-0.5 shrink-0">
+                                        <button onClick={() => moveDraft(i, -1)} disabled={i === 0}
+                                            className="p-1 rounded text-gray-300 hover:text-navy hover:bg-navy/10 disabled:opacity-20 transition-colors">
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={() => moveDraft(i, 1)} disabled={i === configDraft.length - 1}
+                                            className="p-1 rounded text-gray-300 hover:text-navy hover:bg-navy/10 disabled:opacity-20 transition-colors">
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                     <button onClick={() => removeDraft(i)}
                                         className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">
                                         <Trash2 className="w-4 h-4" />
