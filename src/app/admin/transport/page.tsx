@@ -35,6 +35,9 @@ interface Student {
     transport?: string;
     parentEmail?: string;
     status?: string;
+    address?: string;
+    village?: string;
+    city?: string;
     [key: string]: any;
 }
 
@@ -123,6 +126,8 @@ export default function TransportAdminPage() {
     const [generatingFees, setGeneratingFees] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [busView, setBusView] = useState<"all" | string>("all"); // filter by bus in buses tab
+    const [filterClass, setFilterClass] = useState("all");
+    const [filterSection, setFilterSection] = useState("all");
 
     // Modals
     const [busModalOpen, setBusModalOpen] = useState(false);
@@ -436,15 +441,40 @@ export default function TransportAdminPage() {
     const busStudents = students.filter(isBusStudent);
     const nonBusStudents = students.filter(s => !isBusStudent(s));
 
+    const CLASS_ORDER = ["NUR","LKG","UKG","1","2","3","4","5","6","7","8","9","10","11","12"];
+
     const filterStudents = (list: Student[]) => {
-        if (!searchTerm) return list;
-        const q = searchTerm.toLowerCase();
-        return list.filter(s =>
-            getDisplayName(s).toLowerCase().includes(q) ||
-            (s.admissionNumber || "").toLowerCase().includes(q) ||
-            ((s.currentClass || s.className || "") + " " + (s.section || "")).toLowerCase().includes(q)
-        );
+        let result = list;
+        if (filterClass !== "all") result = result.filter(s => (s.currentClass || s.className || "") === filterClass);
+        if (filterSection !== "all") result = result.filter(s => (s.section || "") === filterSection);
+        if (searchTerm) {
+            const q = searchTerm.toLowerCase();
+            result = result.filter(s =>
+                getDisplayName(s).toLowerCase().includes(q) ||
+                (s.admissionNumber || "").toLowerCase().includes(q) ||
+                ((s.currentClass || s.className || "") + " " + (s.section || "")).toLowerCase().includes(q)
+            );
+        }
+        // Sort by admission number numerically
+        result = [...result].sort((a, b) => {
+            const an = parseInt(a.admissionNumber || "0");
+            const bn = parseInt(b.admissionNumber || "0");
+            return an - bn;
+        });
+        return result;
     };
+
+    const getStudentAddress = (s: Student) => {
+        return s.address || s.village || s.city || "";
+    };
+
+    const allClasses = Array.from(new Set(students.map(s => s.currentClass || s.className || "").filter(Boolean)))
+        .sort((a, b) => CLASS_ORDER.indexOf(a) - CLASS_ORDER.indexOf(b));
+    const allSections = Array.from(new Set(
+        students
+            .filter(s => filterClass === "all" || (s.currentClass || s.className || "") === filterClass)
+            .map(s => s.section || "").filter(Boolean)
+    )).sort();
 
     const filteredFeeRecords = feeRecords.filter(r => {
         if (!searchTerm) return true;
@@ -528,13 +558,27 @@ export default function TransportAdminPage() {
                     ))}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                    {activeTab !== "fees" && (
+                        <>
+                            <select value={filterClass} onChange={e => { setFilterClass(e.target.value); setFilterSection("all"); }}
+                                className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy bg-white shadow-sm">
+                                <option value="all">All Classes</option>
+                                {allClasses.map(c => <option key={c} value={c}>Class {c}</option>)}
+                            </select>
+                            <select value={filterSection} onChange={e => setFilterSection(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy bg-white shadow-sm">
+                                <option value="all">All Sections</option>
+                                {allSections.map(s => <option key={s} value={s}>Section {s}</option>)}
+                            </select>
+                        </>
+                    )}
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
                             type="search" placeholder="Search..."
                             value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 w-52 bg-white shadow-sm"
+                            className="pl-9 pr-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 w-44 bg-white shadow-sm"
                         />
                     </div>
                     {activeTab !== "fees" && (
@@ -589,6 +633,7 @@ export default function TransportAdminPage() {
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Student Name</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Class</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Contact</th>
+                                                <th className="h-11 px-4 text-left font-semibold text-gray-600">Address</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Assigned Bus</th>
                                                 <th className="h-11 px-4 text-right font-semibold text-gray-600">Action</th>
                                             </tr>
@@ -604,7 +649,7 @@ export default function TransportAdminPage() {
                                                     }
                                                 }
                                                 if (list.length === 0) return (
-                                                    <tr><td colSpan={6} className="p-12 text-center text-gray-400">No bus students found.</td></tr>
+                                                    <tr><td colSpan={7} className="p-12 text-center text-gray-400">No bus students found.</td></tr>
                                                 );
                                                 return list.map((student, idx) => {
                                                     const parts = (student.transport || "").split("::");
@@ -634,6 +679,9 @@ export default function TransportAdminPage() {
                                                                 {student.currentClass || student.className || "—"} {student.section || ""}
                                                             </td>
                                                             <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
+                                                            <td className="p-4 text-gray-500 text-xs max-w-[160px]">
+                                                                {getStudentAddress(student) || <span className="text-gray-300">—</span>}
+                                                            </td>
                                                             <td className="p-4">
                                                                 {assignedBus ? (
                                                                     <div className="flex flex-col gap-1 items-start">
@@ -675,13 +723,14 @@ export default function TransportAdminPage() {
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Student Name</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Class</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Contact</th>
+                                            <th className="h-11 px-4 text-left font-semibold text-gray-600">Address</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Mode</th>
                                             <th className="h-11 px-4 text-right font-semibold text-gray-600">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-50">
                                         {filterStudents(nonBusStudents).length === 0 ? (
-                                            <tr><td colSpan={6} className="p-12 text-center text-gray-400">No non-bus students found.</td></tr>
+                                            <tr><td colSpan={7} className="p-12 text-center text-gray-400">No non-bus students found.</td></tr>
                                         ) : filterStudents(nonBusStudents).map((student, idx) => (
                                             <tr key={student.id} className="hover:bg-amber-50/30 transition-colors">
                                                 <td className="p-4 text-gray-400 text-xs">{idx + 1}</td>
@@ -693,6 +742,9 @@ export default function TransportAdminPage() {
                                                     {student.currentClass || student.className || "—"} {student.section || ""}
                                                 </td>
                                                 <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
+                                                <td className="p-4 text-gray-500 text-xs max-w-[160px]">
+                                                    {getStudentAddress(student) || <span className="text-gray-300">—</span>}
+                                                </td>
                                                 <td className="p-4">
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
                                                         <Users className="w-3 h-3" /> {student.transport?.toUpperCase() === "NONE" || !student.transport ? "Walk / Self" : student.transport}
