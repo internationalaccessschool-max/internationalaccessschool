@@ -128,6 +128,11 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 if (oldDoc) {
                     await deleteDoc(oldDoc.ref);
                 }
+                // Keep studentLookup in sync — timetable/attendance/fees depend on this
+                await setDoc(doc(db, "studentLookup", student.id), {
+                    className: newClassName,
+                    section: newSection,
+                }, { merge: true });
             }
 
             // Always write to the new nested destination regardless of whether it moved
