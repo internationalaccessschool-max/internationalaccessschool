@@ -115,6 +115,7 @@ export default function AdminStudentsPage() {
                 // Deduplicate
                 const seen = new Set<string>();
                 data = data.filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
+                data.sort((a, b) => parseInt(a.admissionNumber || "0") - parseInt(b.admissionNumber || "0"));
                 setStudents(data);
             } catch (err) { console.error(err); toast.error("Failed to load students."); }
             finally { setIsLoading(false); }
