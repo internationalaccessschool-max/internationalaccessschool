@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getDocs, collection } from "firebase/firestore";
+import { getDocs, getDoc, doc, collection } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Loader2, Clock, BookOpen, Users, CalendarDays, Printer } from "lucide-react";
-import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS, PeriodTiming } from "@/lib/timetable-config";
 
 const DAY_COLORS: Record<string, string> = {
     Monday: "bg-indigo-50 border-indigo-200 text-indigo-700",
@@ -22,6 +22,7 @@ export default function TeacherTimetablePage() {
     const [teacherId, setTeacherId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedDay, setSelectedDay] = useState(DAYS[new Date().getDay() === 0 ? 0 : new Date().getDay() - 1] || "Monday");
+    const [periods, setPeriods] = useState<PeriodTiming[]>(TIMETABLE_PERIODS);
 
     // All my slots: { day: { period: { subjectName, cls, section } } }
     const [mySchedule, setMySchedule] = useState<Record<string, Record<number, { subjectName: string; cls: string; section: string }>>>({});
@@ -31,6 +32,15 @@ export default function TeacherTimetablePage() {
             setTeacherId(user?.uid || null);
         });
         return () => unsub();
+    }, []);
+
+    // Load dynamic period config
+    useEffect(() => {
+        getDoc(doc(db, "timetableConfig", "schedule")).then(snap => {
+            if (snap.exists() && snap.data().periods?.length) {
+                setPeriods(snap.data().periods as PeriodTiming[]);
+            }
+        });
     }, []);
 
     useEffect(() => {
@@ -152,7 +162,7 @@ export default function TeacherTimetablePage() {
                             </p>
                         </div>
                         <div className="divide-y divide-gray-50">
-                            {TIMETABLE_PERIODS.map((timing, idx) => {
+                            {periods.map((timing, idx) => {
                                 if (timing.isBreak) {
                                     return (
                                         <div key={`break-${idx}`} className="bg-amber-50 flex items-center justify-center py-4 border-y border-amber-200/60">
