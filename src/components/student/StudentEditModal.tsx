@@ -128,16 +128,23 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 if (oldDoc) {
                     await deleteDoc(oldDoc.ref);
                 }
-                // Keep studentLookup in sync — timetable/attendance/fees depend on this
-                await setDoc(doc(db, "studentLookup", student.id), {
-                    className: newClassName,
-                    section: newSection,
-                }, { merge: true });
             }
 
             // Always write to the new nested destination regardless of whether it moved
             const newDocRef = doc(db, "users", "classes", newClassName, "sections", newSection, "students", "profiles", student.id);
             await setDoc(newDocRef, dataToSave, { merge: true });
+
+            // Always sync studentLookup — all pages (timetable, attendance, fees) depend on it
+            await setDoc(doc(db, "studentLookup", student.id), {
+                uid: student.id,
+                name: `${dataToSave.firstName || ""} ${dataToSave.lastName || ""}`.trim() || dataToSave.name || "",
+                admissionNumber: dataToSave.admissionNumber || dataToSave.enrollmentNo || "",
+                className: newClassName,
+                section: newSection,
+                status: dataToSave.status || "ACTIVE",
+                mobileNo: dataToSave.mobileNo || "",
+                email: dataToSave.email || "",
+            }, { merge: true });
 
             // Ensure parent documents exist for console visibility
             await setDoc(doc(db, "users", "classes"), { description: "Root for classes", updatedAt: new Date() }, { merge: true });
