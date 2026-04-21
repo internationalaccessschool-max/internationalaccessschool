@@ -4,10 +4,10 @@ import toast from "react-hot-toast";
 import { useState, useEffect, useMemo } from "react";
 import { collection, doc, getDocs, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import { Loader2, Check, Clock, X, ChevronDown, CalendarX, Search, Users } from "lucide-react";
+import { Loader2, Check, Clock, X, ChevronDown, CalendarX, Search, Users, Sun } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
-type AttendanceStatus = "present" | "late" | "absent" | "leave" | "holiday";
+type AttendanceStatus = "present" | "late" | "absent" | "leave" | "half_day" | "holiday";
 
 // Path: teacherAttendance/{year}/months/{month}/days/{date}
 function taDocRef(date: string) {
@@ -248,7 +248,7 @@ export default function AdminTeacherAttendancePage() {
     const totalDays = summaryDocs.filter(d => !d.isHoliday).length;
 
     const getTeacherSummary = (teacherId: string) => {
-        let present = 0, late = 0, absent = 0, leave = 0, total = 0;
+        let present = 0, late = 0, absent = 0, leave = 0, halfDay = 0, total = 0;
         summaryDocs.forEach(d => {
             if (d.isHoliday) return;
             const v = d.records[teacherId];
@@ -257,17 +257,19 @@ export default function AdminTeacherAttendancePage() {
                 if (v === "present") present++;
                 else if (v === "late") late++;
                 else if (v === "leave") leave++;
+                else if (v === "half_day") halfDay++;
                 else absent++;
             }
         });
-        const pct = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
-        return { present, late, absent, leave, total, pct };
+        const pct = total > 0 ? Math.round(((present + late + halfDay * 0.5) / total) * 100) : 0;
+        return { present, late, absent, leave, halfDay, total, pct };
     };
 
     const dayPresent = teachers.filter(t => t.status === "present").length;
     const dayLate = teachers.filter(t => t.status === "late").length;
     const dayAbsent = teachers.filter(t => t.status === "absent").length;
     const dayLeave = teachers.filter(t => t.status === "leave").length;
+    const dayHalfDay = teachers.filter(t => t.status === "half_day").length;
     const dayTotal = teachers.length;
 
     const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
@@ -347,10 +349,10 @@ export default function AdminTeacherAttendancePage() {
             ) : viewMode === "date" ? (
                 <>
                     {/* Day Stats */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                         <StatCard value={dayTotal} label="Total" color="text-navy" />
                         {isHoliday ? (
-                            <div className="col-span-4 bg-purple-50 rounded-2xl p-4 shadow-sm border border-purple-200 text-center flex items-center justify-center gap-2">
+                            <div className="col-span-5 bg-purple-50 rounded-2xl p-4 shadow-sm border border-purple-200 text-center flex items-center justify-center gap-2">
                                 <CalendarX className="w-5 h-5 text-purple-500" />
                                 <div className="text-xl font-bold text-purple-700">Holiday — {dayTotal} staff</div>
                             </div>
@@ -360,6 +362,7 @@ export default function AdminTeacherAttendancePage() {
                                 <StatCard value={dayLate} label="Late" color="text-amber-600" />
                                 <StatCard value={dayAbsent} label="Absent" color="text-red-600" />
                                 <StatCard value={dayLeave} label="CL" color="text-blue-600" />
+                                <StatCard value={dayHalfDay} label="Half Day" color="text-purple-600" />
                             </>
                         )}
                     </div>
@@ -431,6 +434,7 @@ export default function AdminTeacherAttendancePage() {
                                                 <StatusBtn active={teacher.status === "late"} onClick={() => setStatus(teacher.id, "late")} color="amber" icon={<Clock className="w-3.5 h-3.5" />} label="Late" />
                                                 <StatusBtn active={teacher.status === "absent"} onClick={() => setStatus(teacher.id, "absent")} color="red" icon={<X className="w-3.5 h-3.5" />} label="Absent" />
                                                 <StatusBtn active={teacher.status === "leave"} onClick={() => setStatus(teacher.id, "leave")} color="blue" icon={<CalendarX className="w-3.5 h-3.5" />} label="CL" />
+                                                <StatusBtn active={teacher.status === "half_day"} onClick={() => setStatus(teacher.id, "half_day")} color="purple" icon={<Sun className="w-3.5 h-3.5" />} label="Half Day" />
                                             </>
                                         )}
                                     </div>
@@ -480,19 +484,20 @@ export default function AdminTeacherAttendancePage() {
                         <div className="text-center py-10 text-gray-400 text-sm">No teachers found.</div>
                     ) : (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="grid grid-cols-[1fr_60px_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
+                            <div className="grid grid-cols-[1fr_50px_50px_50px_50px_60px_60px] sm:grid-cols-[1fr_70px_70px_70px_70px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
                                 <span>Teacher</span>
                                 <span className="text-center">Present</span>
                                 <span className="text-center">Late</span>
                                 <span className="text-center">Absent</span>
                                 <span className="text-center">CL</span>
+                                <span className="text-center">Half Day</span>
                                 <span className="text-center">%</span>
                             </div>
                             <div className="divide-y divide-gray-50">
                                 {filteredTeachers.map(teacher => {
                                     const s = getTeacherSummary(teacher.id);
                                     return (
-                                        <div key={teacher.id} className="grid grid-cols-[1fr_60px_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
+                                        <div key={teacher.id} className="grid grid-cols-[1fr_50px_50px_50px_50px_60px_60px] sm:grid-cols-[1fr_70px_70px_70px_70px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
                                             <div>
                                                 <div className="flex items-center gap-1.5">
                                                     <p className="text-sm font-semibold text-navy truncate">{teacher.name}</p>
@@ -506,6 +511,7 @@ export default function AdminTeacherAttendancePage() {
                                             <span className="text-center text-sm font-bold text-amber-600">{s.late}</span>
                                             <span className="text-center text-sm font-bold text-red-600">{s.absent}</span>
                                             <span className="text-center text-sm font-bold text-blue-600">{s.leave}</span>
+                                            <span className="text-center text-sm font-bold text-purple-600">{s.halfDay}</span>
                                             <span className={`text-center text-sm font-bold ${s.pct >= 75 ? "text-emerald-600" : s.pct >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                                 {s.total > 0 ? `${s.pct}%` : "—"}
                                             </span>
@@ -536,12 +542,14 @@ function StatusBtn({ active, onClick, color, icon, label }: { active: boolean; o
         amber: "bg-amber-500 text-white shadow-sm",
         red: "bg-red-500 text-white shadow-sm",
         blue: "bg-blue-500 text-white shadow-sm",
+        purple: "bg-purple-500 text-white shadow-sm",
     }[color] || "bg-gray-500 text-white";
     const hoverCls = {
         emerald: "hover:bg-emerald-50 hover:text-emerald-600",
         amber: "hover:bg-amber-50 hover:text-amber-600",
         red: "hover:bg-red-50 hover:text-red-600",
         blue: "hover:bg-blue-50 hover:text-blue-600",
+        purple: "hover:bg-purple-50 hover:text-purple-600",
     }[color] || "";
     return (
         <button onClick={onClick}
