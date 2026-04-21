@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
         const authResult = await verifyAuth(req, ["admin"]);
         if (authResult instanceof NextResponse) return authResult;
 
-        const { year, month, teachers } = await req.json();
+        const { year, month, workingDays: clientWorkingDays, teachers } = await req.json();
 
         if (!year || !month || !Array.isArray(teachers) || teachers.length === 0) {
             return NextResponse.json({ error: "Missing year/month/teachers" }, { status: 400 });
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
                 const esicDeduction = Math.round((gross * esicPct) / 100);
 
                 // Compute attendance summary
-                let presentDays = 0, absentDays = 0, leaveDays = 0, lateDays = 0;
+                let presentDays = 0, absentDays = 0, leaveDays = 0, lateDays = 0, halfDayDays = 0;
                 for (const [, data] of Object.entries(attendanceByDate)) {
                     if ((data as any).isHoliday) continue;
                     const status = (data as any).records?.[t.id];
@@ -82,16 +82,20 @@ export async function POST(req: NextRequest) {
                     else if (status === "late") { presentDays++; lateDays++; }
                     else if (status === "absent") absentDays++;
                     else if (status === "leave") leaveDays++;
+                    else if (status === "half_day") halfDayDays++;
                 }
 
                 // 3 late = 1 absent, then 3 absents = 1 day salary cut
+                // half_day = 0.5 day deduction
+                const effectiveDays = clientWorkingDays || workingDaysInMonth;
                 const lateToAbsent = Math.floor(lateDays / 3);
                 const effectiveAbsents = absentDays + lateToAbsent;
                 const deductibleDays = Math.floor(effectiveAbsents / 3);
-                const perDayRate = workingDaysInMonth > 0 ? gross / workingDaysInMonth : 0;
+                const perDayRate = effectiveDays > 0 ? gross / effectiveDays : 0;
                 const absentDeduction = Math.round(deductibleDays * perDayRate);
+                const halfDayDeduction = Math.round(halfDayDays * 0.5 * perDayRate);
 
-                const totalDeductions = pfDeduction + esicDeduction + absentDeduction;
+                const totalDeductions = pfDeduction + esicDeduction + absentDeduction + halfDayDeduction;
                 const netSalary = gross - totalDeductions;
 
                 await recordRef.set({
@@ -105,15 +109,15 @@ export async function POST(req: NextRequest) {
                     gross,
                     pfPct, esicPct,
                     pfDeduction, esicDeduction, otherDeductions: 0,
-                    absentDeduction,
-                    deductibleDays,
+                    absentDeduction, halfDayDeduction,
+                    deductibleDays, halfDayDays,
                     lateToAbsent,
                     effectiveAbsents,
                     perDayRate: Math.round(perDayRate),
                     totalDeductions,
                     netSalary,
                     status: "pending",
-                    workingDays: workingDaysInMonth,
+                    workingDays: effectiveDays,
                     holidayDays: holidayDates.size,
                     presentDays, absentDays, leaveDays, lateDays,
                     createdAt: FieldValue.serverTimestamp(),
