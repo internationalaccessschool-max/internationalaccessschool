@@ -74,6 +74,7 @@ export default function PromotePage() {
                     const s = { id: d.id, ...d.data() } as Student;
                     if ((s.status || "").toUpperCase() !== "LEFT") data.push(s);
                 });
+                data.sort((a, b) => parseInt(a.admissionNumber || "0") - parseInt(b.admissionNumber || "0"));
                 setStudents(data);
             } catch {
                 toast.error("Students load karne mein error aaya");
