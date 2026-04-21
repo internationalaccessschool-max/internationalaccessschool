@@ -5,18 +5,40 @@ import {
     doc, getDoc, setDoc, getDocs, collection, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, Save, AlertTriangle, Clock, CheckCircle2, RefreshCw, Printer } from "lucide-react";
+import { Loader2, Save, AlertTriangle, Clock, Settings, X, Plus, Trash2, Printer } from "lucide-react";
 import toast from "react-hot-toast";
-import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS } from "@/lib/timetable-config";
+import { TIMETABLE_DAYS as DAYS, TIMETABLE_PERIODS, PeriodTiming } from "@/lib/timetable-config";
 
 const CLASS_LIST = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
 
 interface Slot { subjectId: string; subjectName: string; teacherId: string; teacherName: string; }
-type TimetableSlots = Record<string, Slot>; // key: "Monday-1"
+type TimetableSlots = Record<string, Slot>;
 interface Teacher { id: string; firstName: string; lastName: string; }
 interface Subject { id: string; name: string; }
 interface ConflictInfo { cls: string; section: string; day: string; period: number; }
+
+function to24h(time12: string): string {
+    if (!time12) return "08:00";
+    const match = time12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return "08:00";
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const p = match[3].toUpperCase();
+    if (p === "AM" && h === 12) h = 0;
+    if (p === "PM" && h !== 12) h += 12;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function to12h(time24: string): string {
+    if (!time24) return "08:00 AM";
+    const [hStr, mStr] = time24.split(":");
+    const h = parseInt(hStr);
+    const m = parseInt(mStr) || 0;
+    const p = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${p}`;
+}
 
 export default function AdminTimetablePage() {
     const [cls, setCls] = useState("1");
@@ -28,15 +50,27 @@ export default function AdminTimetablePage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
+    const [periods, setPeriods] = useState<PeriodTiming[]>(TIMETABLE_PERIODS);
+    const [showConfig, setShowConfig] = useState(false);
+    const [configDraft, setConfigDraft] = useState<PeriodTiming[]>(TIMETABLE_PERIODS);
 
-    // Load teachers once
     useEffect(() => {
         getDocs(query(collection(db, "teachers"), orderBy("firstName"))).then(snap => {
             setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
         });
     }, []);
 
-    // Load all timetables for conflict detection
+    // Load period config from Firestore (falls back to hardcoded default)
+    useEffect(() => {
+        getDoc(doc(db, "timetableConfig", "schedule")).then(snap => {
+            if (snap.exists() && snap.data().periods?.length) {
+                const p = snap.data().periods as PeriodTiming[];
+                setPeriods(p);
+                setConfigDraft(p);
+            }
+        });
+    }, []);
+
     const loadAllTimetables = useCallback(async () => {
         const snap = await getDocs(collection(db, "timetable"));
         const map: Record<string, TimetableSlots> = {};
@@ -46,22 +80,16 @@ export default function AdminTimetablePage() {
 
     useEffect(() => { loadAllTimetables(); }, [loadAllTimetables]);
 
-    // Load subjects for selected class
     useEffect(() => {
         const loadSubjects = async () => {
             try {
                 const snap = await getDoc(doc(db, "classSubjects", cls));
-                if (snap.exists()) {
-                    setSubjects((snap.data().subjects as Subject[]) || []);
-                } else {
-                    setSubjects([]);
-                }
+                setSubjects(snap.exists() ? (snap.data().subjects as Subject[]) || [] : []);
             } catch { setSubjects([]); }
         };
         loadSubjects();
     }, [cls]);
 
-    // Load timetable for selected class-section
     useEffect(() => {
         const key = `${cls}-${section}`;
         const loadTimetable = async () => {
@@ -83,7 +111,6 @@ export default function AdminTimetablePage() {
         const key = `${day}-${period}`;
         const current = getSlot(day, period);
         let updated = { ...current, [field]: value };
-
         if (field === "subjectId") {
             const sub = subjects.find(s => s.id === value);
             updated = { ...updated, subjectName: sub?.name || value };
@@ -92,12 +119,10 @@ export default function AdminTimetablePage() {
             const t = teachers.find(t => t.id === value);
             updated = { ...updated, teacherName: t ? `${t.firstName} ${t.lastName}` : "" };
         }
-
         setSlots(prev => ({ ...prev, [key]: updated }));
         setDirty(true);
     };
 
-    // Check if a teacher is already assigned in the same period in another class
     const getConflict = (day: string, period: number, teacherId: string): ConflictInfo | null => {
         if (!teacherId) return null;
         const currentKey = `${cls}-${section}`;
@@ -119,10 +144,8 @@ export default function AdminTimetablePage() {
         try {
             let conflictMsg = "";
             let hasConflict = false;
-            
-            // Check for conflicts across all days/periods
             for (const day of DAYS) {
-                for (const timing of TIMETABLE_PERIODS) {
+                for (const timing of periods) {
                     if (timing.isBreak) continue;
                     const slot = getSlot(day, timing.period);
                     if (slot.teacherId) {
@@ -136,19 +159,15 @@ export default function AdminTimetablePage() {
                 }
                 if (hasConflict) break;
             }
-
             if (hasConflict) {
                 toast.error(conflictMsg, { duration: 5000 });
                 setSaving(false);
                 return;
             }
-
-            // Clean empty slots before saving
             const cleanSlots: TimetableSlots = {};
             Object.entries(slots).forEach(([k, v]) => {
                 if (v.subjectId || v.teacherId) cleanSlots[k] = v;
             });
-            
             await setDoc(doc(db, "timetable", key), {
                 cls, section, slots: cleanSlots, updatedAt: serverTimestamp()
             });
@@ -160,8 +179,43 @@ export default function AdminTimetablePage() {
         } finally { setSaving(false); }
     };
 
+    const updateDraft = (i: number, field: string, value: any) =>
+        setConfigDraft(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+
+    const removeDraft = (i: number) =>
+        setConfigDraft(prev => prev.filter((_, idx) => idx !== i));
+
+    const addPeriod = () => {
+        const nonBreaks = configDraft.filter(p => !p.isBreak);
+        const nextNum = nonBreaks.length > 0 ? Math.max(...nonBreaks.map(p => p.period)) + 1 : 1;
+        const last = configDraft[configDraft.length - 1];
+        setConfigDraft(prev => [...prev, { period: nextNum, start: last?.end || "08:00 AM", end: "08:40 AM" }]);
+    };
+
+    const addBreak = () => {
+        const last = configDraft[configDraft.length - 1];
+        setConfigDraft(prev => [...prev, { period: -1, start: last?.end || "10:40 AM", end: "11:10 AM", isBreak: true, label: "BREAK" }]);
+    };
+
+    const handleSaveConfig = async () => {
+        setSaving(true);
+        try {
+            let pNum = 1;
+            const numbered = configDraft.map(item =>
+                item.isBreak ? item : { ...item, period: pNum++ }
+            );
+            await setDoc(doc(db, "timetableConfig", "schedule"), { periods: numbered });
+            setPeriods(numbered);
+            setConfigDraft(numbered);
+            setShowConfig(false);
+            toast.success("Bell schedule saved!");
+        } catch (e: any) {
+            toast.error(e.message || "Save failed");
+        } finally { setSaving(false); }
+    };
+
     const filledCount = Object.values(slots).filter(s => s.subjectId || s.teacherId).length;
-    const totalSlots = DAYS.length * TIMETABLE_PERIODS.filter(p => !p.isBreak).length;
+    const totalSlots = DAYS.length * periods.filter(p => !p.isBreak).length;
 
     return (
         <div className="space-y-6 print:m-0 print:p-0">
@@ -173,7 +227,7 @@ export default function AdminTimetablePage() {
                     <p className="text-white/50 text-sm font-medium">Admin Console</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Manage Timetable</h1>
                     <p className="text-white/40 text-sm mt-1">
-                        Har class-section ke liye Mon–Sat, Period 1–8 schedule set karo.
+                        Har class-section ke liye {DAYS[0]}–{DAYS[DAYS.length - 1]}, {periods.filter(p => !p.isBreak).length} periods schedule set karo.
                     </p>
                 </div>
             </div>
@@ -199,6 +253,10 @@ export default function AdminTimetablePage() {
                         <span className="text-xs text-gray-400">
                             <span className="font-bold text-navy">{filledCount}</span>/{totalSlots} slots filled
                         </span>
+                        <button onClick={() => { setConfigDraft([...periods]); setShowConfig(true); }}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors">
+                            <Settings className="w-4 h-4" /> Schedule
+                        </button>
                         {dirty && (
                             <button onClick={handleSave} disabled={saving}
                                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-opacity-90 transition-colors disabled:opacity-60">
@@ -233,13 +291,13 @@ export default function AdminTimetablePage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {TIMETABLE_PERIODS.map((timing, idx) => {
+                                {periods.map((timing, idx) => {
                                     if (timing.isBreak) {
                                         return (
                                             <tr key={`break-${idx}`} className="bg-amber-50">
                                                 <td colSpan={DAYS.length + 1} className="px-4 py-3 text-center border-y border-amber-200/60">
                                                     <span className="font-bold text-amber-700 uppercase tracking-[0.2em] text-xs">
-                                                        {timing.label || "BREAK"} <span className="opacity-70 ml-2">({timing.start} - {timing.end})</span>
+                                                        {timing.label || "BREAK"} <span className="opacity-70 ml-2">({timing.start} – {timing.end})</span>
                                                     </span>
                                                 </td>
                                             </tr>
@@ -247,58 +305,46 @@ export default function AdminTimetablePage() {
                                     }
                                     const period = timing.period;
                                     return (
-                                    <tr key={period} className="border-t border-gray-100 hover:bg-gray-50/30">
-                                        <td className="px-4 py-3 align-middle border-r border-gray-100 bg-gray-50/50">
-                                            <div className="flex flex-col items-center justify-center text-center">
-                                                <div className="w-9 h-9 mb-1.5 rounded-xl bg-navy flex items-center justify-center shadow-sm">
-                                                    <span className="text-xs font-bold text-white">P{period}</span>
-                                                </div>
-                                                <div className="text-[10px] font-bold text-gray-500 leading-tight">
-                                                    {timing.start}<br/><span className="opacity-50">-</span><br/>{timing.end}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        {DAYS.map(day => {
-                                            const slot = getSlot(day, period);
-                                            const conflict = slot.teacherId ? getConflict(day, period, slot.teacherId) : null;
-                                            return (
-                                                <td key={day} className="px-2 py-2">
-                                                    <div className={`rounded-xl border p-2 space-y-1.5 min-w-[130px] transition-colors ${conflict ? "border-amber-300 bg-amber-50/60" : slot.subjectId ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                                                        {/* Subject */}
-                                                        <select
-                                                            value={slot.subjectId}
-                                                            onChange={e => updateSlot(day, period, "subjectId", e.target.value)}
-                                                            className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold bg-white outline-none focus:border-navy truncate"
-                                                        >
-                                                            <option value="">— Subject —</option>
-                                                            {subjects.map(s => (
-                                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                                            ))}
-                                                        </select>
-                                                        {/* Teacher */}
-                                                        <select
-                                                            value={slot.teacherId}
-                                                            onChange={e => updateSlot(day, period, "teacherId", e.target.value)}
-                                                            className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:border-navy truncate"
-                                                        >
-                                                            <option value="">— Teacher —</option>
-                                                            {teachers.map(t => (
-                                                                <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>
-                                                            ))}
-                                                        </select>
-                                                        {/* Conflict warning */}
-                                                        {conflict && (
-                                                            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-semibold mt-1">
-                                                                <AlertTriangle className="w-3 h-3 shrink-0" />
-                                                                Busy: {conflict.cls}-{conflict.section}
-                                                            </div>
-                                                        )}
+                                        <tr key={period} className="border-t border-gray-100 hover:bg-gray-50/30">
+                                            <td className="px-4 py-3 align-middle border-r border-gray-100 bg-gray-50/50">
+                                                <div className="flex flex-col items-center justify-center text-center">
+                                                    <div className="w-9 h-9 mb-1.5 rounded-xl bg-navy flex items-center justify-center shadow-sm">
+                                                        <span className="text-xs font-bold text-white">P{period}</span>
                                                     </div>
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                )})}
+                                                    <div className="text-[10px] font-bold text-gray-500 leading-tight">
+                                                        {timing.start}<br /><span className="opacity-50">-</span><br />{timing.end}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            {DAYS.map(day => {
+                                                const slot = getSlot(day, period);
+                                                const conflict = slot.teacherId ? getConflict(day, period, slot.teacherId) : null;
+                                                return (
+                                                    <td key={day} className="px-2 py-2">
+                                                        <div className={`rounded-xl border p-2 space-y-1.5 min-w-[130px] transition-colors ${conflict ? "border-amber-300 bg-amber-50/60" : slot.subjectId ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
+                                                            <select value={slot.subjectId} onChange={e => updateSlot(day, period, "subjectId", e.target.value)}
+                                                                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold bg-white outline-none focus:border-navy truncate">
+                                                                <option value="">— Subject —</option>
+                                                                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                            </select>
+                                                            <select value={slot.teacherId} onChange={e => updateSlot(day, period, "teacherId", e.target.value)}
+                                                                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:border-navy truncate">
+                                                                <option value="">— Teacher —</option>
+                                                                {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+                                                            </select>
+                                                            {conflict && (
+                                                                <div className="flex items-center gap-1 text-[10px] text-amber-700 font-semibold mt-1">
+                                                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                                                    Busy: {conflict.cls}-{conflict.section}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -316,6 +362,76 @@ export default function AdminTimetablePage() {
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             {saving ? "Saving..." : "Save"}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Configure Bell Schedule Modal */}
+            {showConfig && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div>
+                                <h2 className="font-bold text-navy">Configure Bell Schedule</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">Period timings aur breaks edit karo — sabhi classes pe apply hoga</p>
+                            </div>
+                            <button onClick={() => setShowConfig(false)} className="p-2 rounded-xl hover:bg-gray-50 text-gray-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {configDraft.map((item, i) => (
+                                <div key={i} className={`flex items-center gap-2 p-2 rounded-xl border ${item.isBreak ? "bg-amber-50 border-amber-200" : "bg-gray-50/50 border-gray-100"}`}>
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${item.isBreak ? "bg-amber-100 text-amber-700" : "bg-navy text-white"}`}>
+                                        {item.isBreak ? "BRK" : `P${item.period}`}
+                                    </div>
+                                    {item.isBreak ? (
+                                        <input value={item.label || ""}
+                                            onChange={e => updateDraft(i, "label", e.target.value)}
+                                            className="flex-1 px-2 py-1.5 rounded-lg border border-amber-200 text-xs font-semibold bg-white outline-none focus:border-amber-400"
+                                            placeholder="Break name (e.g. LUNCH BREAK)" />
+                                    ) : (
+                                        <span className="flex-1 text-xs font-semibold text-gray-500">Period {item.period}</span>
+                                    )}
+                                    <input type="time" value={to24h(item.start)}
+                                        onChange={e => updateDraft(i, "start", to12h(e.target.value))}
+                                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:border-navy w-[90px]" />
+                                    <span className="text-gray-300 text-xs shrink-0">–</span>
+                                    <input type="time" value={to24h(item.end)}
+                                        onChange={e => updateDraft(i, "end", to12h(e.target.value))}
+                                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:border-navy w-[90px]" />
+                                    <button onClick={() => removeDraft(i)}
+                                        className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-4 border-t border-gray-100 space-y-3">
+                            <div className="flex gap-2">
+                                <button onClick={addPeriod}
+                                    className="flex-1 py-2 rounded-xl border border-dashed border-navy/30 text-navy text-xs font-semibold hover:bg-navy/5 flex items-center justify-center gap-1.5 transition-colors">
+                                    <Plus className="w-3.5 h-3.5" /> Add Period
+                                </button>
+                                <button onClick={addBreak}
+                                    className="flex-1 py-2 rounded-xl border border-dashed border-amber-400/40 text-amber-600 text-xs font-semibold hover:bg-amber-50 flex items-center justify-center gap-1.5 transition-colors">
+                                    <Plus className="w-3.5 h-3.5" /> Add Break
+                                </button>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowConfig(false)}
+                                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button onClick={handleSaveConfig} disabled={saving}
+                                    className="flex-1 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 hover:bg-navy/90 transition-colors">
+                                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    {saving ? "Saving..." : "Save Schedule"}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
