@@ -204,7 +204,7 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string, udiseSchool:
       <td style="font-size:10px">Book No. <b>${tc.bookNo}</b> &nbsp;&nbsp; Sl. No. <b>${tc.slNo}</b></td>
       <td style="font-size:10px;text-align:right">Admission No.: ${udiseSchool} – <b>${admNo}</b></td>
     </tr>
-    <tr><td colspan="2" style="font-size:10px;font-weight:bold;text-align:right">${udiseSchool}: ${udiseCode}</td></tr>
+    <tr><td colspan="2" style="font-size:10px;font-weight:bold;text-align:right">UDISE No.: ${udiseCode}</td></tr>
   </table>
 
   <!-- Title -->
