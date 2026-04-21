@@ -25,9 +25,19 @@ export default function StudentTimetablePage() {
     const [slots, setSlots] = useState<Record<string, Slot>>({});
     const [cls, setCls] = useState("");
     const [section, setSection] = useState("");
+    const [periods, setPeriods] = useState<PeriodTiming[]>(TIMETABLE_PERIODS);
     const [selectedDay, setSelectedDay] = useState(
         DAYS[new Date().getDay() === 0 ? 0 : new Date().getDay() - 1] || "Monday"
     );
+
+    // Load dynamic period config
+    useEffect(() => {
+        getDoc(doc(db, "timetableConfig", "schedule")).then(snap => {
+            if (snap.exists() && snap.data().periods?.length) {
+                setPeriods(snap.data().periods as PeriodTiming[]);
+            }
+        });
+    }, []);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async user => {
