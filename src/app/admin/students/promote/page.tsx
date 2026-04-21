@@ -206,6 +206,11 @@ export default function PromotePage() {
                         { merge: true }
                     );
                     await deleteDoc(oldDocRef);
+                    // Update studentLookup so timetable/attendance/fees fetch correct class
+                    await setDoc(doc(db, "studentLookup", s.id), {
+                        className: e.newClass,
+                        section: e.newSection,
+                    }, { merge: true });
                 } else {
                     await setDoc(newDocRef, { rollNumber: e.newRoll }, { merge: true });
                 }
