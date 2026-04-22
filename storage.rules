@@ -2,35 +2,43 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isAdmin() {
-      // Need to fetch firestore user role, but storage rules don't support get() easily without custom claims.
-      // For now, assuming only Auth check or rely on file path structure + auth
-      return isAuthenticated(); 
-    }
-    
-    // Students profile images
+
+    function isAuthenticated() { return request.auth != null; }
+    function isOwner(userId) { return isAuthenticated() && request.auth.uid == userId; }
+
+    // ─── Student profile images ────────────────────────────────────────────────
+    // Any logged-in user can read (shown in admin panels, class lists).
+    // Only the student themselves can overwrite their own image.
     match /students/profile-images/{userId}/{imageId} {
       allow read: if isAuthenticated();
-      allow write: if request.auth.uid == userId || isAdmin();
+      allow write: if isOwner(userId);
     }
-    
-    // Admit cards
+
+    // ─── Admit cards ──────────────────────────────────────────────────────────
+    // Student reads only their own admit card.
+    // Admin writes are done via Firebase Admin SDK (server-side) — not client rules.
     match /admit-cards/{userId}/{cardId} {
-      allow read: if request.auth.uid == userId || isAdmin();
-      allow write: if isAdmin();
+      allow read: if isOwner(userId);
+      allow write: if false; // server-side only
     }
-    
-    // Homework
+
+    // ─── Homework files ───────────────────────────────────────────────────────
+    // Any logged-in user reads (students download assignments).
+    // Any logged-in user writes (teachers upload) — role check is done in the API layer.
     match /homework/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // Allow any auth user to write for now (teachers/admin)
+      allow write: if isAuthenticated();
     }
-    
+
+    // ─── Public admission form uploads ────────────────────────────────────────
+    // Applicants (not logged in) can upload documents with their admission form.
+    match /admission_uploads/{fileName} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    // ─── Default deny ─────────────────────────────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;
     }
