@@ -10,6 +10,12 @@ cloudinary.config({
     secure: true,
 });
 
+const ALLOWED_FOLDERS = new Set([
+    "homework", "student-profiles", "fee-receipts", "notices",
+    "gallery", "id-cards", "admin-docs", "teachers",
+    "mark-sheets", "applications", "student-tcs",
+]);
+
 export async function POST(req: NextRequest) {
     const authResult = await verifyAuth(req);
     if (authResult instanceof NextResponse) return authResult;
@@ -17,12 +23,20 @@ export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
         const file = formData.get("file") as File | null;
-        const folder = (formData.get("folder") as string) || "ias-school/uploads";
-        let publicId = formData.get("public_id") as string | null;
+        const rawFolder = (formData.get("folder") as string) || "";
+        // Ignore client public_id — always generate server-side
+        // public_id to prevent overwriting other users' files.
 
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
+
+        // Validate folder: must start with ias-school/<allowed-segment>
+        const folderSegment = rawFolder.replace(/^ias-school\//, "").split("/")[0];
+        if (!ALLOWED_FOLDERS.has(folderSegment)) {
+            return NextResponse.json({ error: "Invalid upload folder" }, { status: 400 });
+        }
+        const folder = rawFolder.startsWith("ias-school/") ? rawFolder : `ias-school/${rawFolder}`;
 
         const fileName = file.name.toLowerCase();
         const isPdf = fileName.endsWith('.pdf') || file.type === 'application/pdf';
@@ -33,19 +47,17 @@ export async function POST(req: NextRequest) {
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Create a clean public_id if not provided
-        if (!publicId) {
-            const cleanName = file.name
-                .replace(/\.[^/.]+$/, "") // strip extension
-                .replace(/[^a-zA-Z0-9_-]/g, "_")
-                .substring(0, 50);
-            publicId = `${cleanName}_${Date.now()}`;
-        }
+        // Always generate public_id server-side
+        const cleanName = file.name
+            .replace(/\.[^/.]+$/, "")
+            .replace(/[^a-zA-Z0-9_-]/g, "_")
+            .substring(0, 50);
+        const publicId = `${cleanName}_${Date.now()}`;
 
         const uploadOptions: any = {
             folder: folder,
             resource_type: resourceType, // 'raw' for PDFs, 'image' for others
-            public_id: publicId!,
+            public_id: publicId,
         };
 
         // Aggressively compress images on upload to save Cloudinary storage
