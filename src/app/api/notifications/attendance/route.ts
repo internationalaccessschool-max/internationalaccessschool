@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/auth-guard";
 
 const ONESIGNAL_APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!;
 const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY!;
@@ -46,7 +47,10 @@ async function sendOneSignalNotification(
     }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+    const authResult = await verifyAuth(req, ["admin", "teacher", "supervisor"]);
+    if (authResult instanceof NextResponse) return authResult;
+
     try {
         const body = await req.json();
         const { date, students } = body;
