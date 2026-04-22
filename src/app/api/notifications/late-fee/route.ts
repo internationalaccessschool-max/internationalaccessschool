@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/auth-guard";
 
 const ONESIGNAL_APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!;
 const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY!;
+const CRON_SECRET = process.env.CRON_SECRET;
 
 /**
  * Send a late-fee push notification via OneSignal REST API.
@@ -50,7 +52,17 @@ async function sendOneSignalNotification(
  * POST /api/notifications/late-fee
  * Body: { students: [{ admissionNumber, studentName, month, year, fineAmount }] }
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+    // Accept CRON_SECRET (server-to-server) OR Firebase auth token (browser clients)
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const isCron = CRON_SECRET && bearerToken === CRON_SECRET;
+
+    if (!isCron) {
+        const authResult = await verifyAuth(req, ["admin", "accountant"]);
+        if (authResult instanceof NextResponse) return authResult;
+    }
+
     try {
         const body = await req.json();
         const { students } = body;
