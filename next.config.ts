@@ -5,8 +5,8 @@ const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: false, // We register firebase-messaging-sw.js manually — no auto SW
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
   workboxOptions: {
     disableDevLogs: true,
