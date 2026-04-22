@@ -243,8 +243,18 @@ export default function AdminTeachersPage() {
                 createdAt: serverTimestamp(),
             };
 
-            await setDoc(doc(db, "teachers", uid), teacherDoc);
-            await setDoc(doc(db, "users", uid), { ...teacherDoc, name: `${data.firstName} ${data.lastName}` });
+            try {
+                await setDoc(doc(db, "teachers", uid), teacherDoc);
+                await setDoc(doc(db, "users", uid), { ...teacherDoc, name: `${data.firstName} ${data.lastName}` });
+            } catch (firestoreErr) {
+                // Roll back — delete orphaned Auth user
+                await authFetch("/api/admin/delete-user", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ uid }),
+                }).catch(() => {});
+                throw new Error("Failed to save teacher profile. Please try again.");
+            }
 
             setCreatedInfo({ name: `${data.firstName} ${data.lastName}`, email: data.email, password: data.password });
             reset(); setSelectedSubjects([]); setShowForm(false);
