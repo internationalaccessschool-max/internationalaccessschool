@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { collection, doc, getDoc, getDocs, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { authFetch } from "@/lib/auth-fetch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Check, X, Clock, Loader2, AlertCircle, CalendarX } from "lucide-react";
@@ -268,7 +269,7 @@ export default function TeacherAttendancePage() {
             });
 
             // Trigger push notifications asynchronously
-            fetch("/api/notifications/attendance", {
+            authFetch("/api/notifications/attendance", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
