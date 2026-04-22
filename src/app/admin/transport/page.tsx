@@ -564,12 +564,12 @@ export default function TransportAdminPage() {
                             <select value={filterClass} onChange={e => { setFilterClass(e.target.value); setFilterSection("all"); }}
                                 className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy bg-white shadow-sm">
                                 <option value="all">All Classes</option>
-                                {allClasses.map(c => <option key={c} value={c}>Class {c}</option>)}
+                                {allClasses.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <select value={filterSection} onChange={e => setFilterSection(e.target.value)}
                                 className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy bg-white shadow-sm">
                                 <option value="all">All Sections</option>
-                                {allSections.map(s => <option key={s} value={s}>Section {s}</option>)}
+                                {allSections.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </>
                     )}
