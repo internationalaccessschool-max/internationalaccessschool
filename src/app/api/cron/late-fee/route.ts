@@ -145,7 +145,10 @@ export async function GET(req: Request) {
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://internationalaccessschool.vercel.app";
                 await fetch(`${baseUrl}/api/notifications/late-fee`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${CRON_SECRET}`,
+                    },
                     body: JSON.stringify({ students: affectedStudents }),
                 });
             } catch (notifErr) {
