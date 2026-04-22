@@ -6,6 +6,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { authFetch } from "@/lib/auth-fetch";
 import {
     Search, Loader2, X, CheckCircle2, CreditCard,
     School, Bus, User, ChevronDown, ChevronUp, AlertCircle,
@@ -509,7 +510,7 @@ export default function AdvanceFeePage() {
             const allSchoolReceipts    = receipts.map(r => r.schoolReceiptNo).filter(Boolean).join(", ");
             const allTransportReceipts = receipts.map(r => r.transportReceiptNo).filter(Boolean).join(", ");
 
-            fetch("/api/send-receipt", {
+            authFetch("/api/send-receipt", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
