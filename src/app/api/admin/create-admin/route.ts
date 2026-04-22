@@ -28,14 +28,39 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create new Firebase Auth user
+        // Create Firebase Auth user
         const userRecord = await adminAuth.createUser({
             email: email.toLowerCase().trim(),
             password,
             displayName,
         });
 
-        return NextResponse.json({ uid: userRecord.uid });
+        const uid = userRecord.uid;
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Atomically write Firestore docs — clean up Auth user if this fails
+        try {
+            const batch = adminDb.batch();
+            batch.set(adminDb.collection("users").doc(uid), {
+                role: "admin",
+                email: normalizedEmail,
+                displayName,
+                createdAt: Date.now(),
+            });
+            batch.set(adminDb.collection("admins").doc(uid), {
+                uid,
+                email: normalizedEmail,
+                displayName,
+                createdAt: Date.now(),
+            });
+            await batch.commit();
+        } catch (firestoreError: any) {
+            // Roll back — delete the Auth user so it's not orphaned
+            await adminAuth.deleteUser(uid).catch(() => {});
+            throw new Error("Failed to save admin profile. Please try again.");
+        }
+
+        return NextResponse.json({ uid });
 
     } catch (error: any) {
         console.error("Create admin error:", error);
