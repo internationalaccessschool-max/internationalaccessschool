@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useState, useEffect, useMemo } from "react";
 import { collection, doc, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { Loader2, Check, Clock, X, ChevronDown, CalendarX } from "lucide-react";
 
 type AttendanceStatus = "present" | "late" | "absent" | "holiday";
@@ -350,7 +351,7 @@ export default function AdminAttendancePage() {
             });
 
             // Trigger push notifications for absent/late students
-            fetch("/api/notifications/attendance", {
+            authFetch("/api/notifications/attendance", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
