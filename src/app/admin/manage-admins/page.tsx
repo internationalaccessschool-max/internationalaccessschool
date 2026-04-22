@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,20 +79,7 @@ export default function ManageAdminsPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to create admin");
 
-            const uid = data.uid;
-            await setDoc(doc(db, "users", uid), {
-                role: "admin",
-                email: newEmail.toLowerCase().trim(),
-                displayName: newName,
-                createdAt: Date.now(),
-            });
-            await setDoc(doc(db, "admins", uid), {
-                uid,
-                email: newEmail.toLowerCase().trim(),
-                displayName: newName,
-                createdAt: Date.now(),
-            });
-
+            // Firestore docs are now created atomically in the API route.
             toast.success(`Admin "${newName}" created successfully!`);
             setIsCreateOpen(false);
             setNewName(""); setNewEmail(""); setNewPassword("");
