@@ -180,6 +180,18 @@ service cloud.firestore {
       allow write: if isTeacherOrAdmin();
     }
 
+    // ─── Timetable ────────────────────────────────────────────────────────────
+    // Students read their class timetable; admin writes
+    match /timetable/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+    // Period schedule config (timings) — all auth read; admin writes
+    match /timetableConfig/{document=**} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
     // ─── Classes / Subjects / Assignments ─────────────────────────────────────
     match /classes/{document=**}            { allow read: if isAuth(); allow write: if isAdmin(); }
     match /classSubjects/{document=**}      { allow read: if isAuth(); allow write: if isAdmin(); }
