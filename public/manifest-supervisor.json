@@ -13,11 +13,19 @@
   "lang": "en",
   "icons": [
     {
+      "src": "/logo-supervisor-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/logo-supervisor.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["education"]
+  "categories": [
+    "education"
+  ]
 }
