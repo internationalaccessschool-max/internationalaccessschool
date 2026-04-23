@@ -13,7 +13,7 @@
   "lang": "en",
   "icons": [
     {
-      "src": "/logo-student.png",
+      "src": "/logo-student-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
@@ -25,6 +25,8 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["education"],
+  "categories": [
+    "education"
+  ],
   "prefer_related_applications": false
 }
