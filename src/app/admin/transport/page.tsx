@@ -136,6 +136,7 @@ export default function TransportAdminPage() {
     const [assignModalOpen, setAssignModalOpen] = useState(false);
     const [assigningStudent, setAssigningStudent] = useState<Student | null>(null);
     const [savingAssignment, setSavingAssignment] = useState(false);
+    const [busSearch, setBusSearch] = useState("");
 
     const busForm = useForm<BusFormValues>({ resolver: zodResolver(busSchema) as any });
     const { fields: routeFields, append: appendRoute, remove: removeRoute } = useFieldArray({
@@ -397,6 +398,7 @@ export default function TransportAdminPage() {
         else if (t.startsWith("BUS-")) { initialMode = "BUS_ASSIGNED"; initialBusId = student.transport || ""; }
         else if (t && t !== "NONE") { initialMode = "BUS_UNASSIGNED"; }
         assignForm.reset({ transportMode: initialMode, assignedBusId: initialBusId });
+        setBusSearch("");
         setAssignModalOpen(true);
     };
 
@@ -1071,24 +1073,49 @@ export default function TransportAdminPage() {
                                                         <SelectValue placeholder="Select a Bus..." />
                                                     </SelectTrigger>
                                                     <SelectContent>
+                                                        <div
+                                                            className="p-2 pb-1 border-b"
+                                                            onPointerDown={e => e.stopPropagation()}
+                                                        >
+                                                            <input
+                                                                autoFocus
+                                                                placeholder="Search bus no. or route..."
+                                                                value={busSearch}
+                                                                onChange={e => setBusSearch(e.target.value)}
+                                                                onKeyDown={e => e.stopPropagation()}
+                                                                className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-400"
+                                                            />
+                                                        </div>
                                                         {buses.length === 0 ? (
                                                             <div className="p-2 text-sm text-center text-gray-500">No buses available.</div>
-                                                        ) : buses.flatMap(b => {
-                                                            const routes = b.routes && b.routes.length > 0 
-                                                                ? b.routes 
-                                                                : b.routeDetails 
-                                                                    ? [{ id: "legacy-rt", routeName: b.routeDetails, monthlyFee: b.monthlyFee || 0 }] 
-                                                                    : [];
-                                                            return routes.map(r => (
-                                                                <SelectItem key={`${b.id}::${r.id}`} value={`${b.id}::${r.id}`}>
-                                                                    <div className="flex flex-col text-left py-1">
-                                                                        <span className="font-bold text-navy">Bus {b.busNumber} {routes.length > 1 ? `— ${r.routeName}` : ""}</span>
-                                                                        {routes.length === 1 && <span className="text-[10px] text-gray-400">{r.routeName}</span>}
-                                                                        {r.monthlyFee ? <span className="text-[10px] text-indigo-600 font-semibold">₹{r.monthlyFee}/month</span> : null}
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ));
-                                                        })}
+                                                        ) : (() => {
+                                                            const q = busSearch.toLowerCase();
+                                                            const items = buses.flatMap(b => {
+                                                                const routes = b.routes && b.routes.length > 0
+                                                                    ? b.routes
+                                                                    : b.routeDetails
+                                                                        ? [{ id: "legacy-rt", routeName: b.routeDetails, monthlyFee: b.monthlyFee || 0 }]
+                                                                        : [];
+                                                                return routes
+                                                                    .filter(r =>
+                                                                        !q ||
+                                                                        b.busNumber.toLowerCase().includes(q) ||
+                                                                        r.routeName.toLowerCase().includes(q)
+                                                                    )
+                                                                    .map(r => (
+                                                                        <SelectItem key={`${b.id}::${r.id}`} value={`${b.id}::${r.id}`}>
+                                                                            <div className="flex flex-col text-left py-1">
+                                                                                <span className="font-bold text-navy">Bus {b.busNumber} {routes.length > 1 ? `— ${r.routeName}` : ""}</span>
+                                                                                {routes.length === 1 && <span className="text-[10px] text-gray-400">{r.routeName}</span>}
+                                                                                {r.monthlyFee ? <span className="text-[10px] text-indigo-600 font-semibold">₹{r.monthlyFee}/month</span> : null}
+                                                                            </div>
+                                                                        </SelectItem>
+                                                                    ));
+                                                            });
+                                                            return items.length > 0
+                                                                ? items
+                                                                : <div className="p-3 text-sm text-center text-gray-400">No results found</div>;
+                                                        })()}
                                                     </SelectContent>
                                                 </Select>
                                             )}
