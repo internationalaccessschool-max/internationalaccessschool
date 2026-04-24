@@ -16,10 +16,10 @@ service cloud.firestore {
     function isTeacherOrAdmin() { return hasAny(['admin', 'teacher']); }
     function isAdminOrSupervisor() { return hasAny(['admin', 'supervisor']); }
     function isStaff() { return hasAny(['admin', 'teacher', 'accountant', 'supervisor']); }
+    // Supervisor monitors fees but cannot modify them
+    function isFeeViewer() { return hasAny(['admin', 'accountant', 'supervisor']); }
 
     // ─── Users (core user docs) ───────────────────────────────────────────────
-    // Staff reads all docs (needed for admin panels).
-    // Each user reads only their own doc (student reads own profile doc).
     match /users/{userId} {
       allow read: if isAuth() && (isStaff() || uid() == userId);
       allow create: if isAdmin();
@@ -29,8 +29,7 @@ service cloud.firestore {
     }
 
     // ─── Student profiles (nested: users/classes/…/profiles/{uid}) ────────────
-    // Intermediate traversal docs (class/section marker docs) — staff only.
-    // Students must NOT be able to browse class lists or other sections.
+    // Intermediate traversal docs — staff only
     match /users/classes/{className}/{path=**} {
       allow read: if isStaff();
       allow write: if isStaff();
@@ -39,18 +38,27 @@ service cloud.firestore {
     // Profile documents — student reads/writes own; staff reads/writes all.
     // profileId == student UID (document ID is always set to uid on create).
     match /{path=**}/profiles/{profileId} {
-      allow read: if isStaff() || (isAuth() && uid() == profileId);
-      allow write: if isStaff();
+      allow read: if isStaff() ||
+        (isAuth() && uid() == profileId) ||
+        (isAuth() && resource.data.uid == uid());
+      // Student can update own profile (notificationEmail, photo etc.)
+      // but cannot change class, section, or admissionNumber.
+      allow write: if isStaff() || (
+        isAuth() && uid() == profileId &&
+        request.resource.data.className == resource.data.className &&
+        request.resource.data.section == resource.data.section &&
+        request.resource.data.admissionNumber == resource.data.admissionNumber
+      );
     }
 
     // ─── Role-specific lookup collections ─────────────────────────────────────
-    // Admin list — admin only (phone numbers, emails of admins are sensitive)
+    // Admin list — admin only
     match /admins/{docId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
-    // Each role member can read their own doc; admin manages all
+    // Each role member reads own doc; admin manages all
     match /accountants/{docId} {
       allow read: if isAdmin() || (isAuth() && uid() == docId);
       allow write: if isAdmin();
@@ -60,11 +68,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /teachers/{docId} {
-      allow read: if isAdmin() || (isAuth() && uid() == docId);
+      allow read: if isAdminOrSupervisor() || (isAuth() && uid() == docId);
       allow write: if isAdmin();
     }
     match /nonTeachingStaff/{docId} {
-      allow read: if isAdmin() || (isAuth() && uid() == docId);
+      allow read: if isAdminOrSupervisor() || (isAuth() && uid() == docId);
       allow write: if isAdmin();
     }
 
@@ -81,61 +89,49 @@ service cloud.firestore {
     }
 
     // ─── Student Attendance ───────────────────────────────────────────────────
-    // Attendance is stored as a map {studentId: status} inside each date-doc.
-    // Students must read the whole document to extract their own entry.
-    // Slightly open by design — status (present/absent/late) is low-sensitivity.
     match /attendance/{document=**} {
       allow read: if isAuth();
       allow write: if hasAny(['admin', 'teacher', 'supervisor']);
     }
 
     // ─── Teacher Attendance ───────────────────────────────────────────────────
-    // Teachers can read attendance docs to see their own history.
     match /teacherAttendance/{document=**} {
       allow read: if isAdminOrSupervisor() || (isAuth() && isTeacher());
       allow write: if isAdminOrSupervisor();
     }
 
     // ─── Monthly School Fee Records ───────────────────────────────────────────
-    // Student reads own record (matched by studentId field).
-    // Accountant/admin reads and writes all records.
+    // Supervisor can VIEW fees (read-only); only accountant/admin can write.
     match /feeRecords/{year}/months/{month}/classes/{classId}/records/{recordId} {
-      allow read: if isAccountantOrAdmin() ||
-        (isAuth() && resource.data.studentId == uid());
+      allow read: if isFeeViewer() || (isAuth() && resource.data.studentId == uid());
       allow write: if isAccountantOrAdmin();
     }
-    // Intermediate traversal docs (year/month/class nodes) — accountant/admin only.
-    // Students reach their records via collectionGroup("records").where("studentId","==",uid).
     match /feeRecords/{document=**} {
-      allow read: if isAccountantOrAdmin();
+      allow read: if isFeeViewer();
       allow write: if isAccountantOrAdmin();
     }
 
     // ─── Annual Fee Records ───────────────────────────────────────────────────
-    // Document ID at student level IS the student UID.
     match /annualFeeRecords/{session}/students/{studentId} {
-      allow read: if isAccountantOrAdmin() || (isAuth() && uid() == studentId);
+      allow read: if isFeeViewer() || (isAuth() && uid() == studentId);
       allow write: if isAccountantOrAdmin();
     }
     match /annualFeeRecords/{document=**} {
-      allow read: if isAccountantOrAdmin();
+      allow read: if isFeeViewer();
       allow write: if isAccountantOrAdmin();
     }
 
     // ─── Transport Fee Records ────────────────────────────────────────────────
-    // Path: transportFeeRecords/{year}/months/{month}/students/{uid}
-    // Student reads their own transport fee doc directly by UID.
     match /transportFeeRecords/{year}/months/{month}/students/{studentId} {
-      allow read: if isAccountantOrAdmin() || (isAuth() && uid() == studentId);
+      allow read: if isFeeViewer() || (isAuth() && uid() == studentId);
       allow write: if isAccountantOrAdmin();
     }
     match /transportFeeRecords/{document=**} {
-      allow read: if isAccountantOrAdmin();
+      allow read: if isFeeViewer();
       allow write: if isAccountantOrAdmin();
     }
 
-    // ─── Fee Structure (class-level fee definitions) ──────────────────────────
-    // All authenticated users can read fee structure so students can see their fees.
+    // ─── Fee Structure ────────────────────────────────────────────────────────
     match /fees/{document=**} {
       allow read: if isAuth();
       allow write: if isAccountantOrAdmin();
@@ -146,66 +142,58 @@ service cloud.firestore {
     }
 
     // ─── Teacher Salary ───────────────────────────────────────────────────────
-    // Teacher reads their own salary slip; admin reads/writes all.
+    // Supervisor can VIEW salary (read-only); only admin can write/generate.
     match /teacherSalary/{year}/months/{month}/records/{recordId} {
-      allow read: if isAdmin() ||
+      allow read: if isAdminOrSupervisor() ||
         (isAuth() && isTeacher() && resource.data.teacherId == uid());
       allow write: if isAdmin();
     }
-    // Intermediate nodes and collectionGroup traversal — admin only.
-    // Teachers reach their slip via the specific rule above.
     match /teacherSalary/{document=**} {
-      allow read: if isAdmin();
+      allow read: if isAdminOrSupervisor();
       allow write: if isAdmin();
     }
 
     // ─── Results / Marks ──────────────────────────────────────────────────────
-    // Path: results/{examId}/classes/{class}/sections/{section}/students/{uid}
-    // Document ID at student level IS the student UID.
     match /results/{examId}/classes/{className}/sections/{section}/students/{studentId} {
-      allow read: if isTeacherOrAdmin() ||
+      allow read: if isAdminOrSupervisor() || isTeacherOrAdmin() ||
         (isAuth() && (uid() == studentId || resource.data.uid == uid()));
-      allow write: if isTeacherOrAdmin();
+      allow write: if isTeacherOrAdmin() || isAdminOrSupervisor();
     }
-    // Broad path — teacher/admin only. Students use the specific rule above
-    // via a direct doc read (doc path includes their uid).
     match /results/{document=**} {
-      allow read: if isTeacherOrAdmin();
-      allow write: if isTeacherOrAdmin();
+      allow read: if isTeacherOrAdmin() || isAdminOrSupervisor();
+      allow write: if isTeacherOrAdmin() || isAdminOrSupervisor();
     }
 
-    // Exams master list — all authenticated users (students see exam schedule)
+    // ─── Exams ────────────────────────────────────────────────────────────────
     match /exams/{document=**} {
       allow read: if isAuth();
-      allow write: if isTeacherOrAdmin();
+      allow write: if isTeacherOrAdmin() || isAdminOrSupervisor();
     }
 
     // ─── Timetable ────────────────────────────────────────────────────────────
-    // Students read their class timetable; admin writes
     match /timetable/{document=**} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if isAdminOrSupervisor();
     }
-    // Period schedule config (timings) — all auth read; admin writes
     match /timetableConfig/{document=**} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if isAdminOrSupervisor();
     }
 
     // ─── Classes / Subjects / Assignments ─────────────────────────────────────
-    match /classes/{document=**}            { allow read: if isAuth(); allow write: if isAdmin(); }
-    match /classSubjects/{document=**}      { allow read: if isAuth(); allow write: if isAdmin(); }
-    match /class_teachers/{document=**}     { allow read: if isAuth(); allow write: if isAdmin(); }
-    match /subjects/{document=**}           { allow read: if isAuth(); allow write: if isAdmin(); }
-    match /teacherAssignments/{document=**} { allow read: if isAuth(); allow write: if isTeacherOrAdmin(); }
-    match /homework/{document=**}           { allow read: if isAuth(); allow write: if isTeacherOrAdmin(); }
+    match /classes/{document=**}            { allow read: if isAuth(); allow write: if isAdminOrSupervisor(); }
+    match /classSubjects/{document=**}      { allow read: if isAuth(); allow write: if isAdminOrSupervisor(); }
+    match /class_teachers/{document=**}     { allow read: if isAuth(); allow write: if isAdminOrSupervisor(); }
+    match /subjects/{document=**}           { allow read: if isAuth(); allow write: if isAdminOrSupervisor(); }
+    match /teacherAssignments/{document=**} { allow read: if isAuth(); allow write: if isTeacherOrAdmin() || isAdminOrSupervisor(); }
+    match /homework/{document=**}           { allow read: if isAuth(); allow write: if isTeacherOrAdmin() || isAdminOrSupervisor(); }
 
-    // ─── Academic Content (public-facing pages) ────────────────────────────────
-    match /notices/{document=**}            { allow read: if true; allow write: if isTeacherOrAdmin(); }
+    // ─── Academic Content (public-facing) ─────────────────────────────────────
+    match /notices/{document=**}            { allow read: if true; allow write: if isStaff(); }
     match /gallery/{document=**}            { allow read: if true; allow write: if isStaff(); }
-    match /hero-slides/{document=**}        { allow read: if true; allow write: if isAdmin(); }
-    match /academic_info/{document=**}      { allow read: if true; allow write: if isAdmin(); }
-    match /academic_programs/{document=**}  { allow read: if true; allow write: if isAdmin(); }
+    match /hero-slides/{document=**}        { allow read: if true; allow write: if isAdminOrSupervisor(); }
+    match /academic_info/{document=**}      { allow read: if true; allow write: if isAdminOrSupervisor(); }
+    match /academic_programs/{document=**}  { allow read: if true; allow write: if isAdminOrSupervisor(); }
 
     // ─── App Settings ─────────────────────────────────────────────────────────
     match /settings/{document=**} {
@@ -214,7 +202,6 @@ service cloud.firestore {
     }
 
     // ─── Transport ────────────────────────────────────────────────────────────
-    // Bus/route data — all auth users can read (students need bus info)
     match /transport/{document=**} {
       allow read: if isAuth();
       allow write: if hasAny(['admin', 'supervisor', 'accountant']);
@@ -225,26 +212,24 @@ service cloud.firestore {
     }
 
     // ─── Admissions ───────────────────────────────────────────────────────────
-    // Confirmed admissions — accountant/admin only
     match /admissions/{document=**} {
-      allow read: if isAccountantOrAdmin();
+      allow read: if isFeeViewer();
       allow write: if isAccountantOrAdmin();
     }
-    // Public submission form — anyone can create; only admin manages
     match /admission_requests/{document=**} {
-      allow read: if isAdmin();
+      allow read: if isAdminOrSupervisor();
       allow create: if true;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdminOrSupervisor();
     }
 
     // ─── Job Applications (public submit) ─────────────────────────────────────
     match /job_applications/{document=**} {
-      allow read: if isAdmin();
+      allow read: if isAdminOrSupervisor();
       allow create: if true;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdminOrSupervisor();
     }
 
-    // ─── Default deny (catch-all) ──────────────────────────────────────────────
+    // ─── Default deny ─────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
