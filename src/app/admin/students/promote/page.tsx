@@ -199,18 +199,28 @@ export default function PromotePage() {
 
                 if (classOrSectionChanged) {
                     const oldDocRef = doc(db, "users", "classes", oldClass, "sections", oldSection, "students", "profiles", s.id);
+
+                    // Step 1: Write to new location
                     await setDoc(newDocRef, updatedData, { merge: true });
                     await setDoc(
                         doc(db, "users", "classes", e.newClass, "sections", e.newSection, "students"),
                         { description: `Root for students in ${e.newClass} - ${e.newSection}`, updatedAt: new Date() },
                         { merge: true }
                     );
-                    await deleteDoc(oldDocRef);
-                    // Update studentLookup so timetable/attendance/fees fetch correct class
+
+                    // Step 2: Update lookup BEFORE deleting old doc.
+                    // studentLookup is source of truth — update it first so app
+                    // always points to the correct location even if delete below fails.
                     await setDoc(doc(db, "studentLookup", s.id), {
                         className: e.newClass,
                         section: e.newSection,
                     }, { merge: true });
+
+                    // Step 3: Delete old doc. If this fails it leaves orphan data
+                    // but the app still works correctly (lookup already updated).
+                    await deleteDoc(oldDocRef).catch(err =>
+                        console.warn(`[Promote] Orphan cleanup failed for ${s.id}:`, err)
+                    );
                 } else {
                     await setDoc(newDocRef, { rollNumber: e.newRoll }, { merge: true });
                 }
