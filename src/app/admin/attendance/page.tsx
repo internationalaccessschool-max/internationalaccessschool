@@ -146,7 +146,7 @@ export default function AdminAttendancePage() {
                     list.push({
                         id: data.id,
                         name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || "Unknown",
-                        regNo: data.admissionNumber || "—",
+                        regNo: data.admissionNumber || "",
                         status: "present" as AttendanceStatus,
                     });
                 }
