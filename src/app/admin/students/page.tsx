@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
     Plus, Search, Filter, Loader2, Pencil, UserCircle2,
-    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet, Eye, ArrowLeftRight
+    AlertTriangle, FileDown, PowerOff, RotateCcw, Wallet, Eye, ArrowLeftRight, Trash2,
+    ChevronUp, ChevronDown, ChevronsUpDown
 } from "lucide-react";
 import {
-    collectionGroup, getDocs, doc, updateDoc
+    collectionGroup, getDocs, doc, updateDoc, deleteDoc, getDoc
 } from "firebase/firestore";
+import { authFetch } from "@/lib/auth-fetch";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
 import { StudentEditModal } from "@/components/student/StudentEditModal";
@@ -106,6 +108,19 @@ export default function AdminStudentsPage() {
     const [reactivateTarget, setReactivateTarget] = useState<Student | null>(null);
     const [isReactivating, setIsReactivating] = useState(false);
 
+    // Permanent delete dialog state (left students only)
+    const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Sort state
+    const [sortKey, setSortKey] = useState<string | null>(null);
+    const [sortAsc, setSortAsc] = useState(true);
+
+    const handleSort = (key: string) => {
+        if (sortKey === key) setSortAsc(prev => !prev);
+        else { setSortKey(key); setSortAsc(true); }
+    };
+
     useEffect(() => {
         const fetchStudents = async () => {
             setIsLoading(true);
@@ -158,7 +173,24 @@ export default function AdminStudentsPage() {
             return matchSearch && matchClass && matchSection;
         });
 
-    const filtered = filterList(activeTab === "active" ? activeStudents : leftStudents);
+    const filtered = (() => {
+        const list = filterList(activeTab === "active" ? activeStudents : leftStudents);
+        if (!sortKey) return list;
+        return [...list].sort((a, b) => {
+            let av = "", bv = "";
+            if (sortKey === "sn")       { av = String(a.serialNumber || ""); bv = String(b.serialNumber || ""); }
+            else if (sortKey === "name"){ av = getDisplayName(a); bv = getDisplayName(b); }
+            else if (sortKey === "enr") { av = a.admissionNumber || ""; bv = b.admissionNumber || ""; }
+            else if (sortKey === "class"){ av = `${getClass(a)}${a.section||""}`; bv = `${getClass(b)}${b.section||""}`; }
+            else if (sortKey === "father"){ av = a.fatherName || ""; bv = b.fatherName || ""; }
+            else if (sortKey === "mobile"){ av = a.mobileNo || ""; bv = b.mobileNo || ""; }
+            else if (sortKey === "lastClass"){ av = String(a.lastClass||a.currentClass||""); bv = String(b.lastClass||b.currentClass||""); }
+            else if (sortKey === "leftYear"){ av = String(a.leftYear||""); bv = String(b.leftYear||""); }
+            else if (sortKey === "lastDate"){ av = a.lastDate||""; bv = b.lastDate||""; }
+            const cmp = av.localeCompare(bv, undefined, { numeric: true });
+            return sortAsc ? cmp : -cmp;
+        });
+    })();
 
     const handleSaved = (updated: Student) =>
         setStudents(prev => prev.map(s => s.id === updated.id ? updated : s));
@@ -214,6 +246,41 @@ export default function AdminStudentsPage() {
         } catch (err: any) {
             toast.error(err.message || "Failed to re-activate");
         } finally { setIsReactivating(false); }
+    };
+
+    // ─── Permanent Delete (left students only) ───
+    const handlePermanentDelete = async () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
+        try {
+            // 1. Delete Firebase Auth account
+            const authRes = await authFetch("/api/admin/delete-user", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ uid: deleteTarget.id }),
+            });
+            if (!authRes.ok) {
+                const err = await authRes.json();
+                throw new Error(err.error || "Failed to delete auth account");
+            }
+
+            // 2. Delete profile doc (find via collectionGroup)
+            const snap = await getDocs(collectionGroup(db, "profiles"));
+            const profileDoc = snap.docs.find(d => d.id === deleteTarget.id);
+            if (profileDoc) await deleteDoc(profileDoc.ref);
+
+            // 3. Delete studentLookup doc
+            await deleteDoc(doc(db, "studentLookup", deleteTarget.id)).catch(() => {});
+
+            // 4. Delete users/{uid} doc
+            await deleteDoc(doc(db, "users", deleteTarget.id)).catch(() => {});
+
+            setStudents(prev => prev.filter(s => s.id !== deleteTarget.id));
+            toast.success(`${getDisplayName(deleteTarget)} permanently deleted.`);
+            setDeleteTarget(null);
+        } catch (err: any) {
+            toast.error(err.message || "Failed to delete student");
+        } finally { setIsDeleting(false); }
     };
 
     // ─── Export ───
@@ -348,14 +415,47 @@ export default function AdminStudentsPage() {
                     <table className="w-full text-sm whitespace-nowrap">
                         <thead className="bg-slate-50 border-b border-slate-200/60 sticky top-0 z-20 shadow-sm">
                             <tr>
-                                {activeTab === "active"
-                                    ? ["S.N", "Student", "ENR", "Class & Sec", "Father's Name", "Mobile", "Actions"].map(h => (
-                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right sticky right-0 z-30 bg-slate-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100" : ""}`}>{h}</th>
-                                    ))
-                                    : ["S.N", "Student", "ENR", "Last Class", "Left Year", "Last Date", "Branch", "Remarks", "Actions"].map(h => (
-                                        <th key={h} className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider ${h === "Actions" ? "text-right sticky right-0 z-30 bg-slate-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100" : ""}`}>{h}</th>
-                                    ))
-                                }
+                                {(activeTab === "active"
+                                    ? [
+                                        { label: "S.N", key: "sn" },
+                                        { label: "Student", key: "name" },
+                                        { label: "ENR", key: "enr" },
+                                        { label: "Class & Sec", key: "class" },
+                                        { label: "Father's Name", key: "father" },
+                                        { label: "Mobile", key: "mobile" },
+                                        { label: "Actions", key: null },
+                                    ]
+                                    : [
+                                        { label: "S.N", key: "sn" },
+                                        { label: "Student", key: "name" },
+                                        { label: "ENR", key: "enr" },
+                                        { label: "Last Class", key: "lastClass" },
+                                        { label: "Left Year", key: "leftYear" },
+                                        { label: "Last Date", key: "lastDate" },
+                                        { label: "Branch", key: null },
+                                        { label: "Remarks", key: null },
+                                        { label: "Actions", key: null },
+                                    ]
+                                ).map(({ label, key }) => (
+                                    <th
+                                        key={label}
+                                        onClick={() => key && handleSort(key)}
+                                        className={`h-14 px-5 text-left align-middle text-[11px] font-bold text-slate-500 uppercase tracking-wider
+                                            ${label === "Actions" ? "text-right sticky right-0 z-30 bg-slate-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100" : ""}
+                                            ${key ? "cursor-pointer hover:text-slate-800 hover:bg-slate-100 select-none transition-colors" : ""}`}
+                                    >
+                                        <span className="inline-flex items-center gap-1">
+                                            {label}
+                                            {key && (
+                                                sortKey === key
+                                                    ? sortAsc
+                                                        ? <ChevronUp className="w-3 h-3 text-navy" />
+                                                        : <ChevronDown className="w-3 h-3 text-navy" />
+                                                    : <ChevronsUpDown className="w-3 h-3 opacity-30" />
+                                            )}
+                                        </span>
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -421,9 +521,14 @@ export default function AdminStudentsPage() {
                                                     <PowerOff className="w-3.5 h-3.5" strokeWidth={2.5} /> Disable
                                                 </button>
                                             ) : (
-                                                <button onClick={() => setReactivateTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-600 bg-white hover:bg-emerald-50 ring-1 ring-slate-200 hover:ring-emerald-200 shadow-sm transition-all focus:outline-none">
-                                                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} /> Re-activate
-                                                </button>
+                                                <>
+                                                    <button onClick={() => setReactivateTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-600 bg-white hover:bg-emerald-50 ring-1 ring-slate-200 hover:ring-emerald-200 shadow-sm transition-all focus:outline-none">
+                                                        <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} /> Re-activate
+                                                    </button>
+                                                    <button onClick={() => setDeleteTarget(student)} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 ring-1 ring-red-200 shadow-sm transition-all focus:outline-none">
+                                                        <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} /> Delete
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -569,6 +674,34 @@ export default function AdminStudentsPage() {
                             </button>
                             <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 px-4 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-sm border border-emerald-500">
                                 {isReactivating ? <><Loader2 className="w-4 h-4 animate-spin" /> Activating...</> : <><RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Yes, Re-activate</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── Permanent Delete Modal ─── */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
+                        <div className="flex flex-col items-center text-center gap-3 pt-2">
+                            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
+                                <Trash2 className="w-7 h-7 text-red-500" strokeWidth={2.5} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900 mt-2">Permanently Delete?</h2>
+                            <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                                <span className="font-bold text-slate-800">{getDisplayName(deleteTarget)}</span> (ENR: <span className="font-mono font-bold text-slate-800">{deleteTarget.admissionNumber}</span>) ka <span className="text-red-600 font-bold">sara data aur login account hamesha ke liye delete</span> ho jaayega.
+                            </p>
+                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700 font-medium w-full text-left">
+                                ⚠️ Ye action undo nahi ho sakta. Fees, attendance, results — sab delete ho jaayega.
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => setDeleteTarget(null)} disabled={isDeleting} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 outline-none">
+                                Cancel
+                            </button>
+                            <button onClick={handlePermanentDelete} disabled={isDeleting} className="flex-1 px-4 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 outline-none shadow-sm">
+                                {isDeleting ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</> : <><Trash2 className="w-4 h-4" strokeWidth={2.5} /> Yes, Delete Forever</>}
                             </button>
                         </div>
                     </div>
