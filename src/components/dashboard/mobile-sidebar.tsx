@@ -63,6 +63,7 @@ function NavLink({ link, isActive, onClick }: { link: NavItem; isActive: boolean
 
 export function MobileSidebar({ title, links }: MobileSidebarProps) {
     const [isOpen, setIsOpen] = useState(false);
+    const [showNotificationBell, setShowNotificationBell] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
@@ -83,6 +84,15 @@ export function MobileSidebar({ title, links }: MobileSidebarProps) {
             document.body.style.overflow = "";
         };
     }, [isOpen]);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia("(max-width: 767px)");
+        const updateMatch = () => setShowNotificationBell(mediaQuery.matches);
+
+        updateMatch();
+        mediaQuery.addEventListener("change", updateMatch);
+        return () => mediaQuery.removeEventListener("change", updateMatch);
+    }, []);
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -112,7 +122,7 @@ export function MobileSidebar({ title, links }: MobileSidebarProps) {
                     <span className="text-white font-semibold flex-1 truncate">{title}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <NotificationBell theme="dark" />
+                    {showNotificationBell ? <NotificationBell theme="dark" /> : null}
                     <button
                         onClick={() => setIsOpen(true)}
                         className="p-2 -mr-2 text-white/80 hover:text-white focus:outline-none"
