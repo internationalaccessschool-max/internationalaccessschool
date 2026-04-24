@@ -9,6 +9,7 @@ import { signOut } from "firebase/auth";
 import { LogOut, ChevronRight } from "lucide-react";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface NavItem {
     href: string;
@@ -64,6 +65,16 @@ export function Sidebar({ title, links }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
+    const [showNotificationBell, setShowNotificationBell] = useState(false);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia("(min-width: 768px)");
+        const updateMatch = () => setShowNotificationBell(mediaQuery.matches);
+
+        updateMatch();
+        mediaQuery.addEventListener("change", updateMatch);
+        return () => mediaQuery.removeEventListener("change", updateMatch);
+    }, []);
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -131,7 +142,7 @@ export function Sidebar({ title, links }: SidebarProps) {
             <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
                 <div className="flex justify-between items-center px-1 mb-2">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Account</span>
-                    <NotificationBell theme="dark" />
+                    {showNotificationBell ? <NotificationBell theme="dark" /> : null}
                 </div>
                 {user && (
                     <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5">
