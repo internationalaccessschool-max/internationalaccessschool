@@ -1,8 +1,8 @@
 "use client";
 
 import { Bell, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info, ImageIcon } from "lucide-react";
-import { useState, useEffect } from "react";
-import { subscribeToNotifications, unsubscribeFromNotifications, isSubscribed, getNotificationPermission } from "@/lib/onesignal";
+import { useState, useEffect, useCallback } from "react";
+import { subscribeToNotifications, unsubscribeFromNotifications, getNotificationStatus, observePushSubscription } from "@/lib/onesignal";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, collectionGroup, query, where, getDocs, limit } from "firebase/firestore";
@@ -31,17 +31,26 @@ export default function StudentSettingsPage() {
     const [isPWA, setIsPWA] = useState(false);
     const [showAndroidGuide, setShowAndroidGuide] = useState(false);
 
+    const refreshNotificationState = useCallback(async () => {
+        const status = await getNotificationStatus();
+        setNotifPermission(status.permission);
+        setNotifSubscribed(status.subscribed);
+    }, []);
+
     // Check browser support and current subscription status
     useEffect(() => {
         if (active !== "notifications") return;
 
-        const checkStatus = async () => {
-            const perm = getNotificationPermission();
-            setNotifPermission(perm as any);
-            const subscribed = await isSubscribed();
-            setNotifSubscribed(subscribed);
+        let cancelled = false;
+        let removeObserver: (() => void) | undefined;
+
+        const syncStatus = async () => {
+            const status = await getNotificationStatus();
+            if (cancelled) return;
+            setNotifPermission(status.permission);
+            setNotifSubscribed(status.subscribed);
         };
-        checkStatus();
+        syncStatus();
 
         const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
         setBrowserSupported(supported);
@@ -50,7 +59,39 @@ export default function StudentSettingsPage() {
         const pwa = window.matchMedia("(display-mode: standalone)").matches ||
             (window.navigator as any).standalone === true;
         setIsPWA(pwa);
-    }, [active, admissionNumber]);
+
+        const handleWindowFocus = () => {
+            syncStatus();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                syncStatus();
+            }
+        };
+
+        window.addEventListener("focus", handleWindowFocus);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        observePushSubscription(() => {
+            syncStatus();
+        }).then((cleanup) => {
+            if (cancelled) {
+                cleanup();
+                return;
+            }
+            removeObserver = cleanup;
+        }).catch(() => {
+            // Ignore observer setup failure; focus/visibility sync still keeps UI updated.
+        });
+
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", handleWindowFocus);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            removeObserver?.();
+        };
+    }, [active, admissionNumber, refreshNotificationState]);
 
     // Fetch student profile data (admissionNumber + notificationEmail)
     useEffect(() => {
@@ -116,7 +157,7 @@ export default function StudentSettingsPage() {
             setNotifLoading(true);
             try {
                 await unsubscribeFromNotifications();
-                setNotifSubscribed(false);
+                await refreshNotificationState();
                 toast.success("Push notifications disabled.");
             } catch (err: any) {
                 toast.error(err?.message || "Something went wrong.");
@@ -169,7 +210,7 @@ export default function StudentSettingsPage() {
             }
             const result = await subscribeToNotifications(externalId);
             if (result.success) {
-                setNotifSubscribed(true);
+                await refreshNotificationState();
                 toast.success("✅ Push notifications enabled! You'll now receive alerts.");
             } else {
                 toast.error("Subscribed to browser but OneSignal link failed. Try again.");
