@@ -97,12 +97,9 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                 if (!admNo) return;
 
                 const subscribed = await isSubscribed();
-                if (subscribed) {
-                    await syncOneSignalUser(admNo);
-                    return;
-                }
+                if (!subscribed) return;
 
-                await subscribeToNotifications(admNo);
+                await syncOneSignalUser(admNo);
             } catch {}
         };
 
