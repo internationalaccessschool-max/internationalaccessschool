@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Bell, Check, Loader2 } from "lucide-react";
-import { subscribeToNotifications, isSubscribed } from "@/lib/onesignal";
+import { subscribeToNotifications, isSubscribed, syncOneSignalUser } from "@/lib/onesignal";
+import type { OneSignalLike } from "@/lib/onesignal";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc } from "firebase/firestore";
@@ -21,6 +22,13 @@ interface NotificationBellProps {
     theme?: "light" | "dark";
 }
 
+type OneSignalNotificationPayload = {
+    title?: string;
+    body?: string;
+    heading?: string;
+    content?: string;
+};
+
 const STORAGE_KEY = "student_notifications";
 
 function loadFromStorage(): NotificationItem[] {
@@ -36,7 +44,7 @@ function loadFromStorage(): NotificationItem[] {
 function saveToStorage(items: NotificationItem[]) {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, 50)));
-    } catch { }
+    } catch {}
 }
 
 export function NotificationBell({ theme = "light" }: NotificationBellProps) {
@@ -46,7 +54,6 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Stable ref so OneSignal deferred callback doesn't capture stale state
     const addNotification = useRef((title: string, body: string) => {
         const newNotif: NotificationItem = {
             id: Date.now().toString(),
@@ -55,30 +62,29 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
             date: Date.now(),
             read: false,
         };
-        setNotifications(prev => {
+
+        setNotifications((prev) => {
             const updated = [newNotif, ...prev];
             saveToStorage(updated);
             return updated;
         });
+
         toast.success(title || "New Notification", { icon: "🔔" });
     });
 
-    // 1. Load localStorage + set permission status on mount
     useEffect(() => {
         if (typeof window === "undefined") return;
         if ("Notification" in window) setPermissionStatus(Notification.permission);
         setNotifications(loadFromStorage());
     }, []);
 
-    // 2. Auto re-subscribe if permission already granted (handles subscription expiry on mobile)
     useEffect(() => {
         if (typeof window === "undefined" || !user) return;
-        const autoResubscribe = async () => {
+
+        const syncSubscription = async () => {
             if (Notification.permission !== "granted") return;
+
             try {
-                const subscribed = await isSubscribed();
-                if (subscribed) return; // already OK
-                // Subscription expired — silently re-subscribe
                 let admNo = user.email?.split("@")[0] || "";
                 try {
                     const snap = await getDoc(doc(db, "studentLookup", user.uid));
@@ -86,36 +92,47 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                         const d = snap.data();
                         admNo = d.admissionNumber || d.rollNo || admNo;
                     }
-                } catch { }
-                if (admNo) await subscribeToNotifications(admNo);
-            } catch { }
+                } catch {}
+
+                if (!admNo) return;
+
+                const subscribed = await isSubscribed();
+                if (subscribed) {
+                    await syncOneSignalUser(admNo);
+                    return;
+                }
+
+                await subscribeToNotifications(admNo);
+            } catch {}
         };
-        autoResubscribe();
+
+        syncSubscription();
     }, [user]);
 
-    // 3. Foreground notification event (app is open)
     useEffect(() => {
         if (typeof window === "undefined") return;
-        const handler = (event: any) => {
-            const payload = event.detail?.notification || {};
-            addNotification.current(payload.title, payload.body);
+
+        const handler: EventListener = (event) => {
+            const customEvent = event as CustomEvent<{ notification?: OneSignalNotificationPayload }>;
+            const payload = customEvent.detail?.notification || {};
+            addNotification.current(payload.title || "Notification", payload.body || "");
         };
+
         window.addEventListener("OneSignalNotificationReceived", handler);
         return () => window.removeEventListener("OneSignalNotificationReceived", handler);
     }, []);
 
-    // 4. Background notification click (user tapped notification → app opened)
-    //    Uses OneSignalDeferred so it runs after SDK is ready
     useEffect(() => {
         if (typeof window === "undefined") return;
+
         window.OneSignalDeferred = window.OneSignalDeferred || [];
-        window.OneSignalDeferred.push((os: any) => {
+        window.OneSignalDeferred.push((os: OneSignalLike) => {
             try {
-                os.Notifications.addEventListener("click", (event: any) => {
+                os.Notifications?.addEventListener?.("click", (event) => {
                     const notif = event?.notification || {};
-                    addNotification.current(notif.title || notif.heading, notif.body || notif.content);
+                    addNotification.current(notif.title || notif.heading || "Notification", notif.body || notif.content || "");
                 });
-            } catch { }
+            } catch {}
         });
     }, []);
 
@@ -123,14 +140,13 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
         let admNo = user?.email?.split("@")[0] || "";
         try {
             if (user) {
-                // studentLookup is the correct flat collection for student data
                 const snap = await getDoc(doc(db, "studentLookup", user.uid));
                 if (snap.exists()) {
                     const d = snap.data();
                     admNo = d.admissionNumber || d.rollNo || admNo;
                 }
             }
-        } catch { }
+        } catch {}
         return admNo;
     };
 
@@ -141,22 +157,24 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                 toast.error("This browser doesn't support notifications. Use Chrome.");
                 return;
             }
-            // Request permission FIRST — must be early in user gesture handler
+
             const permission = await Notification.requestPermission();
             setPermissionStatus(permission);
+
             if (permission === "denied") {
-                toast.error("Notifications blocked. Chrome Settings → Site Settings → Notifications → Allow karo.");
+                toast.error("Notifications blocked. Chrome Settings -> Site Settings -> Notifications -> Allow.");
                 return;
             }
+
             if (permission !== "granted") {
-                toast.error("Popup mein 'Allow' dabao — phir try karo.");
+                toast.error("Tap Allow in the popup and try again.");
                 return;
             }
 
             const admNo = await getAdmNo();
             const result = await subscribeToNotifications(admNo);
             if (result.success) {
-                toast.success("Notifications Enabled! ✅");
+                toast.success("Notifications Enabled!");
             } else {
                 toast.error("Failed to link with notification service. Try again.");
             }
@@ -168,14 +186,14 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
     };
 
     const markAllRead = () => {
-        setNotifications(prev => {
-            const updated = prev.map(n => ({ ...n, read: true }));
+        setNotifications((prev) => {
+            const updated = prev.map((n) => ({ ...n, read: true }));
             saveToStorage(updated);
             return updated;
         });
     };
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const unreadCount = notifications.filter((n) => !n.read).length;
 
     return (
         <div className="relative z-50">
@@ -213,18 +231,19 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                         <div className="flex-1 overflow-y-auto p-2">
                             {permissionStatus === "denied" && (
                                 <div className="p-3 mb-2 bg-rose-50 rounded-lg border border-rose-100">
-                                    <p className="text-xs font-semibold text-rose-700 mb-1">🔕 Notifications Blocked</p>
+                                    <p className="text-xs font-semibold text-rose-700 mb-1">Notifications Blocked</p>
                                     <p className="text-xs text-rose-600 mb-2">
-                                        Browser ne block kar diya hai. Manually allow karo:
+                                        Browser notifications are blocked. Allow them manually:
                                     </p>
                                     <ol className="text-xs text-rose-700 space-y-0.5 list-decimal ml-3">
-                                        <li>Chrome address bar → 🔒 lock icon tap karo</li>
-                                        <li><strong>Site Settings</strong> → <strong>Notifications</strong></li>
-                                        <li><strong>Allow</strong> select karo</li>
-                                        <li>Page reload karo → Enable dabao</li>
+                                        <li>Tap the lock icon in the Chrome address bar</li>
+                                        <li>Open Site Settings and then Notifications</li>
+                                        <li>Select Allow</li>
+                                        <li>Reload the page and tap Enable again</li>
                                     </ol>
                                 </div>
                             )}
+
                             {permissionStatus !== "granted" && permissionStatus !== "denied" && (
                                 <div className="p-3 mb-2 bg-blue-50 rounded-lg border border-blue-100">
                                     <p className="text-sm text-blue-800 mb-2">
@@ -248,16 +267,21 @@ export function NotificationBell({ theme = "light" }: NotificationBellProps) {
                                 </div>
                             ) : (
                                 <div className="space-y-1">
-                                    {notifications.map(notif => (
+                                    {notifications.map((notif) => (
                                         <div
                                             key={notif.id}
-                                            className={`p-3 rounded-lg text-sm border-l-2 ${notif.read ? "border-transparent bg-white hover:bg-gray-50" : "border-navy bg-blue-50/30"}`}
+                                            className={`p-3 rounded-lg text-sm border-l-2 ${
+                                                notif.read ? "border-transparent bg-white hover:bg-gray-50" : "border-navy bg-blue-50/30"
+                                            }`}
                                         >
                                             <div className="font-medium text-gray-900">{notif.title}</div>
                                             <div className="text-gray-600 mt-0.5 whitespace-pre-wrap">{notif.body}</div>
                                             <div className="text-xs text-gray-400 mt-2">
                                                 {new Date(notif.date).toLocaleString(undefined, {
-                                                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+                                                    month: "short",
+                                                    day: "numeric",
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
                                                 })}
                                             </div>
                                         </div>
