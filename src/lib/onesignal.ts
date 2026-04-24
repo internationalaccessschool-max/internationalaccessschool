@@ -37,30 +37,43 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
   }
 
   try {
+    // Clear any conflicting service workers before registering OneSignal SW
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        // Remove any SW that is NOT OneSignal's — they block OneSignal SW registration
+        if (reg.active?.scriptURL && !reg.active.scriptURL.includes("OneSignal")) {
+          await reg.unregister();
+          console.log("[OneSignal] Cleared conflicting SW:", reg.active.scriptURL);
+        }
+      }
+    }
+
     const OneSignal = await getOneSignal();
 
-    // Link this device to the student FIRST — so even if optIn is slow,
-    // the external_id is already associated. login() is idempotent.
+    // Link this device to the student — login() is idempotent
     await OneSignal.login(externalUserId);
 
     await OneSignal.User.PushSubscription.optIn();
 
-    // Poll up to 8 seconds for push subscription to be fully created.
-    // On mobile PWA this can take longer than on desktop.
+    // Poll up to 10 seconds for push subscription to be fully created
     let pushId: string | undefined;
     let pushToken: string | undefined;
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 20; i++) {
       pushId = OneSignal.User.PushSubscription.id;
       pushToken = OneSignal.User.PushSubscription.token;
       if (pushId || pushToken) break;
       await new Promise(r => setTimeout(r, 500));
     }
+
     console.log("[OneSignal] Push subscription ID:", pushId);
     console.log("[OneSignal] Push token present:", !!pushToken);
 
-    // We've already called login() and optIn() — treat as success even if
-    // the client-side SDK state hasn't populated yet. OneSignal server
-    // registers the subscription asynchronously anyway.
+    if (!pushId && !pushToken) {
+      console.error("[OneSignal] optIn() called but no push subscription created.");
+      return { success: false, reason: "sdk_error" };
+    }
+
     console.log("[OneSignal] ✅ Subscribed for user:", externalUserId, "pushId:", pushId);
     return { success: true };
   } catch (err: any) {
