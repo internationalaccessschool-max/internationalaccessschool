@@ -100,8 +100,17 @@ service cloud.firestore {
       allow write: if isAdminOrSupervisor();
     }
 
+    // ─── CollectionGroup "records" — covers feeRecords + teacherSalary queries ──
+    // This explicit wildcard rule is what Firestore uses to validate
+    // collectionGroup("records") queries that span multiple root collections.
+    match /{path=**}/records/{recordId} {
+      allow read: if isFeeViewer() || isAdminOrSupervisor() ||
+        (isAuth() && resource.data.studentId == uid()) ||
+        (isAuth() && isTeacher() && resource.data.teacherId == uid());
+      allow write: if isAccountantOrAdmin() || isAdmin();
+    }
+
     // ─── Monthly School Fee Records ───────────────────────────────────────────
-    // Supervisor can VIEW fees (read-only); only accountant/admin can write.
     match /feeRecords/{year}/months/{month}/classes/{classId}/records/{recordId} {
       allow read: if isFeeViewer() || (isAuth() && resource.data.studentId == uid());
       allow write: if isAccountantOrAdmin();
