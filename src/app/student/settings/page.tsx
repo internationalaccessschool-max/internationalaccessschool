@@ -187,6 +187,7 @@ export default function StudentSettingsPage() {
 
         if (permission === "denied") {
             setNotifPermission("denied");
+            setNotifSubscribed(false);
             toast.error("Notifications blocked. See the guide below to unblock.");
             return;
         }
@@ -213,9 +214,11 @@ export default function StudentSettingsPage() {
                 await refreshNotificationState();
                 toast.success("✅ Push notifications enabled! You'll now receive alerts.");
             } else {
+                await refreshNotificationState();
                 toast.error("Subscribed to browser but OneSignal link failed. Try again.");
             }
         } catch (err: any) {
+            await refreshNotificationState();
             toast.error(err?.message || "Something went wrong.");
         } finally {
             setNotifLoading(false);
