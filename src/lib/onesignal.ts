@@ -59,6 +59,12 @@ type SubscribeResult = {
   reason?: SubscribeFailureReason;
 };
 
+export type NotificationStatus = {
+  permission: NotificationPermission | "unsupported";
+  subscribed: boolean;
+  pushSubscription: PushSubscriptionSnapshot;
+};
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const getErrorMessage = (error: unknown) => {
@@ -90,6 +96,8 @@ const getPushSubscriptionSnapshot = (oneSignal: OneSignalLike): PushSubscription
 });
 
 const hasPushIdentity = (snapshot: PushSubscriptionSnapshot) => Boolean(snapshot.id || snapshot.token);
+
+const isPermissionGranted = (permission: NotificationPermission | "unsupported") => permission === "granted";
 
 const waitForPushSubscription = async (
   oneSignal: OneSignalLike,
@@ -221,17 +229,44 @@ export const subscribeToNotifications = async (externalUserId: string): Promise<
   return syncOneSignalUser(externalUserId, { ensureOptedIn: true });
 };
 
-export const isSubscribed = async (): Promise<boolean> => {
+export const getNotificationStatus = async (): Promise<NotificationStatus> => {
+  const permission = getNotificationPermission();
+  if (permission === "unsupported") {
+    return {
+      permission,
+      subscribed: false,
+      pushSubscription: {},
+    };
+  }
+
   try {
-    if ("Notification" in window && Notification.permission === "denied") {
-      return false;
+    if (!isPermissionGranted(permission)) {
+      return {
+        permission,
+        subscribed: false,
+        pushSubscription: {},
+      };
     }
 
     const oneSignal = await getOneSignal();
-    return oneSignal.User.PushSubscription.optedIn === true;
+    const pushSubscription = getPushSubscriptionSnapshot(oneSignal);
+    return {
+      permission,
+      subscribed: pushSubscription.optedIn === true && hasPushIdentity(pushSubscription),
+      pushSubscription,
+    };
   } catch {
-    return false;
+    return {
+      permission,
+      subscribed: false,
+      pushSubscription: {},
+    };
   }
+};
+
+export const isSubscribed = async (): Promise<boolean> => {
+  const status = await getNotificationStatus();
+  return status.subscribed;
 };
 
 export const getNotificationPermission = (): NotificationPermission | "unsupported" => {
@@ -243,9 +278,23 @@ export const unsubscribeFromNotifications = async (): Promise<void> => {
   try {
     const oneSignal = await getOneSignal();
     await oneSignal.User.PushSubscription.optOut();
-    await oneSignal.logout();
     console.log("[OneSignal] Unsubscribed");
   } catch (error: unknown) {
     console.error("[OneSignal] Unsubscribe error:", getErrorMessage(error));
   }
+};
+
+export const observePushSubscription = async (
+  listener: (event: PushSubscriptionChangeEvent) => void
+): Promise<() => void> => {
+  const oneSignal = await getOneSignal();
+  oneSignal.User.PushSubscription.addEventListener?.("change", listener);
+
+  return () => {
+    try {
+      oneSignal.User.PushSubscription.removeEventListener?.("change", listener);
+    } catch {
+      // Ignore cleanup failures from the SDK wrapper.
+    }
+  };
 };
