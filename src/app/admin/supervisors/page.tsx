@@ -25,9 +25,12 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
 
     // ── Management ───────────────────────────────────────────────
     { label: "Students", path: "/supervisor/students", section: "Management" },
+    { label: "Promote / Transfer", path: "/supervisor/promote", section: "Management" },
     { label: "Teachers", path: "/supervisor/teachers", section: "Management" },
+    { label: "Manage Subjects", path: "/supervisor/subjects", section: "Management" },
     { label: "Class Teachers", path: "/supervisor/class-teacher", section: "Management" },
     { label: "Classes", path: "/supervisor/classes", section: "Management" },
+    { label: "Timetable", path: "/supervisor/timetable", section: "Management" },
     { label: "Attendance", path: "/supervisor/attendance", section: "Management" },
     { label: "Teacher Attendance", path: "/supervisor/teacher-attendance", section: "Management" },
     { label: "Applications", path: "/supervisor/applications", section: "Management" },
@@ -36,6 +39,7 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     // ── Finance ───────────────────────────────────────────────────
     { label: "Fee Overview", path: "/supervisor/fees", section: "Finance" },
     { label: "Transport", path: "/supervisor/transport", section: "Finance" },
+    { label: "Teacher Salary", path: "/supervisor/teacher-salary", section: "Finance" },
 
     // ── Content ──────────────────────────────────────────────────
     { label: "Hero Slider", path: "/supervisor/hero", section: "Content" },
