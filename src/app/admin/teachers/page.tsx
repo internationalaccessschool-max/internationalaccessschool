@@ -51,7 +51,7 @@ interface Assignment {
 interface Teacher {
     id: string; uid?: string; firstName: string; lastName: string;
     email: string; phone: string; subjects?: string[]; qualification?: string;
-    assignment?: Assignment; createdAt?: any; role?: string;
+    assignment?: Assignment; createdAt?: any; role?: string; photoUrl?: string;
 }
 
 const emptyAssignment = (): Assignment => ({ classSections: {}, subjects: [], streams: [] });
@@ -80,6 +80,8 @@ export default function AdminTeachersPage() {
         basicSalary: "", hra: "", da: "", otherAllowances: "",
         // Bank
         bankName: "", branchName: "", cinNumber: "", bankAccountNumber: "", ifscCode: "",
+        // Photo
+        photoUrl: "", photoName: "",
         // Documents
         panNumber: "", aadhaarNumber: "",
         panCardUrl: "", panCardName: "",
@@ -129,6 +131,9 @@ export default function AdminTeachersPage() {
             cinNumber: d.cinNumber || "",
             bankAccountNumber: d.bankAccountNumber || "",
             ifscCode: d.ifscCode || "",
+            // Photo
+            photoUrl: d.photoUrl || "",
+            photoName: d.photoName || "",
             // Documents
             panNumber: d.panNumber || "",
             aadhaarNumber: d.aadhaarNumber || "",
@@ -370,9 +375,13 @@ export default function AdminTeachersPage() {
                             <div key={teacher.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-11 h-11 rounded-xl bg-navy/10 flex items-center justify-center font-bold text-navy text-base shrink-0">
-                                            {(teacher.firstName || "T").charAt(0).toUpperCase()}
-                                        </div>
+                                        {(teacher as any).photoUrl ? (
+                                            <img src={(teacher as any).photoUrl} alt={teacher.firstName} className="w-11 h-11 rounded-xl object-cover border border-gray-200 shrink-0" />
+                                        ) : (
+                                            <div className="w-11 h-11 rounded-xl bg-navy/10 flex items-center justify-center font-bold text-navy text-base shrink-0">
+                                                {(teacher.firstName || "T").charAt(0).toUpperCase()}
+                                            </div>
+                                        )}
                                         <div className="min-w-0">
                                             <p className="font-bold text-navy text-sm">{teacher.firstName} {teacher.lastName}</p>
                                             <div className="flex flex-wrap gap-1 mt-1">
@@ -589,6 +598,27 @@ export default function AdminTeachersPage() {
                                 {/* ── Tab: Documents ── */}
                                 {editTab === "documents" && (
                                     <div className="space-y-5">
+                                        {/* Profile Photo */}
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-1 mb-3">📷 Profile Photo</p>
+                                            {editData.photoUrl ? (
+                                                <div className="flex items-center gap-4">
+                                                    <img src={editData.photoUrl} alt="Profile" className="w-20 h-20 rounded-xl object-cover border border-gray-200 shadow-sm" />
+                                                    <div>
+                                                        <p className="text-xs font-medium text-gray-700 mb-1">{editData.photoName || "Photo uploaded"}</p>
+                                                        <button type="button" onClick={() => setEditData(p => ({ ...p, photoUrl: "", photoName: "" }))} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove Photo</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <CloudinaryUpload
+                                                    folder="admin-docs"
+                                                    subFolder="teacher-photos"
+                                                    onUpload={(u, _id, n) => setEditData(p => ({ ...p, photoUrl: u, photoName: n ?? "" }))}
+                                                    acceptedFileTypes="images"
+                                                    maxSizeMB={3}
+                                                />
+                                            )}
+                                        </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField label="PAN Number"><input value={editData.panNumber} onChange={e => setEditData(p => ({ ...p, panNumber: e.target.value }))} className={inputCls} placeholder="ABCDE1234F" /></FormField>
                                             <FormField label="Aadhaar Number"><input value={editData.aadhaarNumber} onChange={e => setEditData(p => ({ ...p, aadhaarNumber: e.target.value }))} className={inputCls} placeholder="12-digit Aadhaar" /></FormField>

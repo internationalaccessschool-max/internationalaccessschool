@@ -93,6 +93,8 @@ export default function AdminAttendancePage() {
     const [selectedSection, setSelectedSection] = useState("A");
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
+    const [summarySortKey, setSummarySortKey] = useState<"name" | "present" | "late" | "absent" | "pct">("name");
+    const [summarySortDir, setSummarySortDir] = useState<"asc" | "desc">("asc");
 
     const currentYearMonth = (() => {
         const now = new Date();
@@ -407,6 +409,23 @@ export default function AdminAttendancePage() {
         const pct = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
         return { present, late, absent, total, pct };
     };
+
+    const handleSummarySort = (key: typeof summarySortKey) => {
+        if (summarySortKey === key) setSummarySortDir(d => d === "asc" ? "desc" : "asc");
+        else { setSummarySortKey(key); setSummarySortDir(key === "name" ? "asc" : "desc"); }
+    };
+
+    const sortedSummaryStudents = [...students].sort((a, b) => {
+        const sa = getStudentSummary(a.id);
+        const sb = getStudentSummary(b.id);
+        let diff = 0;
+        if (summarySortKey === "name") diff = a.name.localeCompare(b.name);
+        else if (summarySortKey === "present") diff = sa.present - sb.present;
+        else if (summarySortKey === "late") diff = sa.late - sb.late;
+        else if (summarySortKey === "absent") diff = sa.absent - sb.absent;
+        else diff = sa.pct - sb.pct;
+        return summarySortDir === "asc" ? diff : -diff;
+    });
 
     const dayPresent = students.filter(s => s.status === "present").length;
     const dayLate = students.filter(s => s.status === "late").length;
@@ -865,38 +884,64 @@ export default function AdminAttendancePage() {
 
                     {students.length === 0 ? (
                         <div className="text-center py-10 text-gray-400 text-sm">No students found.</div>
-                    ) : (
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
-                                <span>Student</span>
-                                <span className="text-center">Present</span>
-                                <span className="text-center">Late</span>
-                                <span className="text-center">Absent</span>
-                                <span className="text-center">%</span>
-                            </div>
-                            <div className="divide-y divide-gray-50">
-                                {students.map(student => {
-                                    const s = getStudentSummary(student.id);
-                                    return (
-                                        <div key={student.id} className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
-                                            <div>
-                                                <p className="text-sm font-semibold text-navy truncate">{student.name}</p>
-                                                <p className="text-xs text-gray-400">{student.regNo}</p>
+                    ) : (() => {
+                        const allSummaries = sortedSummaryStudents.map(st => getStudentSummary(st.id));
+                        const totalPresent = allSummaries.reduce((a, s) => a + s.present, 0);
+                        const totalLate = allSummaries.reduce((a, s) => a + s.late, 0);
+                        const totalAbsent = allSummaries.reduce((a, s) => a + s.absent, 0);
+                        const totalAttended = totalPresent + totalLate;
+                        const totalSlots = allSummaries.reduce((a, s) => a + s.total, 0);
+                        const totalPct = totalSlots > 0 ? Math.round((totalAttended / totalSlots) * 100) : 0;
+
+                        const SortTh = ({ col, label, className = "" }: { col: typeof summarySortKey; label: string; className?: string }) => (
+                            <button onClick={() => handleSummarySort(col)} className={`flex items-center justify-center gap-0.5 hover:text-navy transition-colors ${className}`}>
+                                {label}
+                                <span className="text-[10px] ml-0.5">{summarySortKey === col ? (summarySortDir === "asc" ? "↑" : "↓") : "↕"}</span>
+                            </button>
+                        );
+
+                        return (
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                {/* Total summary bar */}
+                                <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-navy/5 border-b border-navy/10 text-xs font-bold text-navy">
+                                    <span>Total — {students.length} students</span>
+                                    <span className="text-center text-emerald-700">{totalPresent}</span>
+                                    <span className="text-center text-amber-700">{totalLate}</span>
+                                    <span className="text-center text-red-700">{totalAbsent}</span>
+                                    <span className={`text-center ${totalPct >= 75 ? "text-emerald-700" : totalPct >= 50 ? "text-amber-700" : "text-red-700"}`}>{totalSlots > 0 ? `${totalPct}%` : "—"}</span>
+                                </div>
+                                {/* Sortable headers */}
+                                <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
+                                    <SortTh col="name" label="Student" className="justify-start" />
+                                    <SortTh col="present" label="Present" />
+                                    <SortTh col="late" label="Late" />
+                                    <SortTh col="absent" label="Absent" />
+                                    <SortTh col="pct" label="%" />
+                                </div>
+                                <div className="divide-y divide-gray-50">
+                                    {sortedSummaryStudents.map(student => {
+                                        const s = getStudentSummary(student.id);
+                                        return (
+                                            <div key={student.id} className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-navy truncate">{student.name}</p>
+                                                    <p className="text-xs text-gray-400">{student.regNo}</p>
+                                                </div>
+                                                <span className="text-center text-sm font-bold text-emerald-600">{s.present}</span>
+                                                <span className="text-center text-sm font-bold text-amber-600">{s.late}</span>
+                                                <span className="text-center text-sm font-bold text-red-600">{s.absent}</span>
+                                                <div className="text-center">
+                                                    <span className={`text-sm font-bold ${s.pct >= 75 ? "text-emerald-600" : s.pct >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                                                        {s.total > 0 ? `${s.pct}%` : "—"}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <span className="text-center text-sm font-bold text-emerald-600">{s.present}</span>
-                                            <span className="text-center text-sm font-bold text-amber-600">{s.late}</span>
-                                            <span className="text-center text-sm font-bold text-red-600">{s.absent}</span>
-                                            <div className="text-center">
-                                                <span className={`text-sm font-bold ${s.pct >= 75 ? "text-emerald-600" : s.pct >= 50 ? "text-amber-600" : "text-red-600"}`}>
-                                                    {s.total > 0 ? `${s.pct}%` : "—"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </>
             )}
         </div>
