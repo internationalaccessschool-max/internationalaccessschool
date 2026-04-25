@@ -388,12 +388,12 @@ export default function TeacherHomeworkPage() {
                                 subFolder={`class-${formData.className?.replace("Class ", "") || "general"}/${formData.subject || "general"}`}
                                 onUpload={(url, publicId, name) => setFormData({ ...formData, fileUrl: url, fileName: name })}
                                 acceptedFileTypes="all"
-                                maxSizeMB={2}
+                                maxSizeMB={1}
                             />
                             <p className="text-xs text-amber-600 font-medium mt-2 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-start gap-1">
                                 <span>⚠️</span>
                                 <span>
-                                    Max file size is 2MB. Please compress your PDFs before uploading.{" "}
+                                    Max file size is 1MB. Please compress your PDFs before uploading.{" "}
                                     <a href="https://www.ilovepdf.com/compress_pdf" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Compress PDF ↗</a>
                                 </span>
                             </p>
