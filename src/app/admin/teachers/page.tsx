@@ -87,6 +87,7 @@ export default function AdminTeachersPage() {
         drivingLicenceUrl: "", drivingLicenceName: "",
         passportUrl: "", passportName: "",
         // PF & ESIC
+        pfPct: "", esicPct: "",
         uanNumber: "", epfAccountNumber: "", pfJoiningDate: "", pfExitDate: "",
         esicIpNumber: "", esicJoiningDate: "", esicExitDate: "", esicDispensary: "",
         // Credentials
@@ -140,6 +141,8 @@ export default function AdminTeachersPage() {
             passportUrl: d.passportUrl || "",
             passportName: d.passportName || "",
             // PF & ESIC
+            pfPct: d.pfPct != null ? String(d.pfPct) : "",
+            esicPct: d.esicPct != null ? String(d.esicPct) : "",
             uanNumber: d.uanNumber || "",
             epfAccountNumber: d.epfAccountNumber || d.epfNumber || "",
             pfJoiningDate: d.pfJoiningDate || "",
@@ -180,9 +183,15 @@ export default function AdminTeachersPage() {
             }
 
             // Build Firestore update — omit credential-specific fields
-            const { newEmail, newPassword, ...firestoreFields } = editData;
+            const { newEmail, newPassword, pfPct, esicPct, ...firestoreFields } = editData;
             const effectiveEmail = newEmail.trim() || editingTeacher.email;
-            const update = { ...firestoreFields, email: effectiveEmail, name: `${editData.firstName} ${editData.lastName}` };
+            const update = {
+                ...firestoreFields,
+                email: effectiveEmail,
+                name: `${editData.firstName} ${editData.lastName}`,
+                pfPct: pfPct !== "" ? Number(pfPct) : 0,
+                esicPct: esicPct !== "" ? Number(esicPct) : 0,
+            };
             await updateDoc(doc(db, "teachers", editingTeacher.id), update);
             await updateDoc(doc(db, "users", editingTeacher.id), update);
             setEditingTeacher(null);
@@ -600,6 +609,14 @@ export default function AdminTeachersPage() {
                                             <p className="text-xs font-bold text-indigo-500 uppercase tracking-wider border-b border-indigo-100 pb-1">🏦 Provident Fund (PF / EPF)</p>
                                             <p className="text-[10px] text-gray-400 mt-1">UAN is the 12-digit portable ID. EPF Account No. is employer-linked (e.g. DL/CPM/0012345/000/0000001). These are different numbers.</p>
                                         </div>
+                                        <FormField label="PF Deduction %">
+                                            <input type="number" min={0} max={100} step={0.01} value={editData.pfPct} onChange={e => setEditData(p => ({ ...p, pfPct: e.target.value }))} className={inputCls} placeholder="e.g. 12" />
+                                            <p className="text-[10px] text-gray-400 mt-0.5">Employee PF contribution % of gross salary (typically 12%)</p>
+                                        </FormField>
+                                        <FormField label="ESIC Deduction %">
+                                            <input type="number" min={0} max={100} step={0.01} value={editData.esicPct} onChange={e => setEditData(p => ({ ...p, esicPct: e.target.value }))} className={inputCls} placeholder="e.g. 0.75" />
+                                            <p className="text-[10px] text-gray-400 mt-0.5">Employee ESIC contribution % of gross salary (typically 0.75%)</p>
+                                        </FormField>
                                         <FormField label="UAN Number"><input value={editData.uanNumber} onChange={e => setEditData(p => ({ ...p, uanNumber: e.target.value }))} className={inputCls} placeholder="12-digit e.g. 100234567890" /></FormField>
                                         <FormField label="EPF Account Number"><input value={editData.epfAccountNumber} onChange={e => setEditData(p => ({ ...p, epfAccountNumber: e.target.value }))} className={inputCls} placeholder="e.g. DL/CPM/0012345/000/0000001" /></FormField>
                                         <div className="col-span-2 mt-1">
