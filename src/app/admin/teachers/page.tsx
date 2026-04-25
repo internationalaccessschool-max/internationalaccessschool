@@ -615,7 +615,7 @@ export default function AdminTeachersPage() {
                                                     subFolder="teacher-photos"
                                                     onUpload={(u, _id, n) => setEditData(p => ({ ...p, photoUrl: u, photoName: n ?? "" }))}
                                                     acceptedFileTypes="images"
-                                                    maxSizeMB={3}
+                                                    maxSizeMB={1}
                                                 />
                                             )}
                                         </div>
@@ -754,7 +754,7 @@ function DocUploadSlot({ label, url, name, onUpload, onRemove }: {
                     subFolder="staff-docs"
                     onUpload={(u, _id, n) => onUpload(u, n ?? "")}
                     acceptedFileTypes="all"
-                    maxSizeMB={5}
+                    maxSizeMB={1}
                 />
             )}
         </div>
