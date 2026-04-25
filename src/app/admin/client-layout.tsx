@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange, UsersRound
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
@@ -90,6 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {
             section: "System",
             items: [
+                { href: "/admin/staff", label: "Staff Directory", icon: UsersRound },
                 { href: "/admin/manage-admins", label: "Manage Admins", icon: UserCog },
                 { href: "/admin/supervisors", label: "Supervisors", icon: ShieldCheck },
                 { href: "/admin/accountants", label: "Accountants", icon: Banknote },
