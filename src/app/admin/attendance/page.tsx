@@ -62,6 +62,31 @@ function generateYearOptions(): string[] {
     return years;
 }
 
+function getWeekRange(date: string): { from: string; to: string } {
+    const d = new Date(date + "T00:00:00");
+    const day = d.getDay(); // 0=Sun
+    const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { from: mon.toISOString().split("T")[0], to: sun.toISOString().split("T")[0] };
+}
+
+function getMonthRange(date: string): { from: string; to: string } {
+    const [y, m] = date.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return { from: `${date.slice(0, 7)}-01`, to: `${date.slice(0, 7)}-${String(last).padStart(2, "0")}` };
+}
+
+function getMonthsBetween(from: string, to: string): string[] {
+    const months: string[] = [];
+    let [y, m] = from.split("-").map(Number);
+    const [ey, em] = to.split("-").map(Number);
+    while (y < ey || (y === ey && m <= em)) {
+        months.push(`${y}-${String(m).padStart(2, "0")}`);
+        m++; if (m > 12) { m = 1; y++; }
+    }
+    return months;
+}
+
 interface AttendanceDoc {
     date: string;
     month: string;
@@ -79,6 +104,16 @@ interface ClassDaySummary {
     late: number;
     absent: number;
     holiday: boolean;
+}
+
+interface ClassPeriodSummary {
+    cls: string;
+    section: string;
+    workingDays: number;
+    totalSlots: number;
+    present: number;
+    late: number;
+    absent: number;
 }
 
 interface StudentInfo {
@@ -116,6 +151,13 @@ export default function AdminAttendancePage() {
     const [existingDocId, setExistingDocId] = useState<string | null>(null);
     const [isHoliday, setIsHoliday] = useState(false);
     const [schoolOverview, setSchoolOverview] = useState<ClassDaySummary[]>([]);
+
+    // Period summary (ALL classes view)
+    const [overviewPeriod, setOverviewPeriod] = useState<"daily" | "weekly" | "monthly" | "period">("daily");
+    const [periodFrom, setPeriodFrom] = useState(() => new Date().toISOString().split("T")[0]);
+    const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split("T")[0]);
+    const [periodData, setPeriodData] = useState<ClassPeriodSummary[]>([]);
+    const [periodLoading, setPeriodLoading] = useState(false);
 
     // Fetch students for selected class-section
     useEffect(() => {
@@ -298,6 +340,58 @@ export default function AdminAttendancePage() {
 
         fetchAttendance();
     }, [selectedClass, selectedSection, selectedDate, viewMode, filterYear]);
+
+    // Period summary fetch (only when ALL classes selected and period !== daily)
+    useEffect(() => {
+        if (selectedClass !== "ALL" || overviewPeriod === "daily") { setPeriodData([]); return; }
+
+        let from = "", to = "";
+        if (overviewPeriod === "weekly") { const r = getWeekRange(selectedDate); from = r.from; to = r.to; }
+        else if (overviewPeriod === "monthly") { const r = getMonthRange(selectedDate); from = r.from; to = r.to; }
+        else { from = periodFrom; to = periodTo; }
+        if (!from || !to || from > to) return;
+
+        const fetchPeriod = async () => {
+            setPeriodLoading(true);
+            const months = getMonthsBetween(from, to);
+            const classOrder: Record<string, number> = { NUR: 0, LKG: 1, UKG: 2 };
+            const map: Record<string, ClassPeriodSummary> = {};
+
+            await Promise.all(CLASSES.map(async (cls) => {
+                await Promise.all(months.map(async (monthStr) => {
+                    try {
+                        const year = monthStr.split("-")[0];
+                        const snap = await getDocs(collection(db, "attendance", year, cls, "months", monthStr));
+                        snap.docs.forEach(d => {
+                            const data = d.data();
+                            if (data.isHoliday) return;
+                            const dateStr = data.date || d.id.split("_")[0];
+                            if (dateStr < from || dateStr > to) return;
+                            const section = data.section || d.id.split("_")[1] || "?";
+                            const key = `${cls}_${section}`;
+                            if (!map[key]) map[key] = { cls, section, workingDays: 0, totalSlots: 0, present: 0, late: 0, absent: 0 };
+                            const vals = Object.values(data.records || {}) as string[];
+                            map[key].workingDays++;
+                            map[key].totalSlots += vals.length;
+                            map[key].present += vals.filter(v => v === "present").length;
+                            map[key].late += vals.filter(v => v === "late").length;
+                            map[key].absent += vals.filter(v => v === "absent").length;
+                        });
+                    } catch { /* class may have no data */ }
+                }));
+            }));
+
+            const result = Object.values(map).sort((a, b) => {
+                const na = classOrder[a.cls] ?? (parseInt(a.cls) || 99);
+                const nb = classOrder[b.cls] ?? (parseInt(b.cls) || 99);
+                return na !== nb ? na - nb : a.section.localeCompare(b.section);
+            });
+            setPeriodData(result);
+            setPeriodLoading(false);
+        };
+
+        fetchPeriod();
+    }, [selectedClass, overviewPeriod, selectedDate, periodFrom, periodTo]);
 
     // Apply fetched attendance statuses to student list (skip if day is holiday)
     useEffect(() => {
@@ -533,6 +627,18 @@ export default function AdminAttendancePage() {
                     </>
                 )}
 
+                {/* Period tabs — only when ALL selected */}
+                {selectedClass === "ALL" && (
+                    <div className="flex rounded-xl border border-gray-200 overflow-hidden ml-auto">
+                        {(["daily", "weekly", "monthly", "period"] as const).map(p => (
+                            <button key={p} onClick={() => setOverviewPeriod(p)}
+                                className={`px-3 py-2 text-xs font-semibold capitalize transition-colors ${overviewPeriod === p ? "bg-navy text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                                {p === "period" ? "Custom" : p.charAt(0).toUpperCase() + p.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 {/* View Toggle — hidden when ALL selected */}
                 {selectedClass !== "ALL" && (
                     <div className="flex rounded-xl border border-gray-200 overflow-hidden ml-auto">
@@ -552,13 +658,127 @@ export default function AdminAttendancePage() {
                 )}
             </div>
 
+            {/* Custom period pickers */}
+            {selectedClass === "ALL" && overviewPeriod === "period" && (
+                <div className="flex flex-wrap items-end gap-4 px-1">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">From Date</label>
+                        <input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)}
+                            className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none text-sm" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">To Date</label>
+                        <input type="date" value={periodTo} min={periodFrom} onChange={e => setPeriodTo(e.target.value)}
+                            className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none text-sm" />
+                    </div>
+                </div>
+            )}
+
             {loading ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-navy" />
                 </div>
             ) : selectedClass === "ALL" ? (
                 /* ── School-wide Overview ── */
-                (() => {
+                overviewPeriod !== "daily" ? (
+                    /* ── Period Summary ── */
+                    periodLoading ? (
+                        <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-navy" /></div>
+                    ) : (() => {
+                        const label = overviewPeriod === "weekly"
+                            ? (() => { const r = getWeekRange(selectedDate); return `${r.from} → ${r.to}`; })()
+                            : overviewPeriod === "monthly"
+                            ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+                            : `${periodFrom} → ${periodTo}`;
+
+                        const totPresent = periodData.reduce((a, r) => a + r.present, 0);
+                        const totLate = periodData.reduce((a, r) => a + r.late, 0);
+                        const totAbsent = periodData.reduce((a, r) => a + r.absent, 0);
+                        const totSlots = periodData.reduce((a, r) => a + r.totalSlots, 0);
+                        const totPct = totSlots > 0 ? Math.round(((totPresent + totLate) / totSlots) * 100) : null;
+                        const pctClr = (p: number | null) => p === null ? "text-gray-400" : p >= 90 ? "text-emerald-600" : p >= 75 ? "text-amber-600" : "text-red-600";
+
+                        return (
+                            <>
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h3 className="font-bold text-navy capitalize">{overviewPeriod === "period" ? "Custom Period" : overviewPeriod.charAt(0).toUpperCase() + overviewPeriod.slice(1)} Summary</h3>
+                                            <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-3 text-center">
+                                        <div className="bg-blue-50 rounded-xl py-3">
+                                            <div className="text-xl font-extrabold text-blue-600">{totSlots}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">Student-Days</div>
+                                        </div>
+                                        <div className="bg-emerald-50 rounded-xl py-3">
+                                            <div className="text-xl font-extrabold text-emerald-600">{totPresent}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">Present</div>
+                                        </div>
+                                        <div className="bg-amber-50 rounded-xl py-3">
+                                            <div className="text-xl font-extrabold text-amber-600">{totLate}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">Late</div>
+                                        </div>
+                                        <div className="bg-red-50 rounded-xl py-3">
+                                            <div className="text-xl font-extrabold text-red-600">{totAbsent}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">Absent</div>
+                                        </div>
+                                    </div>
+                                    {totPct !== null && (
+                                        <div className="mt-4">
+                                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                <span>Overall Attendance</span>
+                                                <span className={`font-bold ${pctClr(totPct)}`}>{totPct}%</span>
+                                            </div>
+                                            <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden flex">
+                                                <div className="bg-emerald-500 h-full" style={{ width: totSlots > 0 ? `${(totPresent / totSlots) * 100}%` : "0%" }} />
+                                                <div className="bg-amber-400 h-full" style={{ width: totSlots > 0 ? `${(totLate / totSlots) * 100}%` : "0%" }} />
+                                                <div className="bg-red-400 h-full" style={{ width: totSlots > 0 ? `${(totAbsent / totSlots) * 100}%` : "0%" }} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {periodData.length > 0 && (
+                                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                        <div className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
+                                            <span>Class</span>
+                                            <span className="text-center">Sec</span>
+                                            <span className="text-center">Days</span>
+                                            <span className="text-center text-emerald-600">Present</span>
+                                            <span className="text-center text-amber-600">Late</span>
+                                            <span className="text-center text-red-600">Absent</span>
+                                            <span className="text-center">Avg %</span>
+                                        </div>
+                                        <div className="divide-y divide-gray-50">
+                                            {periodData.map((row, i) => {
+                                                const rowPct = row.totalSlots > 0 ? Math.round(((row.present + row.late) / row.totalSlots) * 100) : null;
+                                                return (
+                                                    <div key={i} className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 items-center hover:bg-gray-50/50 transition-colors">
+                                                        <span className="font-bold text-navy text-sm">{row.cls}</span>
+                                                        <span className="text-center text-xs text-gray-500 font-medium">{row.section}</span>
+                                                        <span className="text-center text-sm font-semibold text-gray-700">{row.workingDays}</span>
+                                                        <span className="text-center text-sm font-bold text-emerald-600">{row.present}</span>
+                                                        <span className="text-center text-sm font-bold text-amber-600">{row.late}</span>
+                                                        <span className="text-center text-sm font-bold text-red-600">{row.absent}</span>
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <span className={`text-sm font-extrabold ${pctClr(rowPct)}`}>{rowPct !== null ? `${rowPct}%` : "—"}</span>
+                                                            {rowPct !== null && <div className="w-10 h-1 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${rowPct >= 90 ? "bg-emerald-500" : rowPct >= 75 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rowPct}%` }} /></div>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {periodData.length === 0 && (
+                                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">No attendance data found for this period.</div>
+                                )}
+                            </>
+                        );
+                    })()
+                ) : (() => {
                     const nonHoliday = schoolOverview.filter(r => !r.holiday);
                     const schoolTotal   = nonHoliday.reduce((s, r) => s + r.total,   0);
                     const schoolPresent = nonHoliday.reduce((s, r) => s + r.present, 0);
@@ -704,7 +924,7 @@ export default function AdminAttendancePage() {
                         </>
                     );
                 })()
-            ) : viewMode === "date" ? (
+            ) : viewMode === "date" ? ( // end overviewPeriod ternary + end ALL ternary
                 <>
                     {/* Day Stats */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
