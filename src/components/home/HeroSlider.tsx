@@ -123,13 +123,6 @@ export function HeroSlider() {
                         <p className="text-xl md:text-2xl text-[clamp(1rem,4vw,1.5rem)] text-gray-200 mb-6 lg:mb-8 max-w-2xl mx-auto px-4">
                             {slide.subtitle}
                         </p>
-                        <Link
-                            href={slide.ctaLink || "/admissions"}
-                            className="inline-flex items-center gap-2 px-8 py-4 bg-gold text-navy font-bold rounded-full hover:bg-gold-light transition-all transform hover:scale-105 shadow-lg group"
-                        >
-                            {slide.cta || "Apply Now"}
-                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                        </Link>
                     </motion.div>
                 </div>
             </div>
