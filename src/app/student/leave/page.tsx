@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, getDoc, doc } from "firebase/firestore";
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, getDoc, doc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { FileText, Clock, CheckCircle2, XCircle, Plus, X, Loader2, CalendarDays, AlertCircle } from "lucide-react";
@@ -69,13 +69,14 @@ export default function StudentLeavePage() {
         if (!uid) return;
         const q = query(
             collection(db, "leaveApplications"),
-            where("applicantId", "==", uid),
-            orderBy("submittedAt", "desc")
+            where("applicantId", "==", uid)
         );
         const unsub = onSnapshot(q, snap => {
-            setApplications(snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveApplication)));
+            const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveApplication));
+            list.sort((a, b) => (b.submittedAt?.seconds ?? 0) - (a.submittedAt?.seconds ?? 0));
+            setApplications(list);
             setLoading(false);
-        }, () => setLoading(false));
+        }, (err) => { console.error("Leave fetch error:", err); setLoading(false); });
         return () => unsub();
     }, [uid]);
 
