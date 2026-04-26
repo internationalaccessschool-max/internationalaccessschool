@@ -60,9 +60,18 @@ export default function ContactPage() {
                                 ))}
                             </div>
 
-                            {/* Map Placeholder */}
-                            <div className="rounded-2xl overflow-hidden h-48 bg-gradient-to-br from-navy/5 to-gold/10 flex items-center justify-center border border-gray-100">
-                                <span className="text-sm text-gray-400">Map Integration</span>
+                            {/* Google Map */}
+                            <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm" style={{ height: "260px" }}>
+                                <iframe
+                                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3577.7078537240786!2d84.39161227607896!3d26.27114348736589!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3992fda9af8b122f%3A0xbcced3a9a37ee189!2sInternational%20Access%20School!5e0!3m2!1sen!2sin!4v1777185811873!5m2!1sen!2sin"
+                                    width="100%"
+                                    height="100%"
+                                    style={{ border: 0 }}
+                                    allowFullScreen
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                    title="International Access School Location"
+                                />
                             </div>
                         </div>
 
