@@ -58,11 +58,21 @@ export default function TeacherMySalaryPage() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch teacher profile
+                // Fetch profile — check teachers first, then nonTeachingStaff, then users
                 const tSnap = await getDoc(doc(db, "teachers", user.uid));
-                if (tSnap.exists()) setTeacherData(tSnap.data());
+                if (tSnap.exists()) {
+                    setTeacherData(tSnap.data());
+                } else {
+                    const ntsSnap = await getDoc(doc(db, "nonTeachingStaff", user.uid));
+                    if (ntsSnap.exists()) {
+                        setTeacherData(ntsSnap.data());
+                    } else {
+                        const uSnap = await getDoc(doc(db, "users", user.uid));
+                        if (uSnap.exists()) setTeacherData(uSnap.data());
+                    }
+                }
 
-                // Fetch all salary records for this teacher via collectionGroup
+                // Fetch all salary records via collectionGroup (works for both teachers and NTS)
                 const q = query(
                     collectionGroup(db, "records"),
                     where("teacherId", "==", user.uid)
@@ -102,7 +112,7 @@ export default function TeacherMySalaryPage() {
                 <div className="absolute inset-0 opacity-10"
                     style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.4) 0%, transparent 60%)" }} />
                 <div className="relative z-10">
-                    <p className="text-white/50 text-sm font-medium">Teacher Portal</p>
+                    <p className="text-white/50 text-sm font-medium">Staff Portal</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">💰 My Salary</h1>
                     <p className="text-white/40 text-sm mt-1">View and download your salary slips</p>
                 </div>
