@@ -15,6 +15,7 @@ interface NavItem {
     href: string;
     label: string;
     icon?: React.ComponentType<{ className?: string }>;
+    badge?: boolean;
 }
 
 interface NavSection {
@@ -56,6 +57,9 @@ function NavLink({ link, isActive }: { link: NavItem; isActive: boolean }) {
                 )} />
             )}
             <span className="flex-1 truncate">{link.label}</span>
+            {link.badge && !isActive && (
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
+            )}
             {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/30 shrink-0" />}
         </Link>
     );

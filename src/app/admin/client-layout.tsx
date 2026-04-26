@@ -9,7 +9,9 @@ import {
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { user, role, loading } = useAuth();
@@ -24,6 +26,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             }
         }
     }, [user, role, loading, router, isLoginPage]);
+
+    // Real-time pending counts for badge dots
+    const [pendingAdmissions, setPendingAdmissions] = useState(0);
+    const [pendingApplications, setPendingApplications] = useState(0);
+    const [pendingLeave, setPendingLeave] = useState(0);
+
+    useEffect(() => {
+        if (isLoginPage || !user) return;
+        const unsubs = [
+            onSnapshot(query(collection(db, "admissions"), where("status", "==", "pending")),
+                s => setPendingAdmissions(s.size), () => {}),
+            onSnapshot(query(collection(db, "applications"), where("status", "==", "pending")),
+                s => setPendingApplications(s.size), () => {}),
+            onSnapshot(query(collection(db, "leaveApplications"), where("status", "==", "pending")),
+                s => setPendingLeave(s.size), () => {}),
+        ];
+        return () => unsubs.forEach(u => u());
+    }, [isLoginPage, user]);
 
     const links = [
         {
@@ -44,9 +64,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/timetable", label: "Timetable", icon: CalendarRange },
                 { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
                 { href: "/admin/teacher-attendance", label: "Teacher Attendance", icon: CalendarCheck },
-                { href: "/admin/applications", label: "Applications", icon: Briefcase },
-                { href: "/admin/admissions", label: "Admissions", icon: UserCheck },
-                { href: "/admin/leave", label: "Leave Applications", icon: ScrollText },
+                { href: "/admin/applications", label: "Applications", icon: Briefcase, badge: pendingApplications > 0 },
+                { href: "/admin/admissions", label: "Admissions", icon: UserCheck, badge: pendingAdmissions > 0 },
+                { href: "/admin/leave", label: "Leave Applications", icon: ScrollText, badge: pendingLeave > 0 },
             ],
         },
         {
