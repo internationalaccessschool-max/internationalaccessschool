@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
     FileText, Clock, CheckCircle2, XCircle, Search, ChevronDown,
-    Loader2, CalendarDays, User, GraduationCap, X
+    Loader2, CalendarDays, User, GraduationCap, X, Trash2
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -93,6 +93,16 @@ export default function AdminLeavePage() {
     const openReview = (app: LeaveApplication) => {
         setReviewModal(app);
         setAdminNote(app.adminNote || "");
+    };
+
+    const handleDelete = async (app: LeaveApplication) => {
+        if (!confirm(`Delete leave application from ${app.applicantName}? This will remove it from their portal too.`)) return;
+        try {
+            await deleteDoc(doc(db, "leaveApplications", app.id));
+            toast.success("Application deleted");
+        } catch {
+            toast.error("Failed to delete. Try again.");
+        }
     };
 
     const handleDecision = async (decision: "approved" | "rejected") => {
@@ -227,18 +237,24 @@ export default function AdminLeavePage() {
                                             <p className="text-[10px] text-gray-400">
                                                 {app.submittedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) || "—"}
                                             </p>
-                                            {app.status === "pending" && (
-                                                <button onClick={() => openReview(app)}
-                                                    className="px-3 py-1.5 bg-navy text-white text-xs font-semibold rounded-lg hover:bg-navy/90 transition-colors">
-                                                    Review →
+                                            <div className="flex items-center gap-1.5">
+                                                {app.status === "pending" ? (
+                                                    <button onClick={() => openReview(app)}
+                                                        className="px-3 py-1.5 bg-navy text-white text-xs font-semibold rounded-lg hover:bg-navy/90 transition-colors">
+                                                        Review →
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={() => openReview(app)}
+                                                        className="px-3 py-1.5 border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors">
+                                                        Edit Decision
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleDelete(app)}
+                                                    className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                    title="Delete application">
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
-                                            )}
-                                            {app.status !== "pending" && (
-                                                <button onClick={() => openReview(app)}
-                                                    className="px-3 py-1.5 border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors">
-                                                    Edit Decision
-                                                </button>
-                                            )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
