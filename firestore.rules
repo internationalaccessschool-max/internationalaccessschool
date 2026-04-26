@@ -238,6 +238,16 @@ service cloud.firestore {
       allow update, delete: if isAdminOrSupervisor();
     }
 
+    // ─── Leave Applications ───────────────────────────────────────────────────
+    match /leaveApplications/{docId} {
+      allow read: if isAuth() && (
+        resource.data.applicantId == uid() || isAdminOrSupervisor()
+      );
+      allow create: if isAuth() && request.resource.data.applicantId == uid();
+      allow update: if isAdminOrSupervisor();
+      allow delete: if isAdminOrSupervisor();
+    }
+
     // ─── Default deny ─────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
