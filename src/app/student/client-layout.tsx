@@ -74,6 +74,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 { href: "/student/homework", label: "Homework", icon: ClipboardList },
                 { href: "/student/fees", label: "My Fees", icon: Banknote },
                 { href: "/student/fees/transport", label: "Transport Fees", icon: Bus },
+                { href: "/student/leave", label: "Leave Applications", icon: FileText },
             ],
         },
         {

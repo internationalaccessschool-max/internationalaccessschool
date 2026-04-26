@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange, UsersRound
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange, UsersRound, ScrollText
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
@@ -46,6 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/teacher-attendance", label: "Teacher Attendance", icon: CalendarCheck },
                 { href: "/admin/applications", label: "Applications", icon: Briefcase },
                 { href: "/admin/admissions", label: "Admissions", icon: UserCheck },
+                { href: "/admin/leave", label: "Leave Applications", icon: ScrollText },
             ],
         },
         {
