@@ -269,6 +269,10 @@ export default function AdminTeachersPage() {
             if (ntsEditing) {
                 await updateDoc(doc(db, "nonTeachingStaff", ntsEditing.id), payload);
                 if (ntsEditing.uid) await updateDoc(doc(db, "users", ntsEditing.uid), payload);
+                // Update password if provided
+                if (ntsForm.password.trim() && ntsEditing.uid) {
+                    await authFetch("/api/admin/update-user-credentials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: ntsEditing.uid, newPassword: ntsForm.password.trim() }) });
+                }
                 toast.success("Staff updated");
                 setNtsModal(false);
             } else {
@@ -522,10 +526,18 @@ export default function AdminTeachersPage() {
                                     </div>
                                     <div className="border-t border-gray-100 pt-3">
                                         <p className="text-xs font-bold text-blue-500 uppercase tracking-wide mb-1">Login Access (Optional)</p>
-                                        <p className="text-[10px] text-gray-400 mb-2">Fill email + password to give this staff member portal login access.</p>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Email</label><input type="email" value={ntsForm.email} onChange={e => setNtsForm(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="staff@school.com" /></div>
-                                            {!ntsEditing && <div><label className="block text-xs font-semibold text-gray-500 mb-1">Password</label><input type="password" value={ntsForm.password} onChange={e => setNtsForm(p => ({ ...p, password: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Min 6 chars" /></div>}
+                                        <p className="text-[10px] text-gray-400 mb-2">
+                                            {ntsEditing ? "Leave password blank to keep it unchanged." : "Fill both fields to give portal login access."}
+                                        </p>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-500 mb-1">Email</label>
+                                                <input type="email" value={ntsForm.email} onChange={e => setNtsForm(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="staff@school.com" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-500 mb-1">Password {ntsEditing && <span className="text-gray-400 font-normal">(leave blank to keep unchanged)</span>}</label>
+                                                <input type="password" value={ntsForm.password} onChange={e => setNtsForm(p => ({ ...p, password: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Min 6 characters" />
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="border-t border-gray-100 pt-3">
