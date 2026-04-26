@@ -37,7 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             items: [
                 { href: "/admin/students", label: "Students", icon: GraduationCap },
                 { href: "/admin/students/promote", label: "Promote / Transfer", icon: ArrowLeftRight },
-                { href: "/admin/teachers", label: "Teachers", icon: Users },
+                { href: "/admin/teachers", label: "Manage Staff", icon: Users },
                 { href: "/admin/subjects", label: "Manage Subjects", icon: Tags },
                 { href: "/admin/class-teacher", label: "Class Teachers", icon: School },
                 { href: "/admin/classes", label: "Classes", icon: ClipboardList },
@@ -77,7 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
                 { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
                 { href: "/admin/transport", label: "Transport", icon: Bus },
-                { href: "/admin/teacher-salary", label: "Teacher Salary", icon: Banknote },
+                { href: "/admin/teacher-salary", label: "Staff Salary", icon: Banknote },
             ],
         },
         {

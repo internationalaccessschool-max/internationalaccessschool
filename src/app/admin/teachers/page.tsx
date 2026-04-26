@@ -13,8 +13,8 @@ import * as z from "zod";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
-    doc, setDoc, serverTimestamp, collection,
-    onSnapshot, query, orderBy, deleteDoc, updateDoc
+    doc, setDoc, serverTimestamp, collection, addDoc,
+    onSnapshot, query, orderBy, deleteDoc, updateDoc, getDocs
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
 import Link from "next/link";
@@ -57,6 +57,7 @@ interface Teacher {
 const emptyAssignment = (): Assignment => ({ classSections: {}, subjects: [], streams: [] });
 
 export default function AdminTeachersPage() {
+    const [staffTab, setStaffTab] = useState<"teachers" | "nts">("teachers");
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -100,6 +101,17 @@ export default function AdminTeachersPage() {
     const [editData, setEditData] = useState(EMPTY_EDIT);
     const [savingEdit, setSavingEdit] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
+
+    // ── Non-Teaching Staff ─────────────────────────────────────────────────────
+    const [ntsStaff, setNtsStaff] = useState<any[]>([]);
+    const [ntsLoading, setNtsLoading] = useState(false);
+    const [ntsSearch, setNtsSearch] = useState("");
+    const [ntsModal, setNtsModal] = useState(false);
+    const [ntsEditing, setNtsEditing] = useState<any | null>(null);
+    const [ntsSaving, setNtsSaving] = useState(false);
+    const [ntsCreatedInfo, setNtsCreatedInfo] = useState<{ name: string; email: string; password: string } | null>(null);
+    const EMPTY_NTS = { name: "", designation: "", phone: "", email: "", password: "", basicSalary: "", hra: "0", da: "0", otherAllowances: "0", photoUrl: "", photoName: "" };
+    const [ntsForm, setNtsForm] = useState(EMPTY_NTS);
 
     const openEdit = (teacher: Teacher) => {
         const d = teacher as any;
@@ -219,6 +231,81 @@ export default function AdminTeachersPage() {
         }, () => setLoading(false));
     }, []);
 
+    const fetchNts = async () => {
+        setNtsLoading(true);
+        try {
+            const snap = await getDocs(collection(db, "nonTeachingStaff"));
+            setNtsStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch { } finally { setNtsLoading(false); }
+    };
+
+    useEffect(() => { if (staffTab === "nts") fetchNts(); }, [staffTab]);
+
+    const openNtsCreate = () => { setNtsEditing(null); setNtsForm(EMPTY_NTS); setNtsModal(true); setNtsCreatedInfo(null); };
+    const openNtsEdit = (s: any) => {
+        setNtsEditing(s);
+        setNtsForm({ name: s.name || "", designation: s.designation || "", phone: s.phone || "", email: s.email || "", password: "", basicSalary: s.basicSalary || "", hra: s.hra || "0", da: s.da || "0", otherAllowances: s.otherAllowances || "0", photoUrl: s.photoUrl || "", photoName: s.photoName || "" });
+        setNtsModal(true); setNtsCreatedInfo(null);
+    };
+
+    const saveNts = async () => {
+        if (!ntsForm.name.trim()) { toast.error("Name is required"); return; }
+        setNtsSaving(true);
+        try {
+            const payload: any = {
+                name: ntsForm.name.trim(),
+                designation: ntsForm.designation.trim(),
+                phone: ntsForm.phone.trim(),
+                email: ntsForm.email.trim().toLowerCase(),
+                basicSalary: Number(ntsForm.basicSalary) || 0,
+                hra: Number(ntsForm.hra) || 0,
+                da: Number(ntsForm.da) || 0,
+                otherAllowances: Number(ntsForm.otherAllowances) || 0,
+                photoUrl: ntsForm.photoUrl,
+                photoName: ntsForm.photoName,
+                role: "staff",
+            };
+
+            if (ntsEditing) {
+                await updateDoc(doc(db, "nonTeachingStaff", ntsEditing.id), payload);
+                if (ntsEditing.uid) await updateDoc(doc(db, "users", ntsEditing.uid), payload);
+                toast.success("Staff updated");
+                setNtsModal(false);
+            } else {
+                if (ntsForm.email && ntsForm.password) {
+                    const res = await authFetch("/api/admin/create-teacher", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ntsForm.email, password: ntsForm.password, displayName: ntsForm.name.trim() }) });
+                    const apiData = await res.json();
+                    if (!res.ok) { toast.error(apiData.error || "Failed to create login"); setNtsSaving(false); return; }
+                    const uid = apiData.uid;
+                    payload.uid = uid;
+                    const docRef = doc(db, "nonTeachingStaff", uid);
+                    await setDoc(docRef, { ...payload, createdAt: serverTimestamp() });
+                    await setDoc(doc(db, "users", uid), { ...payload, createdAt: serverTimestamp() });
+                    setNtsCreatedInfo({ name: ntsForm.name, email: ntsForm.email, password: ntsForm.password });
+                } else {
+                    await addDoc(collection(db, "nonTeachingStaff"), { ...payload, createdAt: serverTimestamp() });
+                    toast.success("Staff member added");
+                    setNtsModal(false);
+                }
+            }
+            fetchNts();
+        } catch (e) {
+            toast.error("Failed to save. Try again.");
+        } finally {
+            setNtsSaving(false);
+        }
+    };
+
+    const deleteNts = async (s: any) => {
+        if (!confirm(`Delete ${s.name}? This cannot be undone.`)) return;
+        try {
+            await deleteDoc(doc(db, "nonTeachingStaff", s.id));
+            if (s.uid) { await authFetch("/api/admin/delete-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: s.uid }) }); await deleteDoc(doc(db, "users", s.uid)); }
+            toast.success("Staff deleted");
+            fetchNts();
+        } catch { toast.error("Failed to delete"); }
+    };
+
     // ── Create Teacher ─────────────────────────────────────────────────────
     const onCreateTeacher = async (data: TeacherForm) => {
         setCreating(true);
@@ -319,18 +406,18 @@ export default function AdminTeachersPage() {
                 <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
                     <div>
                         <p className="text-white/50 text-sm">Admin Console</p>
-                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Manage Teachers</h1>
-                        <p className="text-white/40 text-sm mt-1">{teachers.length} teacher{teachers.length !== 1 ? "s" : ""} registered</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Manage Staff</h1>
+                        <p className="text-white/40 text-sm mt-1">
+                            {staffTab === "teachers" ? `${teachers.length} teacher${teachers.length !== 1 ? "s" : ""} registered` : `${ntsStaff.length} non-teaching staff`}
+                        </p>
                     </div>
                     <div className="flex gap-3">
-                        <Link href="/admin/teachers/import"
-                            className="px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors">
-                            Bulk Import
-                        </Link>
-                        <button onClick={() => { setShowForm(true); setCreatedInfo(null); setFormError(null); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-gold hover:bg-gold/90 text-navy rounded-xl font-semibold text-sm transition-all">
-                            <Plus className="w-4 h-4" /> Add Teacher
-                        </button>
+                        {staffTab === "teachers" ? (<>
+                            <Link href="/admin/teachers/import" className="px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors">Bulk Import</Link>
+                            <button onClick={() => { setShowForm(true); setCreatedInfo(null); setFormError(null); }} className="flex items-center gap-2 px-5 py-2.5 bg-gold hover:bg-gold/90 text-navy rounded-xl font-semibold text-sm transition-all"><Plus className="w-4 h-4" /> Add Teacher</button>
+                        </>) : (
+                            <button onClick={openNtsCreate} className="flex items-center gap-2 px-5 py-2.5 bg-gold hover:bg-gold/90 text-navy rounded-xl font-semibold text-sm transition-all"><Plus className="w-4 h-4" /> Add Staff</button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -349,6 +436,123 @@ export default function AdminTeachersPage() {
                 </div>
             )}
 
+            {/* ── Tab Switcher ── */}
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+                <button onClick={() => setStaffTab("teachers")} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${staffTab === "teachers" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Teaching Staff</button>
+                <button onClick={() => setStaffTab("nts")} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${staffTab === "nts" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Non-Teaching Staff</button>
+            </div>
+
+            {staffTab === "nts" ? (
+                /* ── Non-Teaching Staff ── */
+                <>
+                    <div className="relative max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input type="search" placeholder="Search non-teaching staff…" value={ntsSearch} onChange={e => setNtsSearch(e.target.value)} className="pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm w-full focus:outline-none focus:border-navy" />
+                    </div>
+                    {ntsCreatedInfo && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <p className="font-bold text-emerald-800">Account created for {ntsCreatedInfo.name}!</p>
+                                <p className="text-xs text-emerald-600 mt-1">Email: <b>{ntsCreatedInfo.email}</b> · Password: <b>{ntsCreatedInfo.password}</b></p>
+                            </div>
+                            <button onClick={() => setNtsCreatedInfo(null)} className="text-gray-300 hover:text-gray-500"><X className="w-4 h-4" /></button>
+                        </div>
+                    )}
+                    {ntsLoading ? (
+                        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-navy" /></div>
+                    ) : (
+                        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {ntsStaff.filter(s => !ntsSearch || s.name?.toLowerCase().includes(ntsSearch.toLowerCase()) || s.designation?.toLowerCase().includes(ntsSearch.toLowerCase())).map(s => (
+                                <div key={s.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="flex items-center gap-3">
+                                            {s.photoUrl ? (
+                                                <img src={s.photoUrl} alt={s.name} className="w-11 h-11 rounded-xl object-cover border border-gray-200 shrink-0" />
+                                            ) : (
+                                                <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center font-bold text-orange-400 text-base shrink-0">{(s.name || "S").charAt(0).toUpperCase()}</div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-navy text-sm">{s.name}</p>
+                                                <p className="text-xs text-gray-400">{s.designation || "Staff"}</p>
+                                                {s.uid && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Has Login</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1 text-xs text-gray-500 mb-4">
+                                        {s.phone && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 shrink-0" />{s.phone}</div>}
+                                        {s.email && <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{s.email}</span></div>}
+                                        {(s.basicSalary || 0) > 0 && <div className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5 shrink-0" />Gross: ₹{(Number(s.basicSalary || 0) + Number(s.hra || 0) + Number(s.da || 0) + Number(s.otherAllowances || 0)).toLocaleString("en-IN")}/mo</div>}
+                                    </div>
+                                    <div className="flex gap-2 pt-3 border-t border-gray-50">
+                                        <button onClick={() => openNtsEdit(s)} className="flex-1 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                                        <button onClick={() => deleteNts(s)} className="py-2 px-3 rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                </div>
+                            ))}
+                            {ntsStaff.length === 0 && !ntsLoading && (
+                                <div className="col-span-full bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
+                                    <User className="w-10 h-10 text-gray-200 mx-auto mb-3" /><p className="text-sm font-semibold text-gray-400">No non-teaching staff yet</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {/* NTS Modal */}
+                    {ntsModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                                <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                                    <h3 className="font-bold text-navy">{ntsEditing ? "Edit Staff Member" : "Add Non-Teaching Staff"}</h3>
+                                    <button onClick={() => setNtsModal(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Full Name *</label><input value={ntsForm.name} onChange={e => setNtsForm(p => ({ ...p, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Full name" /></div>
+                                        <div><label className="block text-xs font-semibold text-gray-500 mb-1">Designation</label><input value={ntsForm.designation} onChange={e => setNtsForm(p => ({ ...p, designation: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="e.g. Peon, Guard" /></div>
+                                        <div><label className="block text-xs font-semibold text-gray-500 mb-1">Phone</label><input value={ntsForm.phone} onChange={e => setNtsForm(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Phone number" /></div>
+                                    </div>
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Salary Components</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Basic Salary (₹)</label><input type="number" value={ntsForm.basicSalary} onChange={e => setNtsForm(p => ({ ...p, basicSalary: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="0" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">HRA (₹)</label><input type="number" value={ntsForm.hra} onChange={e => setNtsForm(p => ({ ...p, hra: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="0" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">DA (₹)</label><input type="number" value={ntsForm.da} onChange={e => setNtsForm(p => ({ ...p, da: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="0" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Other Allowances (₹)</label><input type="number" value={ntsForm.otherAllowances} onChange={e => setNtsForm(p => ({ ...p, otherAllowances: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="0" /></div>
+                                        </div>
+                                    </div>
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-blue-500 uppercase tracking-wide mb-1">Login Access (Optional)</p>
+                                        <p className="text-[10px] text-gray-400 mb-2">Fill email + password to give this staff member portal login access.</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Email</label><input type="email" value={ntsForm.email} onChange={e => setNtsForm(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="staff@school.com" /></div>
+                                            {!ntsEditing && <div><label className="block text-xs font-semibold text-gray-500 mb-1">Password</label><input type="password" value={ntsForm.password} onChange={e => setNtsForm(p => ({ ...p, password: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Min 6 chars" /></div>}
+                                        </div>
+                                    </div>
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Profile Photo</p>
+                                        {ntsForm.photoUrl ? (
+                                            <div className="flex items-center gap-3">
+                                                <img src={ntsForm.photoUrl} alt="Photo" className="w-14 h-14 rounded-xl object-cover border border-gray-200" />
+                                                <button type="button" onClick={() => setNtsForm(p => ({ ...p, photoUrl: "", photoName: "" }))} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove</button>
+                                            </div>
+                                        ) : (
+                                            <CloudinaryUpload folder="admin-docs" subFolder="teacher-photos" onUpload={(u, _id, n) => setNtsForm(p => ({ ...p, photoUrl: u, photoName: n ?? "" }))} acceptedFileTypes="images" maxSizeMB={1} />
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 p-5 border-t border-gray-100">
+                                    <button onClick={() => setNtsModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+                                    <button onClick={saveNts} disabled={ntsSaving} className="flex-1 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-70 flex items-center justify-center gap-2">
+                                        {ntsSaving && <Loader2 className="w-4 h-4 animate-spin" />}{ntsEditing ? "Save Changes" : "Add Staff"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            ) : (
+            /* ── Teacher section (existing) ── */
+            <>
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input type="search" placeholder="Search by name, subject or email..."
@@ -714,6 +918,8 @@ export default function AdminTeachersPage() {
                     </div>
                 )
             }
+            </> // end teacher tab
+            )} {/* end staffTab ternary */}
         </div>
     );
 }

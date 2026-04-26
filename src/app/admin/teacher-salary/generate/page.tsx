@@ -263,7 +263,7 @@ export default function GenerateTeacherSalaryPage() {
                     style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.4) 0%, transparent 60%)" }} />
                 <div className="relative z-10">
                     <p className="text-white/50 text-sm font-medium">Admin Finance</p>
-                    <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Generate Teacher Salary</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Generate Staff Salary</h1>
                     <p className="text-white/40 text-sm mt-1">3 late = 1 absent · 3 absents = 1 day deduction</p>
                 </div>
             </div>

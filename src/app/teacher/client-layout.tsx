@@ -19,7 +19,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
-            if (!user || role !== "teacher") {
+            if (!user || role !== "teacher" && role !== "staff") {
                 router.push("/teacher/login");
             }
         }
@@ -67,7 +67,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         );
     }
 
-    if (loading || !user || role !== "teacher") {
+    if (loading || !user || role !== "teacher" && role !== "staff") {
         return (
             <div className="h-screen w-full flex items-center justify-center bg-gray-50">
                 <Loader2 className="w-8 h-8 animate-spin text-navy" />

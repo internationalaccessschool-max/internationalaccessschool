@@ -5,7 +5,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Search, LayoutGrid, List, User, Phone, MapPin, Briefcase, Mail, IdCard } from "lucide-react";
 
-type StaffRole = "admin" | "supervisor" | "accountant" | "teacher" | "all";
+type StaffRole = "admin" | "supervisor" | "accountant" | "teacher" | "staff" | "all";
 
 interface StaffMember {
     id: string;
@@ -29,6 +29,7 @@ const ROLE_COLOR: Record<string, string> = {
     supervisor: "bg-blue-100 text-blue-700",
     accountant: "bg-amber-100 text-amber-700",
     teacher: "bg-emerald-100 text-emerald-700",
+    staff: "bg-orange-100 text-orange-700",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -37,6 +38,7 @@ const ROLE_LABELS: Record<string, string> = {
     supervisor: "Supervisors",
     accountant: "Accountants",
     teacher: "Teachers",
+    staff: "Non-Teaching",
 };
 
 function nameOf(d: any) {
@@ -55,11 +57,12 @@ export default function StaffDirectoryPage() {
         const fetchAll = async () => {
             setLoading(true);
             try {
-                const [adminSnap, supervisorSnap, accountantSnap, teacherSnap] = await Promise.all([
+                const [adminSnap, supervisorSnap, accountantSnap, teacherSnap, ntsSnap] = await Promise.all([
                     getDocs(collection(db, "admins")),
                     getDocs(collection(db, "supervisors")),
                     getDocs(collection(db, "accountants")),
                     getDocs(collection(db, "teachers")),
+                    getDocs(collection(db, "nonTeachingStaff")),
                 ]);
 
                 const toStaff = (snap: any, role: StaffRole, displayRole: string): StaffMember[] =>
@@ -88,6 +91,7 @@ export default function StaffDirectoryPage() {
                     ...toStaff(supervisorSnap, "supervisor", "Supervisor"),
                     ...toStaff(accountantSnap, "accountant", "Accountant"),
                     ...toStaff(teacherSnap, "teacher", "Teacher"),
+                    ...toStaff(ntsSnap, "staff", "Non-Teaching"),
                 ];
                 all.sort((a, b) => a.name.localeCompare(b.name));
                 setStaff(all);
@@ -119,6 +123,7 @@ export default function StaffDirectoryPage() {
         supervisor: staff.filter(s => s.role === "supervisor").length,
         accountant: staff.filter(s => s.role === "accountant").length,
         teacher: staff.filter(s => s.role === "teacher").length,
+        staff: staff.filter(s => s.role === "staff").length,
     }), [staff]);
 
     return (
@@ -135,7 +140,7 @@ export default function StaffDirectoryPage() {
 
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {(["all", "teacher", "admin", "supervisor", "accountant"] as StaffRole[]).map(r => (
+                {(["all", "teacher", "staff", "admin", "supervisor", "accountant"] as StaffRole[]).map(r => (
                     <button key={r} onClick={() => setFilterRole(r)}
                         className={`rounded-xl p-3 text-center border transition-all ${filterRole === r ? "border-navy bg-navy text-white shadow-md" : "border-gray-100 bg-white hover:border-navy/30"}`}>
                         <div className={`text-xl font-extrabold ${filterRole === r ? "text-white" : "text-navy"}`}>{counts[r]}</div>
