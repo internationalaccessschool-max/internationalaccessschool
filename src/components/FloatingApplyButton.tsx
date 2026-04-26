@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 export function FloatingApplyButton() {
+    const pathname = usePathname();
+
+    if (pathname !== "/") {
+        return null;
+    }
+
     return (
         <Link
             href="/admissions"
