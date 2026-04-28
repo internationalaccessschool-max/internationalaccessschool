@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, doc, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Check, Clock, X, ChevronDown, CalendarX } from "lucide-react";
+import { Loader2, Check, Clock, X, ChevronDown, CalendarX, Search } from "lucide-react";
 
 type AttendanceStatus = "present" | "late" | "absent" | "holiday";
 
@@ -130,6 +130,7 @@ export default function AdminAttendancePage() {
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
     const [summarySortKey, setSummarySortKey] = useState<"name" | "present" | "late" | "absent" | "pct">("name");
     const [summarySortDir, setSummarySortDir] = useState<"asc" | "desc">("asc");
+    const [summarySearch, setSummarySearch] = useState("");
 
     const currentYearMonth = (() => {
         const now = new Date();
@@ -509,7 +510,9 @@ export default function AdminAttendancePage() {
         else { setSummarySortKey(key); setSummarySortDir(key === "name" ? "asc" : "desc"); }
     };
 
-    const sortedSummaryStudents = [...students].sort((a, b) => {
+    const sortedSummaryStudents = [...students]
+        .filter(s => !summarySearch || s.name.toLowerCase().includes(summarySearch.toLowerCase()) || s.regNo.includes(summarySearch))
+        .sort((a, b) => {
         const sa = getStudentSummary(a.id);
         const sb = getStudentSummary(b.id);
         let diff = 0;
@@ -1074,6 +1077,17 @@ export default function AdminAttendancePage() {
             ) : (
                 /* Summary View */
                 <>
+                    {/* Search bar */}
+                    <div className="relative max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="search"
+                            placeholder="Search student name or reg no…"
+                            value={summarySearch}
+                            onChange={e => setSummarySearch(e.target.value)}
+                            className="pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm w-full focus:outline-none focus:border-navy bg-white"
+                        />
+                    </div>
                     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="font-bold text-navy">
