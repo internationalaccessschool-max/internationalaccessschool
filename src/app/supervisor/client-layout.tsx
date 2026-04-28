@@ -30,6 +30,7 @@ const ALL_NAV = [
     { href: "/supervisor/applications", label: "Applications", icon: Briefcase, section: "Management" },
     { href: "/supervisor/admissions", label: "Admissions", icon: UserCheck, section: "Management" },
     { href: "/supervisor/hero", label: "Hero Slider", icon: Sliders, section: "Content" },
+    { href: "/supervisor/syllabus", label: "Syllabus", icon: BookOpen, section: "Content" },
     { href: "/supervisor/academics", label: "Academics", icon: BookOpen, section: "Content" },
     { href: "/supervisor/homework", label: "Homework", icon: ClipboardList, section: "Content" },
     { href: "/supervisor/notices", label: "Notices", icon: Megaphone, section: "Content" },

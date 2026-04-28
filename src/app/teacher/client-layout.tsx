@@ -40,6 +40,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 { href: "/teacher/marks", label: "Marks", icon: GraduationCap },
                 { href: "/teacher/homework", label: "Homework", icon: BookOpen },
                 { href: "/teacher/timetable", label: "My Timetable", icon: Clock },
+                { href: "/teacher/syllabus", label: "Syllabus", icon: BookOpen },
             ],
         },
         {

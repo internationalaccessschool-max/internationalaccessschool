@@ -238,6 +238,12 @@ service cloud.firestore {
       allow update, delete: if isAdminOrSupervisor();
     }
 
+    // ─── Syllabus ─────────────────────────────────────────────────────────────
+    match /syllabus/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrSupervisor() || isTeacher();
+    }
+
     // ─── Leave Applications ───────────────────────────────────────────────────
     match /leaveApplications/{docId} {
       allow read: if isAuth() && (

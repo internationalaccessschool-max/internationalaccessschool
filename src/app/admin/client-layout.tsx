@@ -64,6 +64,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/timetable", label: "Timetable", icon: CalendarRange },
                 { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
                 { href: "/admin/teacher-attendance", label: "Teacher Attendance", icon: CalendarCheck },
+                { href: "/admin/syllabus", label: "Syllabus", icon: BookOpen },
                 { href: "/admin/applications", label: "Applications", icon: Briefcase, badge: pendingApplications > 0 },
                 { href: "/admin/admissions", label: "Admissions", icon: UserCheck, badge: pendingAdmissions > 0 },
                 { href: "/admin/leave", label: "Leave Applications", icon: ScrollText, badge: pendingLeave > 0 },
