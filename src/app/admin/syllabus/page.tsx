@@ -7,7 +7,6 @@ import { Plus, Trash2, Pencil, Save, X, ChevronUp, ChevronDown, BookOpen, Loader
 import toast from "react-hot-toast";
 
 const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
-const SUBJECTS = ["Mathematics", "Physics", "Chemistry", "Biology", "English", "Hindi", "History", "Geography", "Civics", "Computer Science", "Economics", "Accountancy", "Business Studies", "Physical Education", "Art", "Science", "Social Science", "Urdu", "Sanskrit", "Other"];
 const DURATION_UNITS = ["Days", "Weeks", "Periods"];
 const STATUSES = ["upcoming", "ongoing", "completed"] as const;
 type ChapterStatus = typeof STATUSES[number];
@@ -36,7 +35,9 @@ const EMPTY_CHAPTER = (): Omit<Chapter, "id" | "order"> => ({
 
 export default function AdminSyllabusPage() {
     const [selectedClass, setSelectedClass] = useState("1");
-    const [selectedSubject, setSelectedSubject] = useState("Mathematics");
+    const [classSubjects, setClassSubjects] = useState<string[]>([]);
+    const [selectedSubject, setSelectedSubject] = useState("");
+    const [subjectsLoading, setSubjectsLoading] = useState(false);
     const [chapters, setChapters] = useState<Chapter[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -47,6 +48,20 @@ export default function AdminSyllabusPage() {
     const [addForm, setAddForm] = useState(EMPTY_CHAPTER());
 
     const key = docId(selectedClass, selectedSubject);
+
+    // Load configured subjects for selected class
+    useEffect(() => {
+        setSubjectsLoading(true);
+        setSelectedSubject("");
+        setChapters([]);
+        getDoc(doc(db, "classSubjects", selectedClass)).then(snap => {
+            const subs: string[] = snap.exists()
+                ? (snap.data().subjects || []).map((s: any) => s.name as string)
+                : [];
+            setClassSubjects(subs);
+            if (subs.length > 0) setSelectedSubject(subs[0]);
+        }).catch(() => setClassSubjects([])).finally(() => setSubjectsLoading(false));
+    }, [selectedClass]);
 
     useEffect(() => {
         const fetch = async () => {
@@ -185,10 +200,20 @@ export default function AdminSyllabusPage() {
                     </div>
                     <div className="flex-1 min-w-[200px]">
                         <label className="block text-xs font-semibold text-gray-500 mb-1.5">Subject</label>
-                        <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
-                            {SUBJECTS.map(s => <option key={s}>{s}</option>)}
-                        </select>
+                        {subjectsLoading ? (
+                            <div className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-400">
+                                <Loader2 className="w-4 h-4 animate-spin" /> Loading subjects…
+                            </div>
+                        ) : classSubjects.length === 0 ? (
+                            <div className="px-4 py-2.5 border border-amber-200 rounded-xl bg-amber-50 text-xs text-amber-700">
+                                No subjects configured for this class. Go to <span className="font-semibold">Class Subjects</span> to add them.
+                            </div>
+                        ) : (
+                            <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
+                                {classSubjects.map(s => <option key={s}>{s}</option>)}
+                            </select>
+                        )}
                     </div>
                 </div>
                 {chapters.length > 0 && (

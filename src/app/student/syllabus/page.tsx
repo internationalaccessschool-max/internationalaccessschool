@@ -6,7 +6,6 @@ import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { BookOpen, Loader2, CheckCircle2, Clock, Circle, ChevronDown } from "lucide-react";
 
-const SUBJECTS = ["Mathematics", "Physics", "Chemistry", "Biology", "English", "Hindi", "History", "Geography", "Civics", "Computer Science", "Economics", "Accountancy", "Business Studies", "Physical Education", "Art", "Science", "Social Science", "Urdu", "Sanskrit", "Other"];
 const STATUSES = ["upcoming", "ongoing", "completed"] as const;
 type ChapterStatus = typeof STATUSES[number];
 
@@ -25,7 +24,8 @@ const docId = (cls: string, subject: string) => `${cls}_${subject.replace(/\s+/g
 
 export default function StudentSyllabusPage() {
     const [studentClass, setStudentClass] = useState("");
-    const [selectedSubject, setSelectedSubject] = useState(SUBJECTS[0]);
+    const [classSubjects, setClassSubjects] = useState<string[]>([]);
+    const [selectedSubject, setSelectedSubject] = useState("");
     const [chapters, setChapters] = useState<Chapter[]>([]);
     const [loading, setLoading] = useState(false);
     const [studentName, setStudentName] = useState("");
@@ -40,6 +40,15 @@ export default function StudentSyllabusPage() {
                     const cls = d.class || d.className || "";
                     setStudentClass(cls);
                     setStudentName(d.name || user.displayName || "");
+                    // Load class-configured subjects
+                    if (cls) {
+                        const subSnap = await getDoc(doc(db, "classSubjects", cls));
+                        const subs: string[] = subSnap.exists()
+                            ? (subSnap.data().subjects || []).map((s: any) => s.name as string)
+                            : [];
+                        setClassSubjects(subs);
+                        if (subs.length > 0) setSelectedSubject(subs[0]);
+                    }
                 }
             } catch { }
         });
@@ -81,7 +90,9 @@ export default function StudentSyllabusPage() {
                 <div className="relative max-w-xs">
                     <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white appearance-none pr-8">
-                        {SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                        {classSubjects.length > 0
+                            ? classSubjects.map(s => <option key={s}>{s}</option>)
+                            : <option value="">No subjects configured</option>}
                     </select>
                     <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>

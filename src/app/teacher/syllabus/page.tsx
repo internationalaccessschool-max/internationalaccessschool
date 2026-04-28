@@ -7,7 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { BookOpen, Loader2, CheckCircle2, Clock, Circle, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 
-const SUBJECTS = ["Mathematics", "Physics", "Chemistry", "Biology", "English", "Hindi", "History", "Geography", "Civics", "Computer Science", "Economics", "Accountancy", "Business Studies", "Physical Education", "Art", "Science", "Social Science", "Urdu", "Sanskrit", "Other"];
 const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const STATUSES = ["upcoming", "ongoing", "completed"] as const;
 type ChapterStatus = typeof STATUSES[number];
@@ -28,6 +27,7 @@ const docId = (cls: string, subject: string) => `${cls}_${subject.replace(/\s+/g
 export default function TeacherSyllabusPage() {
     const [teacherData, setTeacherData] = useState<any>(null);
     const [selectedClass, setSelectedClass] = useState("");
+    const [classSubjects, setClassSubjects] = useState<string[]>([]);
     const [selectedSubject, setSelectedSubject] = useState("");
     const [chapters, setChapters] = useState<Chapter[]>([]);
     const [loading, setLoading] = useState(false);
@@ -46,6 +46,24 @@ export default function TeacherSyllabusPage() {
         });
         return () => unsub();
     }, []);
+
+    // Load class-configured subjects when class changes
+    useEffect(() => {
+        if (!selectedClass) return;
+        setSelectedSubject("");
+        setChapters([]);
+        getDoc(doc(db, "classSubjects", selectedClass)).then(snap => {
+            const subs: string[] = snap.exists()
+                ? (snap.data().subjects || []).map((s: any) => s.name as string)
+                : [];
+            // Filter to only subjects this teacher teaches
+            const mySubjects: string[] = teacherData?.subjects || [];
+            const filtered = mySubjects.length > 0 ? subs.filter(s => mySubjects.includes(s)) : subs;
+            setClassSubjects(filtered.length > 0 ? filtered : subs);
+            if (filtered.length > 0) setSelectedSubject(filtered[0]);
+            else if (subs.length > 0) setSelectedSubject(subs[0]);
+        }).catch(() => setClassSubjects([]));
+    }, [selectedClass, teacherData]);
 
     useEffect(() => {
         if (!selectedClass || !selectedSubject) return;
@@ -76,7 +94,6 @@ export default function TeacherSyllabusPage() {
 
     const completed = chapters.filter(c => c.status === "completed").length;
     const ongoing   = chapters.filter(c => c.status === "ongoing").length;
-    const mySubjects: string[] = teacherData?.subjects || [];
 
     return (
         <div className="space-y-6">
@@ -108,7 +125,7 @@ export default function TeacherSyllabusPage() {
                             <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white pr-8 appearance-none">
                                 <option value="">Select</option>
-                                {(mySubjects.length > 0 ? mySubjects : SUBJECTS).map(s => <option key={s}>{s}</option>)}
+                                {classSubjects.map(s => <option key={s}>{s}</option>)}
                             </select>
                             <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
                         </div>
