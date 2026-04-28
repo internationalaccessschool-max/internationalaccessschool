@@ -524,8 +524,8 @@ export default function AdminAttendancePage() {
         return summarySortDir === "asc" ? diff : -diff;
     });
 
-    const dayPresent = students.filter(s => s.status === "present").length;
     const dayLate = students.filter(s => s.status === "late").length;
+    const dayPresent = students.filter(s => s.status === "present").length + dayLate;
     const dayAbsent = students.filter(s => s.status === "absent").length;
     const dayTotal = students.length;
 

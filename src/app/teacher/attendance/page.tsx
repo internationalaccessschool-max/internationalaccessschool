@@ -290,8 +290,8 @@ export default function TeacherAttendancePage() {
     };
 
     // Counts
-    const presentCount = students.filter(s => s.status === "present").length;
     const lateCount = students.filter(s => s.status === "late").length;
+    const presentCount = students.filter(s => s.status === "present").length + lateCount;
     const absentCount = students.filter(s => s.status === "absent").length;
 
     const todayStr = new Date().toISOString().split("T")[0];
