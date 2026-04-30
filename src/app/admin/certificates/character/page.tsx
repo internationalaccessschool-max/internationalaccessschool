@@ -120,7 +120,7 @@ function buildCCHtml(cc: CCData, logoUrl: string): string {
         <div style="font-size:20px;font-weight:bold;color:#1a1a5e;letter-spacing:1px">INTERNATIONAL ACCESS SCHOOL</div>
         <div style="font-size:9px;color:#444;margin-top:2px">Managed by: International Board of Educational Research Trust (IBERT)</div>
         <div style="font-size:9px;color:#444">Affiliated to CBSE(II) New Delhi &nbsp;Aff. No.: 330691 &nbsp;|&nbsp; School Code: 65688</div>
-        <div style="font-size:9px;color:#444">Harhan, Siwan, Bihar – 841227 &nbsp;&nbsp;Ph: +91-9934776670</div>
+        <div style="font-size:9px;color:#444">Barhan, Siwan, Bihar – 841227 &nbsp;&nbsp;Ph: +91-9934776670</div>
         <div style="font-size:9px;color:#444">Email: info@aschool.edu.in &nbsp;|&nbsp; Web: www.iaschool.edu.in</div>
       </td>
       <td style="width:70px;text-align:right;vertical-align:top;font-size:8px;color:#666">
@@ -186,7 +186,7 @@ function buildCCHtml(cc: CCData, logoUrl: string): string {
         <div style="border-top:1px solid #000;width:170px;margin:0 auto;padding-top:5px;font-size:11px;font-weight:bold">
           ${cc.principalName}<br/>
           <span style="font-weight:normal;font-size:9.5px">International Access School</span><br/>
-          <span style="font-weight:normal;font-size:9.5px">Harhan, Siwan, Bihar</span>
+          <span style="font-weight:normal;font-size:9.5px">Barhan, Siwan, Bihar</span>
         </div>
       </td>
     </tr>
@@ -397,7 +397,7 @@ export default function CharacterCertificatePage() {
                         <div style={{ fontSize: "18px", fontWeight: "bold", color: "#1a1a5e", letterSpacing: "1px" }}>INTERNATIONAL ACCESS SCHOOL</div>
                         <div style={{ fontSize: "8px", color: "#555", marginTop: "2px" }}>Managed by: International Board of Educational Research Trust (IBERT)</div>
                         <div style={{ fontSize: "8px", color: "#555" }}>Affiliated to CBSE(II) New Delhi Aff. No.: 330691 | School Code: 65688</div>
-                        <div style={{ fontSize: "8px", color: "#555" }}>Harhan, Siwan, Bihar – 841227  Ph: +91-9934776670</div>
+                        <div style={{ fontSize: "8px", color: "#555" }}>Barhan, Siwan, Bihar – 841227  Ph: +91-9934776670</div>
                         <div style={{ fontSize: "8px", color: "#555" }}>Email: info@aschool.edu.in | Web: www.iaschool.edu.in</div>
                       </td>
                       <td style={{ width: "60px", textAlign: "right", verticalAlign: "top", fontSize: "7px", color: "#888" }}>
@@ -452,7 +452,7 @@ export default function CharacterCertificatePage() {
                         <div style={{ borderTop: "1px solid #000", width: "160px", margin: "0 auto", paddingTop: "4px", fontSize: "10px", fontWeight: "bold" }}>
                           {ccData.principalName}<br />
                           <span style={{ fontWeight: "normal", fontSize: "9px" }}>International Access School</span><br />
-                          <span style={{ fontWeight: "normal", fontSize: "9px" }}>Harhan, Siwan, Bihar</span>
+                          <span style={{ fontWeight: "normal", fontSize: "9px" }}>Barhan, Siwan, Bihar</span>
                         </div>
                       </td>
                     </tr>
