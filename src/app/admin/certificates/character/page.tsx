@@ -380,10 +380,19 @@ export default function CharacterCertificatePage() {
               </button>
             </div>
 
-            {/* Preview uses identical inline styles as the print HTML */}
-            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 overflow-auto"
-              style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-              <div style={{ border: "6px double #1a1a5e", margin: "24px", padding: "24px" }}>
+            {/* Preview — fixed A4 dimensions (210mm × 297mm) */}
+            <div className="overflow-auto">
+              <div style={{
+                fontFamily: "'Times New Roman', Times, serif",
+                width: "210mm",
+                minHeight: "297mm",
+                margin: "0 auto",
+                background: "#fff",
+                boxShadow: "0 0 12px rgba(0,0,0,0.15)",
+                padding: "15mm 18mm",
+                boxSizing: "border-box",
+              }}>
+              <div style={{ border: "6px double #1a1a5e", padding: "24px", minHeight: "240mm" }}>
 
                 {/* Header */}
                 <table style={{ width: "100%", marginBottom: "6px", borderCollapse: "collapse" }}>
@@ -460,6 +469,7 @@ export default function CharacterCertificatePage() {
                 </table>
 
                 <div style={{ textAlign: "center", marginTop: "16px", fontSize: "8px", color: "#ccc" }}>[ School Seal / Stamp ]</div>
+              </div>
               </div>
             </div>
           </div>
