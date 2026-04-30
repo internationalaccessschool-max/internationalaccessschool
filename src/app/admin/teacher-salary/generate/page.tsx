@@ -244,8 +244,10 @@ export default function GenerateTeacherSalaryPage() {
         const pf = Math.round((t.gross * t.pfPct) / 100);
         const esic = Math.round((t.gross * t.esicPct) / 100);
         const perDay = workingDays > 0 ? t.gross / workingDays : 0;
-        const effective = att.absent + Math.floor(att.late / 3);
-        const absentCut = Math.round(Math.floor(effective / 3) * perDay);
+        // 3 lates = 1 day cut, 3 absents = 1 day cut (separate, direct)
+        const lateDeductDays = Math.floor(att.late / 3);
+        const absentDeductDays = Math.floor(att.absent / 3);
+        const absentCut = Math.round((lateDeductDays + absentDeductDays) * perDay);
         const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);
         return sum + (t.gross - pf - esic - absentCut - halfDayCut);
     }, 0);
@@ -366,9 +368,10 @@ export default function GenerateTeacherSalaryPage() {
                             {teachers.map(t => {
                                 const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0 };
                                 const perDay = workingDays > 0 ? t.gross / workingDays : 0;
-                                const lateToAbsent = Math.floor(att.late / 3);
-                                const effectiveAbsents = att.absent + lateToAbsent;
-                                const deductDays = Math.floor(effectiveAbsents / 3);
+                                // 3 lates = 1 day cut, 3 absents = 1 day cut (separate)
+                                const lateDeductDays = Math.floor(att.late / 3);
+                                const absentDeductDays = Math.floor(att.absent / 3);
+                                const deductDays = lateDeductDays + absentDeductDays;
                                 const absentCut = Math.round(deductDays * perDay);
                                 const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);
                                 const pfAmt = Math.round((t.gross * t.pfPct) / 100);
@@ -461,7 +464,8 @@ export default function GenerateTeacherSalaryPage() {
                                                 {deductDays > 0 || halfDayCut > 0 ? (
                                                     <div className="font-bold text-red-500">
                                                         {deductDays > 0 && <span>{deductDays} day{deductDays > 1 ? "s" : ""}</span>}
-                                                        {lateToAbsent > 0 && <span className="block text-[10px] text-amber-500">(+{lateToAbsent} from late)</span>}
+                                                        {lateDeductDays > 0 && <span className="block text-[10px] text-amber-500">{lateDeductDays} from late</span>}
+                                                        {absentDeductDays > 0 && <span className="block text-[10px] text-red-400">{absentDeductDays} from absent</span>}
                                                         {halfDayCut > 0 && <span className="block text-[10px] text-purple-500">½ day ×{att.halfDay}</span>}
                                                         <span className="text-[10px]">-₹{(absentCut + halfDayCut).toLocaleString("en-IN")}</span>
                                                     </div>

@@ -85,12 +85,12 @@ export async function POST(req: NextRequest) {
                     else if (status === "half_day") halfDayDays++;
                 }
 
-                // 3 late = 1 absent, then 3 absents = 1 day salary cut
+                // 3 lates = 1 day cut, 3 absents = 1 day cut (separate, direct)
                 // half_day = 0.5 day deduction
                 const effectiveDays = clientWorkingDays || workingDaysInMonth;
-                const lateToAbsent = Math.floor(lateDays / 3);
-                const effectiveAbsents = absentDays + lateToAbsent;
-                const deductibleDays = Math.floor(effectiveAbsents / 3);
+                const lateDeductDays = Math.floor(lateDays / 3);
+                const absentDeductDays = Math.floor(absentDays / 3);
+                const deductibleDays = lateDeductDays + absentDeductDays;
                 const perDayRate = effectiveDays > 0 ? gross / effectiveDays : 0;
                 const absentDeduction = Math.round(deductibleDays * perDayRate);
                 const halfDayDeduction = Math.round(halfDayDays * 0.5 * perDayRate);
@@ -111,8 +111,11 @@ export async function POST(req: NextRequest) {
                     pfDeduction, esicDeduction, otherDeductions: 0,
                     absentDeduction, halfDayDeduction,
                     deductibleDays, halfDayDays,
-                    lateToAbsent,
-                    effectiveAbsents,
+                    lateDeductDays,
+                    absentDeductDays,
+                    // Kept for backward compatibility with old salary slips:
+                    lateToAbsent: lateDeductDays,
+                    effectiveAbsents: absentDays + lateDeductDays,
                     perDayRate: Math.round(perDayRate),
                     totalDeductions,
                     netSalary,
