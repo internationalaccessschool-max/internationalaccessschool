@@ -273,7 +273,7 @@ export default function AdminTeacherSalaryPage() {
                     <div>
                         <p className="text-white/50 text-sm font-medium">Admin Finance</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">💰 Staff Salary</h1>
-                        <p className="text-white/40 text-sm mt-1">Attendance-linked · 3 absents = 1 day deduction</p>
+                        <p className="text-white/40 text-sm mt-1">Attendance-linked · 1 absent = 1 day cut · 3 lates = 1 day cut</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={openAddStaff}

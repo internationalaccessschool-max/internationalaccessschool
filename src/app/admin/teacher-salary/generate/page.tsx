@@ -244,9 +244,9 @@ export default function GenerateTeacherSalaryPage() {
         const pf = Math.round((t.gross * t.pfPct) / 100);
         const esic = Math.round((t.gross * t.esicPct) / 100);
         const perDay = workingDays > 0 ? t.gross / workingDays : 0;
-        // 3 lates = 1 day cut, 3 absents = 1 day cut (separate, direct)
+        // 1 absent = 1 day cut, 3 lates = 1 day cut
         const lateDeductDays = Math.floor(att.late / 3);
-        const absentDeductDays = Math.floor(att.absent / 3);
+        const absentDeductDays = att.absent;
         const absentCut = Math.round((lateDeductDays + absentDeductDays) * perDay);
         const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);
         return sum + (t.gross - pf - esic - absentCut - halfDayCut);
@@ -266,7 +266,7 @@ export default function GenerateTeacherSalaryPage() {
                 <div className="relative z-10">
                     <p className="text-white/50 text-sm font-medium">Admin Finance</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Generate Staff Salary</h1>
-                    <p className="text-white/40 text-sm mt-1">3 late = 1 absent · 3 absents = 1 day deduction</p>
+                    <p className="text-white/40 text-sm mt-1">1 absent = 1 day cut · 3 lates = 1 day cut</p>
                 </div>
             </div>
 
@@ -368,9 +368,9 @@ export default function GenerateTeacherSalaryPage() {
                             {teachers.map(t => {
                                 const att = attMap[t.id] || { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0 };
                                 const perDay = workingDays > 0 ? t.gross / workingDays : 0;
-                                // 3 lates = 1 day cut, 3 absents = 1 day cut (separate)
+                                // 1 absent = 1 day cut, 3 lates = 1 day cut
                                 const lateDeductDays = Math.floor(att.late / 3);
-                                const absentDeductDays = Math.floor(att.absent / 3);
+                                const absentDeductDays = att.absent;
                                 const deductDays = lateDeductDays + absentDeductDays;
                                 const absentCut = Math.round(deductDays * perDay);
                                 const halfDayCut = Math.round((att.halfDay || 0) * 0.5 * perDay);

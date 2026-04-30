@@ -85,11 +85,11 @@ export async function POST(req: NextRequest) {
                     else if (status === "half_day") halfDayDays++;
                 }
 
-                // 3 lates = 1 day cut, 3 absents = 1 day cut (separate, direct)
+                // 1 absent = 1 day cut, 3 lates = 1 day cut
                 // half_day = 0.5 day deduction
                 const effectiveDays = clientWorkingDays || workingDaysInMonth;
                 const lateDeductDays = Math.floor(lateDays / 3);
-                const absentDeductDays = Math.floor(absentDays / 3);
+                const absentDeductDays = absentDays;
                 const deductibleDays = lateDeductDays + absentDeductDays;
                 const perDayRate = effectiveDays > 0 ? gross / effectiveDays : 0;
                 const absentDeduction = Math.round(deductibleDays * perDayRate);
