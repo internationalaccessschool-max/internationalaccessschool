@@ -35,9 +35,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     useEffect(() => {
         if (isLoginPage || !user) return;
         const unsubs = [
-            onSnapshot(query(collection(db, "admissions"), where("status", "==", "pending")),
+            onSnapshot(query(collection(db, "admission_requests"), where("status", "in", ["pending", "test_pending"])),
                 s => setPendingAdmissions(s.size), () => {}),
-            onSnapshot(query(collection(db, "applications"), where("status", "==", "pending")),
+            onSnapshot(query(collection(db, "job_applications"), where("status", "==", "pending")),
                 s => setPendingApplications(s.size), () => {}),
             onSnapshot(query(collection(db, "leaveApplications"), where("status", "==", "pending")),
                 s => setPendingLeave(s.size), () => {}),
