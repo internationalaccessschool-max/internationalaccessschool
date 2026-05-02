@@ -36,6 +36,9 @@ interface Student {
     transport?: string;
     parentEmail?: string;
     status?: string;
+    address?: string;
+    village?: string;
+    city?: string;
     [key: string]: any;
 }
 
@@ -437,6 +440,8 @@ export default function TransportAccountantPage() {
         return raw || s.name || "Unknown Student";
     };
 
+    const getStudentAddress = (s: Student) => s.address || s.village || s.city || "";
+
     const getBusById = (id: string) => buses.find(b => b.id === id) || null;
 
     const isBusStudent = (s: Student) => {
@@ -601,6 +606,7 @@ export default function TransportAccountantPage() {
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Student Name</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Class</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Contact</th>
+                                                <th className="h-11 px-4 text-left font-semibold text-gray-600">Address</th>
                                                 <th className="h-11 px-4 text-left font-semibold text-gray-600">Assigned Bus</th>
                                                 <th className="h-11 px-4 text-right font-semibold text-gray-600">Action</th>
                                             </tr>
@@ -616,7 +622,7 @@ export default function TransportAccountantPage() {
                                                     }
                                                 }
                                                 if (list.length === 0) return (
-                                                    <tr><td colSpan={6} className="p-12 text-center text-gray-400">No bus students found.</td></tr>
+                                                    <tr><td colSpan={7} className="p-12 text-center text-gray-400">No bus students found.</td></tr>
                                                 );
                                                 return list.map((student, idx) => {
                                                     const parts = (student.transport || "").split("::");
@@ -646,6 +652,9 @@ export default function TransportAccountantPage() {
                                                                 {student.currentClass || student.className || "—"} {student.section || ""}
                                                             </td>
                                                             <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
+                                                            <td className="p-4 text-gray-500 text-xs max-w-[160px]">
+                                                                {getStudentAddress(student) || <span className="text-gray-300">—</span>}
+                                                            </td>
                                                             <td className="p-4">
                                                                 {assignedBus ? (
                                                                     <div className="flex flex-col gap-1 items-start">
@@ -687,13 +696,14 @@ export default function TransportAccountantPage() {
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Student Name</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Class</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Contact</th>
+                                            <th className="h-11 px-4 text-left font-semibold text-gray-600">Address</th>
                                             <th className="h-11 px-4 text-left font-semibold text-gray-600">Mode</th>
                                             <th className="h-11 px-4 text-right font-semibold text-gray-600">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-50">
                                         {filterStudents(nonBusStudents).length === 0 ? (
-                                            <tr><td colSpan={6} className="p-12 text-center text-gray-400">No non-bus students found.</td></tr>
+                                            <tr><td colSpan={7} className="p-12 text-center text-gray-400">No non-bus students found.</td></tr>
                                         ) : filterStudents(nonBusStudents).map((student, idx) => (
                                             <tr key={student.id} className="hover:bg-amber-50/30 transition-colors">
                                                 <td className="p-4 text-gray-400 text-xs">{idx + 1}</td>
@@ -705,6 +715,9 @@ export default function TransportAccountantPage() {
                                                     {student.currentClass || student.className || "—"} {student.section || ""}
                                                 </td>
                                                 <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
+                                                <td className="p-4 text-gray-500 text-xs max-w-[160px]">
+                                                    {getStudentAddress(student) || <span className="text-gray-300">—</span>}
+                                                </td>
                                                 <td className="p-4">
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
                                                         <Users className="w-3 h-3" /> {student.transport?.toUpperCase() === "NONE" || !student.transport ? "Walk / Self" : student.transport}
