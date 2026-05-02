@@ -534,7 +534,7 @@ export default function AdminAdmissionsPage() {
             <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden">
                 <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 80% 50%, rgba(200,169,81,0.3) 0%, transparent 60%)" }} />
                 <div className="relative z-10">
-                    <p className="text-white/50 text-sm font-medium">Admin Console</p>
+                    <p className="text-white/50 text-sm font-medium">Finance Portal</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Admission Requests</h1>
                     <p className="text-white/40 text-sm mt-1">
                         {counts["pending"]} pending · {counts["test_pending"]} for test · {counts["accepted"]} accepted · {counts["rejected"]} rejected
