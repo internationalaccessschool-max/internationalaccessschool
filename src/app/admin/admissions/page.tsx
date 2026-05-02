@@ -97,6 +97,117 @@ const TAB_STYLES: Record<string, string> = {
     red: "bg-red-50 text-red-700 border-red-200",
 };
 
+// ─── Admission Receipt Print HTML ────────────────────────────────────────────
+
+function buildAdmReceiptHTML(r: {
+    receiptNo: string; studentName: string; admissionNo: string;
+    class: string; section: string; items: { label: string; amount: number }[];
+    total: number; discount: number; paidOn: string; paymentMode: string;
+}, logoUrl: string): string {
+    const itemRows = r.items.map(i => `
+        <tr>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#444">${i.label}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;text-align:right;color:#0f2044;font-weight:600">₹${i.amount.toLocaleString()}</td>
+        </tr>`).join("");
+
+    const discountRow = r.discount > 0 ? `
+        <tr>
+            <td style="padding:7px 12px;border-bottom:1px solid #fde8e8;font-size:13px;color:#e53e3e;font-weight:500">🏷 Discount</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #fde8e8;font-size:13px;text-align:right;color:#e53e3e;font-weight:700">− ₹${r.discount.toLocaleString()}</td>
+        </tr>` : "";
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Admission Receipt – ${r.studentName}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:A5 portrait;margin:10mm}
+</style>
+</head>
+<body>
+<div style="max-width:148mm;margin:0 auto;border:1px solid #ddd;border-radius:8px;overflow:hidden">
+
+  <!-- Header -->
+  <div style="background:#0f2044;padding:16px 20px;display:flex;align-items:center;gap:14px">
+    <img src="${logoUrl}" alt="IAS" style="width:52px;height:52px;object-fit:contain;border-radius:6px;background:#fff;padding:3px"/>
+    <div>
+      <div style="font-size:15px;font-weight:700;color:#fff;letter-spacing:0.5px">INTERNATIONAL ACCESS SCHOOL</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:2px">Barhan, Siwan, Bihar – 841227 | Ph: +91-9934776670</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.6)">Email: info@iaschool.edu.in | Web: www.iaschool.edu.in</div>
+    </div>
+  </div>
+
+  <!-- Title bar -->
+  <div style="background:#c8a951;padding:8px 20px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:13px;font-weight:700;color:#0f2044;letter-spacing:1px;text-transform:uppercase">Admission Fee Receipt</span>
+    <span style="font-size:11px;font-weight:600;color:#0f2044;font-family:monospace">${r.receiptNo}</span>
+  </div>
+
+  <!-- Student Info -->
+  <div style="padding:14px 20px;background:#f8f9fb;border-bottom:1px solid #e8e8e8">
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <td style="padding:4px 0;font-size:11px;color:#888;width:40%">Student Name</td>
+        <td style="padding:4px 0;font-size:13px;font-weight:700;color:#0f2044">${r.studentName}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;font-size:11px;color:#888">Admission No.</td>
+        <td style="padding:4px 0;font-size:13px;font-weight:600;color:#0f2044">${r.admissionNo}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;font-size:11px;color:#888">Class / Section</td>
+        <td style="padding:4px 0;font-size:13px;font-weight:600;color:#0f2044">${r.class} – ${r.section}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;font-size:11px;color:#888">Date of Admission</td>
+        <td style="padding:4px 0;font-size:13px;font-weight:600;color:#0f2044">${r.paidOn}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;font-size:11px;color:#888">Payment Mode</td>
+        <td style="padding:4px 0;font-size:13px;font-weight:600;color:#0f2044">${r.paymentMode}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Fee Breakdown -->
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:#f0f4f8">
+        <th style="padding:8px 12px;text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px">Particulars</th>
+        <th style="padding:8px 12px;text-align:right;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+      ${discountRow}
+    </tbody>
+    <tfoot>
+      <tr style="background:#0f2044">
+        <td style="padding:10px 12px;font-size:13px;font-weight:700;color:#fff">Total Amount Paid</td>
+        <td style="padding:10px 12px;font-size:16px;font-weight:800;text-align:right;color:#c8a951">₹${r.total.toLocaleString()}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- Signatures -->
+  <div style="padding:20px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #eee;margin-top:4px">
+    <div style="text-align:center">
+      <div style="width:100px;border-top:1px solid #999;padding-top:4px;font-size:10px;color:#888">Parent / Guardian</div>
+    </div>
+    <div style="text-align:center;font-size:9px;color:#bbb">This is a computer-generated receipt.</div>
+    <div style="text-align:center">
+      <div style="width:120px;border-top:1px solid #999;padding-top:4px;font-size:10px;color:#888">Authorized Signatory</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>`;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 interface TransportBus {
@@ -145,6 +256,19 @@ export default function AdminAdmissionsPage() {
     const { register, handleSubmit, control, formState: { errors }, setValue, reset } = useForm<AcceptFormValues>({
         resolver: zodResolver(acceptSchema),
     });
+
+    const handlePrintReceipt = () => {
+        if (!admReceipt) return;
+        const logoUrl = `${window.location.origin}/LOGO.png`;
+        const html = buildAdmReceiptHTML(admReceipt, logoUrl);
+        const win = window.open("", "_blank", "width=700,height=600");
+        if (!win) { alert("Pop-up blocked — please allow pop-ups."); return; }
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.onload = () => { win.focus(); win.print(); };
+        setTimeout(() => { try { win.focus(); win.print(); } catch { } }, 800);
+    };
 
     // ── Fetch ALL requests once ──
     const fetchAll = useCallback(async () => {
@@ -1072,7 +1196,7 @@ export default function AdminAdmissionsPage() {
                                     </div>
 
                                     <div className="flex gap-3 mt-5">
-                                        <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+                                        <Button variant="outline" className="flex-1" onClick={handlePrintReceipt}>
                                             <Printer className="w-4 h-4 mr-2" /> Print
                                         </Button>
                                         <Button className="flex-1 bg-navy text-white hover:bg-navy/90"
