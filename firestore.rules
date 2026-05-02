@@ -16,13 +16,14 @@ service cloud.firestore {
     function isTeacherOrAdmin() { return hasAny(['admin', 'teacher']); }
     function isAdminOrSupervisor() { return hasAny(['admin', 'supervisor']); }
     function isStaff() { return hasAny(['admin', 'teacher', 'accountant', 'supervisor']); }
-    // Supervisor monitors fees but cannot modify them
-    function isFeeViewer() { return hasAny(['admin', 'accountant', 'supervisor']); }
+    // Supervisor monitors fees but cannot modify them; teacher views own class fees
+    function isFeeViewer() { return hasAny(['admin', 'accountant', 'supervisor', 'teacher']); }
 
     // ─── Users (core user docs) ───────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isAuth() && (isStaff() || uid() == userId);
-      allow create: if isAdmin();
+      allow create: if isAdmin() ||
+        (hasRole('accountant') && request.resource.data.role == 'student');
       allow update: if isAdmin() ||
         (isAuth() && uid() == userId && request.resource.data.role == resource.data.role);
       allow delete: if isAdmin();
@@ -226,9 +227,9 @@ service cloud.firestore {
       allow write: if isAccountantOrAdmin();
     }
     match /admission_requests/{document=**} {
-      allow read: if isAdminOrSupervisor();
+      allow read: if isAdminOrSupervisor() || hasRole('accountant');
       allow create: if true;
-      allow update, delete: if isAdminOrSupervisor();
+      allow update, delete: if isAdminOrSupervisor() || hasRole('accountant');
     }
 
     // ─── Job Applications (public submit) ─────────────────────────────────────
@@ -242,6 +243,14 @@ service cloud.firestore {
     match /syllabus/{docId} {
       allow read: if isAuth();
       allow write: if isAdminOrSupervisor() || isTeacher();
+    }
+
+    // ─── Generated Certificates (TC + Character) ─────────────────────────────
+    match /generatedTC/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /generatedCC/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // ─── Leave Applications ───────────────────────────────────────────────────
