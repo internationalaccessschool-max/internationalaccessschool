@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    Search, Loader2, Bus, Users, Route, Map, UserCheck, ShieldAlert
+    Search, Loader2, Bus, Users, Route, Map, UserCheck, ShieldAlert,
+    ChevronUp, ChevronDown, ChevronsUpDown
 } from "lucide-react";
 import {
     collection, query, getDocs, orderBy, collectionGroup
@@ -49,6 +50,8 @@ export default function SupervisorTransportPage() {
     const [activeTab, setActiveTab] = useState<TabType>("students");
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [sortKey, setSortKey] = useState<string | null>(null);
+    const [sortAsc, setSortAsc] = useState(true);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -74,16 +77,39 @@ export default function SupervisorTransportPage() {
 
     const getStudentAddress = (s: Student) => s.address || s.village || s.city || "";
 
+    const handleSort = (key: string) => {
+        if (sortKey === key) setSortAsc(p => !p);
+        else { setSortKey(key); setSortAsc(true); }
+    };
+
+    const SortIcon = ({ k }: { k: string }) => sortKey === k
+        ? sortAsc ? <ChevronUp className="w-3 h-3 text-navy" /> : <ChevronDown className="w-3 h-3 text-navy" />
+        : <ChevronsUpDown className="w-3 h-3 opacity-30" />;
+
     const getBusByTransportString = (ts: string) =>
         buses.find(b => b.id === ts) || null;
 
-    const filteredStudents = students.filter(s => {
-        if (!searchTerm) return true;
-        const q = searchTerm.toLowerCase();
-        return (getDisplayName(s).toLowerCase().includes(q) ||
-            (s.admissionNumber || "").toLowerCase().includes(q) ||
-            (s.className || "").toLowerCase().includes(q));
-    });
+    const filteredStudents = (() => {
+        const list = students.filter(s => {
+            if (!searchTerm) return true;
+            const q = searchTerm.toLowerCase();
+            return (getDisplayName(s).toLowerCase().includes(q) ||
+                (s.admissionNumber || "").toLowerCase().includes(q) ||
+                (s.className || "").toLowerCase().includes(q));
+        });
+        if (!sortKey) return list;
+        return [...list].sort((a, b) => {
+            let av = "", bv = "";
+            if (sortKey === "name")    { av = getDisplayName(a); bv = getDisplayName(b); }
+            else if (sortKey === "enr"){ av = a.admissionNumber || ""; bv = b.admissionNumber || ""; }
+            else if (sortKey === "class"){ av = `${a.className || ""}${a.section || ""}`; bv = `${b.className || ""}${b.section || ""}`; }
+            else if (sortKey === "contact"){ av = a.mobileNo || ""; bv = b.mobileNo || ""; }
+            else if (sortKey === "address"){ av = getStudentAddress(a); bv = getStudentAddress(b); }
+            else if (sortKey === "bus") { av = getBusByTransportString(a.transport || "")?.busNumber || ""; bv = getBusByTransportString(b.transport || "")?.busNumber || ""; }
+            const cmp = av.localeCompare(bv, undefined, { numeric: true });
+            return sortAsc ? cmp : -cmp;
+        });
+    })();
 
     const filteredBuses = buses.filter(b => {
         if (!searchTerm) return true;
@@ -240,11 +266,18 @@ export default function SupervisorTransportPage() {
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50/50 border-b">
                                             <tr>
-                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Student Name</th>
-                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Class</th>
-                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Contact</th>
-                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Address</th>
-                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Assigned Bus</th>
+                                                {[
+                                                    { label: "Student Name", key: "name" },
+                                                    { label: "Class",        key: "class" },
+                                                    { label: "Contact",      key: "contact" },
+                                                    { label: "Address",      key: "address" },
+                                                    { label: "Assigned Bus", key: "bus" },
+                                                ].map(({ label, key }) => (
+                                                    <th key={key} onClick={() => handleSort(key)}
+                                                        className="h-12 px-4 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-800 hover:bg-gray-100 select-none transition-colors">
+                                                        <span className="inline-flex items-center gap-1">{label}<SortIcon k={key} /></span>
+                                                    </th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-50">
