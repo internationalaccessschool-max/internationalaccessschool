@@ -443,7 +443,8 @@ export default function TransportAccountantPage() {
         return raw || s.name || "Unknown Student";
     };
 
-    const getStudentAddress = (s: Student) => s.address || s.village || s.city || "";
+    const getStudentAddress = (s: Student) =>
+        s.address || s.village || s.city || s.presentAddress || s.localAddress || "";
 
     const handleSort = (key: string) => {
         if (sortKey === key) setSortAsc(p => !p);
