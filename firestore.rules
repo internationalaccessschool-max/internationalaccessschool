@@ -23,8 +23,15 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuth() && (isStaff() || uid() == userId);
       allow create: if isAdmin() ||
-        (hasRole('accountant') && request.resource.data.role == 'student');
+        (hasRole('accountant') && (
+          request.resource.data.role == 'student' ||
+          !('role' in request.resource.data)
+        ));
       allow update: if isAdmin() ||
+        (hasRole('accountant') && (
+          !('role' in resource.data) ||
+          resource.data.role == 'student'
+        )) ||
         (isAuth() && uid() == userId && request.resource.data.role == resource.data.role);
       allow delete: if isAdmin();
     }
