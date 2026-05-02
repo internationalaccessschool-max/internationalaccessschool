@@ -466,9 +466,8 @@ export default function TransportAdminPage() {
         return result;
     };
 
-    const getStudentAddress = (s: Student) => {
-        return s.address || s.village || s.city || "";
-    };
+    const getStudentAddress = (s: Student) =>
+        s.address || s.village || s.city || s.presentAddress || s.localAddress || "";
 
     const allClasses = Array.from(new Set(students.map(s => s.currentClass || s.className || "").filter(Boolean)))
         .sort((a, b) => CLASS_ORDER.indexOf(a) - CLASS_ORDER.indexOf(b));
