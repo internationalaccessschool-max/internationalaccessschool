@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collectionGroup, getDocs } from "firebase/firestore";
+import { collectionGroup, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
@@ -209,17 +209,32 @@ export default function CharacterCertificatePage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [ccData, setCcData] = useState<CCData>(defaultCC());
   const [notFound, setNotFound] = useState(false);
+  const [alreadyGenerated, setAlreadyGenerated] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string>("");
 
   const handleSearch = async () => {
     const trimmed = enr.trim();
     if (!trimmed) { toast.error("Enter an Admission Number"); return; }
-    setIsSearching(true); setNotFound(false); setStudent(null);
+    setIsSearching(true); setNotFound(false); setStudent(null); setAlreadyGenerated(false); setGeneratedAt("");
     try {
       const snap = await getDocs(collectionGroup(db, "profiles"));
       const found = snap.docs.find(d => safeStr(d.data().admissionNumber) === trimmed);
       if (!found) { setNotFound(true); return; }
       const s = { id: found.id, ...found.data() } as Student;
       setStudent(s);
+
+      // Check if CC already generated
+      const docKey = trimmed.replace(/\//g, "_");
+      const existingSnap = await getDoc(doc(db, "generatedCC", docKey));
+      if (existingSnap.exists()) {
+        const saved = existingSnap.data();
+        setCcData(saved.ccData as CCData);
+        const at = saved.generatedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) || "";
+        setGeneratedAt(at);
+        setAlreadyGenerated(true);
+        toast("Certificate already generated — showing saved copy.", { icon: "📋" });
+        return;
+      }
       const currentYear = new Date().getFullYear();
       const fullName = `${safeStr(s.firstName)} ${safeStr(s.lastName)}`.trim();
       const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
@@ -251,7 +266,7 @@ export default function CharacterCertificatePage() {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!student) return;
     const logoUrl = `${window.location.origin}/LOGO.png`;
     const html = buildCCHtml(ccData, logoUrl);
@@ -262,17 +277,48 @@ export default function CharacterCertificatePage() {
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
     setTimeout(() => { try { win.focus(); win.print(); } catch { /* already printed */ } }, 1200);
+
+    // Save to Firestore on first print
+    if (!alreadyGenerated) {
+      try {
+        const docKey = student.admissionNumber.replace(/\//g, "_");
+        await setDoc(doc(db, "generatedCC", docKey), {
+          ccData,
+          studentName: ccData.studentName,
+          admissionNumber: student.admissionNumber,
+          generatedAt: serverTimestamp(),
+        });
+        setAlreadyGenerated(true);
+        setGeneratedAt(new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }));
+      } catch { /* silent — print still works */ }
+    }
+  };
+
+  const handleIssueNew = async () => {
+    if (!student) return;
+    if (!confirm("Issue a new Character Certificate for this student? The previous record will be removed.")) return;
+    try {
+      const docKey = student.admissionNumber.replace(/\//g, "_");
+      await deleteDoc(doc(db, "generatedCC", docKey));
+      setAlreadyGenerated(false);
+      setGeneratedAt("");
+      toast.success("Previous certificate cleared. You can now edit and print a new one.");
+    } catch {
+      toast.error("Failed to clear. Try again.");
+    }
   };
 
   const field = (key: keyof CCData, label: string, multiline?: boolean) => (
     <div className="mb-1.5">
       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-0.5">{label}</label>
       {multiline ? (
-        <textarea value={ccData[key]} onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
-          rows={2} className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20 resize-none" />
+        <textarea value={ccData[key]} onChange={e => !alreadyGenerated && setCcData(p => ({ ...p, [key]: e.target.value }))}
+          readOnly={alreadyGenerated} rows={2}
+          className={`w-full border rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none resize-none ${alreadyGenerated ? "bg-slate-50 border-slate-100 text-slate-500 cursor-not-allowed" : "border-slate-200 focus:border-navy focus:ring-1 focus:ring-navy/20"}`} />
       ) : (
-        <input value={ccData[key]} onChange={e => setCcData(p => ({ ...p, [key]: e.target.value }))}
-          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20" />
+        <input value={ccData[key]} onChange={e => !alreadyGenerated && setCcData(p => ({ ...p, [key]: e.target.value }))}
+          readOnly={alreadyGenerated}
+          className={`w-full border rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none ${alreadyGenerated ? "bg-slate-50 border-slate-100 text-slate-500 cursor-not-allowed" : "border-slate-200 focus:border-navy focus:ring-1 focus:ring-navy/20"}`} />
       )}
     </div>
   );
@@ -313,7 +359,7 @@ export default function CharacterCertificatePage() {
             {isSearching ? "Searching…" : "Search"}
           </button>
           {student && (
-            <button onClick={() => { setStudent(null); setEnr(""); setCcData(defaultCC()); setNotFound(false); }}
+            <button onClick={() => { setStudent(null); setEnr(""); setCcData(defaultCC()); setNotFound(false); setAlreadyGenerated(false); setGeneratedAt(""); }}
               className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors">
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
@@ -337,14 +383,38 @@ export default function CharacterCertificatePage() {
         )}
       </div>
 
+      {/* Already Generated Banner */}
+      {student && alreadyGenerated && (
+        <div className="flex items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-bold text-amber-800 text-sm">Certificate Already Generated</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Previously issued{generatedAt ? ` on ${generatedAt}` : ""}. Showing saved copy — you can only print it.
+              </p>
+            </div>
+          </div>
+          <button onClick={handleIssueNew}
+            className="shrink-0 px-3 py-1.5 border border-amber-300 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
+            Issue New Certificate
+          </button>
+        </div>
+      )}
+
       {student ? (
         <div className="grid xl:grid-cols-5 gap-6">
           {/* Edit Form */}
           <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 space-y-1">
             <div className="flex items-center gap-2 mb-3">
               <Edit3 className="w-4 h-4 text-navy" />
-              <h2 className="font-bold text-navy text-sm">Customize Certificate Fields</h2>
+              <h2 className="font-bold text-navy text-sm">{alreadyGenerated ? "Certificate Fields (Read-only)" : "Customize Certificate Fields"}</h2>
             </div>
+            {alreadyGenerated && (
+              <div className="mb-3 p-2.5 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-700 font-medium">
+                🔒 Fields are locked. Click "Issue New Certificate" above to make changes.
+              </div>
+            )}
             {field("certNo", "Certificate / Sl. No.")}
             {field("studentName", "Student Full Name")}
             {field("fatherName", "Father's Name")}
