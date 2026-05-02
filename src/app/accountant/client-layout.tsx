@@ -8,13 +8,26 @@ import {
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function AccountantLayout({ children }: { children: React.ReactNode }) {
     const { user, role, loading } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
     const isLoginPage = pathname === "/accountant/login";
+
+    const [pendingAdmissions, setPendingAdmissions] = useState(0);
+
+    useEffect(() => {
+        if (isLoginPage || !user) return;
+        const unsub = onSnapshot(
+            query(collection(db, "admission_requests"), where("status", "in", ["pending", "test_pending"])),
+            s => setPendingAdmissions(s.size), () => {}
+        );
+        return () => unsub();
+    }, [isLoginPage, user]);
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
@@ -46,7 +59,7 @@ export default function AccountantLayout({ children }: { children: React.ReactNo
         {
             section: "Admissions",
             items: [
-                { href: "/accountant/admissions", label: "Admission Requests", icon: UserPlus },
+                { href: "/accountant/admissions", label: "Admission Requests", icon: UserPlus, badge: pendingAdmissions > 0 },
             ],
         },
     ];
