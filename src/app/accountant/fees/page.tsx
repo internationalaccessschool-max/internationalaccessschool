@@ -52,6 +52,7 @@ interface FeeRecord {
         miscFee?: number;
     };
     paymentMode?: "CASH" | "UPI";
+    lateFine?: number;
 }
 
 type MarkPaidType = "school" | "transport" | "both";
@@ -775,15 +776,25 @@ export default function ManageFeesPage() {
         }
     };
 
-    // Mark fee as overdue
+    // Mark fee as overdue — also applies ₹100 late fine if not already applied
     const handleMarkOverdue = async (record: FeeRecord) => {
         setActionLoading(record.id + "_overdue");
         try {
-            await updateDoc(doc(db, record.path), { status: "overdue" });
+            const alreadyFined = record.lateFine && (record.lateFine as number) > 0;
+            const updatePayload: Record<string, any> = { status: "overdue" };
+
+            if (!alreadyFined) {
+                const LATE_FINE = 100;
+                updatePayload.lateFine = LATE_FINE;
+                updatePayload.totalAmount = (record.totalAmount || record.amount || 0) + LATE_FINE;
+                updatePayload.lateFineAppliedOn = new Date();
+            }
+
+            await updateDoc(doc(db, record.path), updatePayload);
             setRecords(prev => prev.map(r =>
-                r.id === record.id ? { ...r, status: "overdue" } : r
+                r.id === record.id ? { ...r, status: "overdue", ...updatePayload } : r
             ));
-            toast.success("Marked as overdue");
+            toast.success(alreadyFined ? "Marked as overdue" : "Marked as overdue + ₹100 late fine applied");
         } catch {
             toast.error("Failed to update status");
         } finally {
