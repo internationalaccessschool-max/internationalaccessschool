@@ -5,8 +5,8 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
-    FileText, Clock, CheckCircle2, XCircle, Search, ChevronDown,
-    Loader2, CalendarDays, User, GraduationCap, X, Trash2
+    FileText, Clock, CheckCircle2, XCircle, Search,
+    Loader2, CalendarDays, User, GraduationCap, X, Trash2, Paperclip
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -29,6 +29,8 @@ interface LeaveApplication {
     reason: string;
     status: LeaveStatus;
     adminNote?: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
     submittedAt: any;
     reviewedAt?: any;
     reviewedBy?: string;
@@ -222,6 +224,12 @@ export default function AdminLeavePage() {
                                                 </span>
                                             </div>
                                             <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{app.reason}</p>
+                                            {app.attachmentUrl && (
+                                                <a href={app.attachmentUrl} target="_blank" rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:underline font-medium">
+                                                    <Paperclip className="w-3 h-3" /> {app.attachmentName || "View Attachment"}
+                                                </a>
+                                            )}
                                             {app.adminNote && (
                                                 <p className={`text-xs mt-1.5 px-2 py-1 rounded-lg ${cfg.bg} ${cfg.color} font-medium`}>
                                                     Note: {app.adminNote}
@@ -292,6 +300,12 @@ export default function AdminLeavePage() {
                                     <p className="text-xs text-gray-400 mb-1">Reason:</p>
                                     <p className="text-sm text-gray-700">{reviewModal.reason}</p>
                                 </div>
+                                {reviewModal.attachmentUrl && (
+                                    <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline font-semibold bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100">
+                                        <Paperclip className="w-3.5 h-3.5" /> {reviewModal.attachmentName || "View Attachment"} ↗
+                                    </a>
+                                )}
                             </div>
                             {/* Admin Note */}
                             <div>
