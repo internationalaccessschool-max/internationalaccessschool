@@ -99,6 +99,13 @@ const TAB_STYLES: Record<string, string> = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+interface TransportBus {
+    id: string;
+    busNumber: string;
+    routeDetails?: string;
+    routes?: { id: string; routeName: string; monthlyFee: number }[];
+}
+
 export default function AdminAdmissionsPage() {
     const [allRequests, setAllRequests] = useState<AdmissionRequest[]>([]);
     const [activeTab, setActiveTab] = useState<TabStatus>("pending");
@@ -110,6 +117,8 @@ export default function AdminAdmissionsPage() {
     const [error, setError] = useState<string | null>(null);
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+    const [buses, setBuses] = useState<TransportBus[]>([]);
+    const [selectedTransport, setSelectedTransport] = useState<string>("NONE");
 
     // ── Current session (derived from today's date — April onwards = current year) ──
     const _now = new Date();
@@ -152,6 +161,12 @@ export default function AdminAdmissionsPage() {
     }, []);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
+
+    useEffect(() => {
+        getDocs(query(collection(db, "transport_buses"), orderBy("busNumber")))
+            .then(snap => setBuses(snap.docs.map(d => ({ id: d.id, ...d.data() } as TransportBus))))
+            .catch(() => {});
+    }, []);
 
     const showToast = (msg: string, type: "success" | "error" = "success") => {
         setToast({ msg, type });
@@ -240,6 +255,7 @@ export default function AdminAdmissionsPage() {
         setDiscountAmt(0);
         setFeePaymentMode("CASH");
         setAdmReceipt(null);
+        setSelectedTransport("NONE");
         setValue("class", req.enrollmentClass || "");
         setError(null);
     };
@@ -344,7 +360,7 @@ export default function AdminAdmissionsPage() {
                     childPhotoUrl: selectedRequest.imageUrl || selectedRequest.childPhotoUrl || "",
                     admissionRequestId: selectedRequest.id,
                     pen: "", aparId: "", udise: "", cbseEnrolmentNo: "",
-                    house: "", transport: "", branch: "", block: "",
+                    house: "", transport: selectedTransport === "NONE" ? "" : selectedTransport, branch: "", block: "",
                     serialNumber: newSerialNumber, religion: "", contact2: "", contact3: "",
                     freeScheme: "", economicallyWeakSection: "No", minorityStatus: "",
                     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -768,6 +784,31 @@ export default function AdminAdmissionsPage() {
                                                 {errors.section && <p className="text-red-500 text-xs mt-1">{errors.section.message}</p>}
                                             </div>
                                         </div>
+                                        {/* Transport Assignment */}
+                                        <div>
+                                            <Label>Transport <span className="text-gray-400 font-normal">(Optional)</span></Label>
+                                            <select
+                                                value={selectedTransport}
+                                                onChange={e => setSelectedTransport(e.target.value)}
+                                                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-navy bg-white"
+                                            >
+                                                <option value="NONE">No Transport (Walk / Self)</option>
+                                                <option value="BUS">Uses Bus (Not Assigned Yet)</option>
+                                                {buses.flatMap(b => {
+                                                    const routes = b.routes && b.routes.length > 0
+                                                        ? b.routes
+                                                        : b.routeDetails
+                                                            ? [{ id: "legacy", routeName: b.routeDetails, monthlyFee: 0 }]
+                                                            : [];
+                                                    return routes.map(r => (
+                                                        <option key={`${b.id}::${r.id}`} value={`${b.id}::${r.id}`}>
+                                                            Bus {b.busNumber} — {r.routeName}{r.monthlyFee ? ` (₹${r.monthlyFee}/mo)` : ""}
+                                                        </option>
+                                                    ));
+                                                })}
+                                            </select>
+                                        </div>
+
                                         <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
                                             <p>🔐 Login will be created automatically:</p>
                                             <p className="font-mono mt-1">Email: <strong>{`{admissionNo}@ias.edu`}</strong></p>
