@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, getDoc, doc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { FileText, Clock, CheckCircle2, XCircle, Plus, X, Loader2, CalendarDays, AlertCircle } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Plus, X, Loader2, CalendarDays, AlertCircle, Paperclip } from "lucide-react";
 import toast from "react-hot-toast";
+import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
 
 const LEAVE_TYPES = ["Sick Leave", "Casual Leave", "Emergency Leave", "Family Function", "Other"];
 
@@ -20,6 +21,8 @@ interface LeaveApplication {
     reason: string;
     status: LeaveStatus;
     adminNote?: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
     submittedAt: any;
 }
 
@@ -43,7 +46,7 @@ export default function StudentLeavePage() {
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const today = new Date().toISOString().split("T")[0];
-    const [form, setForm] = useState({ leaveType: LEAVE_TYPES[0], fromDate: today, toDate: today, reason: "" });
+    const [form, setForm] = useState({ leaveType: LEAVE_TYPES[0], fromDate: today, toDate: today, reason: "", attachmentUrl: "", attachmentName: "" });
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -100,12 +103,13 @@ export default function StudentLeavePage() {
                 toDate: form.toDate,
                 totalDays,
                 reason: form.reason.trim(),
+                ...(form.attachmentUrl && { attachmentUrl: form.attachmentUrl, attachmentName: form.attachmentName }),
                 status: "pending",
                 submittedAt: serverTimestamp(),
             });
             toast.success("Leave application submitted!");
             setShowForm(false);
-            setForm({ leaveType: LEAVE_TYPES[0], fromDate: today, toDate: today, reason: "" });
+            setForm({ leaveType: LEAVE_TYPES[0], fromDate: today, toDate: today, reason: "", attachmentUrl: "", attachmentName: "" });
         } catch {
             toast.error("Failed to submit. Try again.");
         } finally {
@@ -188,6 +192,12 @@ export default function StudentLeavePage() {
                                             <span className="font-semibold text-navy">({app.totalDays} day{app.totalDays !== 1 ? "s" : ""})</span>
                                         </div>
                                         <p className="text-sm text-gray-600 mt-2">{app.reason}</p>
+                                        {app.attachmentUrl && (
+                                            <a href={app.attachmentUrl} target="_blank" rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline">
+                                                <Paperclip className="w-3 h-3" /> {app.attachmentName || "View Attachment"}
+                                            </a>
+                                        )}
                                         {app.adminNote && (
                                             <div className={`mt-2 p-2.5 rounded-lg text-xs font-medium border ${cfg.bg} ${cfg.color}`}>
                                                 <span className="font-bold">Admin Note: </span>{app.adminNote}
@@ -248,6 +258,27 @@ export default function StudentLeavePage() {
                                 <textarea value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} rows={4}
                                     placeholder="Briefly explain your reason for leave…"
                                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy resize-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide flex items-center gap-1">
+                                    <Paperclip className="w-3.5 h-3.5" /> Attachment <span className="normal-case font-normal text-gray-400">(Optional — Medical cert, application, etc.)</span>
+                                </label>
+                                <CloudinaryUpload
+                                    folder="leave-docs"
+                                    subFolder={uid || "general"}
+                                    onUpload={(url, _pid, name) => setForm(p => ({ ...p, attachmentUrl: url, attachmentName: name }))}
+                                    acceptedFileTypes="all"
+                                    maxSizeMB={1}
+                                />
+                                <p className="text-xs text-amber-600 font-medium mt-2 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-start gap-1">
+                                    <span>⚠️</span>
+                                    <span>
+                                        Max 1MB. Compress before uploading —{" "}
+                                        <a href="https://squoosh.app" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Compress Image ↗</a>
+                                        {" · "}
+                                        <a href="https://www.ilovepdf.com/compress_pdf" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Compress PDF ↗</a>
+                                    </span>
+                                </p>
                             </div>
                             <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
                                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
