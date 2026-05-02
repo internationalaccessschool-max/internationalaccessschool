@@ -260,19 +260,29 @@ export default function AdminAdmissionsPage() {
         setError(null);
     };
 
-    // ── Step 1 → Step 2: save admission details, fetch fee structure ──
+    // ── Step 1 → Step 2: check uniqueness + fetch fee structure ──
     const onAcceptSubmit = async (data: AcceptFormValues) => {
         if (!selectedRequest) return;
         setIsLoading(true);
         setError(null);
         try {
+            // Check admission number not already in use
+            const admNoTrimmed = data.admissionNo.trim();
+            const existing = await getDocs(
+                query(collection(db, "studentLookup"), where("admissionNumber", "==", admNoTrimmed))
+            );
+            if (!existing.empty) {
+                setError("This Admission Number is already used. Try a different one.");
+                return;
+            }
+
             const normClass = data.class.trim().replace(/^class\s*/i, "").trim();
             const fsDoc = await getDoc(doc(db, "fees", "structure", "classes", normClass));
             setFeeStructure(fsDoc.exists() ? fsDoc.data() : null);
             setAdmData({ ...data, class: normClass });
             setAdmStep(2);
         } catch (e: any) {
-            setError("Failed to fetch fee structure: " + e.message);
+            setError("Failed: " + e.message);
         } finally {
             setIsLoading(false);
         }
@@ -997,7 +1007,7 @@ export default function AdminAdmissionsPage() {
                                     {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">{error}</div>}
 
                                     <div className="flex gap-3 pt-2">
-                                        <Button type="button" variant="outline" className="flex-1" onClick={() => setAdmStep(1)}>
+                                        <Button type="button" variant="outline" className="flex-1" onClick={() => { setAdmStep(1); setError(null); }}>
                                             Back
                                         </Button>
                                         <Button type="button" disabled={isLoading} onClick={onFeeConfirm}
