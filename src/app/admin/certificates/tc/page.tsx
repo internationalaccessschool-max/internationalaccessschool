@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { collectionGroup, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw } from "lucide-react";
+import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -403,11 +403,13 @@ export default function TransferCertificatePage() {
     <div className="mb-1.5">
       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-0.5">{label}</label>
       {multiline ? (
-        <textarea value={tcData[key]} onChange={e => setTcData(p => ({ ...p, [key]: e.target.value }))}
-          rows={2} className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20 resize-none" />
+        <textarea value={tcData[key]} onChange={e => !alreadyGenerated && setTcData(p => ({ ...p, [key]: e.target.value }))}
+          readOnly={alreadyGenerated} rows={2}
+          className={`w-full border rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none resize-none ${alreadyGenerated ? "bg-slate-50 border-slate-100 text-slate-500 cursor-not-allowed" : "border-slate-200 focus:border-navy focus:ring-1 focus:ring-navy/20"}`} />
       ) : (
-        <input value={tcData[key]} onChange={e => setTcData(p => ({ ...p, [key]: e.target.value }))}
-          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy/20" />
+        <input value={tcData[key]} onChange={e => !alreadyGenerated && setTcData(p => ({ ...p, [key]: e.target.value }))}
+          readOnly={alreadyGenerated}
+          className={`w-full border rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none ${alreadyGenerated ? "bg-slate-50 border-slate-100 text-slate-500 cursor-not-allowed" : "border-slate-200 focus:border-navy focus:ring-1 focus:ring-navy/20"}`} />
       )}
     </div>
   );
