@@ -23,6 +23,9 @@ interface Student {
     section?: string;
     mobileNo?: string;
     transport?: string;
+    address?: string;
+    village?: string;
+    city?: string;
     [key: string]: any;
 }
 
@@ -68,6 +71,8 @@ export default function SupervisorTransportPage() {
         const raw = `${s.firstName || ""} ${s.middleName || ""} ${s.lastName || ""}`.replace(/\s+/g, " ").trim();
         return raw || s.name || "Unknown Student";
     };
+
+    const getStudentAddress = (s: Student) => s.address || s.village || s.city || "";
 
     const getBusByTransportString = (ts: string) =>
         buses.find(b => b.id === ts) || null;
@@ -238,12 +243,13 @@ export default function SupervisorTransportPage() {
                                                 <th className="h-12 px-4 text-left font-semibold text-gray-500">Student Name</th>
                                                 <th className="h-12 px-4 text-left font-semibold text-gray-500">Class</th>
                                                 <th className="h-12 px-4 text-left font-semibold text-gray-500">Contact</th>
+                                                <th className="h-12 px-4 text-left font-semibold text-gray-500">Address</th>
                                                 <th className="h-12 px-4 text-left font-semibold text-gray-500">Assigned Bus</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-50">
                                             {filteredStudents.length === 0 ? (
-                                                <tr><td colSpan={4} className="p-12 text-center text-gray-400">No students found.</td></tr>
+                                                <tr><td colSpan={5} className="p-12 text-center text-gray-400">No students found.</td></tr>
                                             ) : filteredStudents.map(student => {
                                                 const busId = student.transport || "";
                                                 const assignedBus = getBusByTransportString(busId);
@@ -256,6 +262,9 @@ export default function SupervisorTransportPage() {
                                                         </td>
                                                         <td className="p-4 text-gray-600">{student.className} {student.section}</td>
                                                         <td className="p-4 text-gray-600">{student.mobileNo || "—"}</td>
+                                                        <td className="p-4 text-gray-500 text-xs max-w-[160px]">
+                                                            {getStudentAddress(student) || <span className="text-gray-300">—</span>}
+                                                        </td>
                                                         <td className="p-4">
                                                             {isUnassigned ? (
                                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-100">
