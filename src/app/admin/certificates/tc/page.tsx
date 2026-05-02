@@ -103,7 +103,7 @@ const defaultTC = (): TCData => ({
   nationality: "INDIAN", category: "NO",
   classAtAdmission: "", admissionDate: "",
   lastClassFigures: "", lastClassWords: "",
-  board: "AISSE - 2024 (QUALIFIED)", failed: "NO",
+  board: "AISSE - " + new Date().getFullYear() + " (QUALIFIED)", failed: "NO",
   subjects: "English, Hindi, Mathematics, Urdu, Science, Social Science, GK & Computer",
   qualified: "YES", ifSoClass: "", qualifiedClass: "",
   workingDays: "207", presentDays: "195",
@@ -185,9 +185,9 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string, udiseSchool:
       <td style="text-align:center;vertical-align:middle">
         <div style="font-size:20px;font-weight:bold;color:#1a1a5e;letter-spacing:1px">INTERNATIONAL ACCESS SCHOOL</div>
         <div style="font-size:9px;color:#444;margin-top:2px">Managed by: International Board of Educational Research Trust (IBERT)</div>
-        <div style="font-size:9px;color:#444">Affiliated to CBSE(II) New Delhi &nbsp;Aff. No.: 330691 &nbsp;|&nbsp; School Code: 65688</div>
-        <div style="font-size:9px;color:#444">Siwan, Bihar – 841227 &nbsp;&nbsp;Ph: +91-9934776670, 8406000829/30/31/40</div>
-        <div style="font-size:9px;color:#444">Email: info@aschool.edu.in &nbsp;|&nbsp; Web: www.iaschool.edu.in</div>
+        <div style="font-size:9px;color:#444">Affiliated to CBSE(10+2) New Delhi &nbsp;Aff. No.: 330691 &nbsp;|&nbsp; School Code: 65688</div>
+        <div style="font-size:9px;color:#444">Siwan, Bihar – 841227 &nbsp;&nbsp;Ph: +91-9934776670, 8406000829/30/33/40</div>
+        <div style="font-size:9px;color:#444">Email: info@iaschool.edu.in &nbsp;|&nbsp; Web: www.iaschool.edu.in</div>
       </td>
       <td style="width:70px;text-align:right;vertical-align:top;font-size:8px;color:#666">
         <div style="border:1px solid #aaa;padding:2px 5px;display:inline-block;margin-bottom:3px">ISO 9001·2005</div><br/>
@@ -313,7 +313,7 @@ export default function TransferCertificatePage() {
         admissionDate: formatDate(safeStr(s.dateOfAdmission)),
         lastClassFigures: lastCls ? `STD - ${lastCls}` : "",
         lastClassWords: lastNum ? `(in words) ${numToWords(lastNum)}` : "",
-        board: safeStr(s.previousBoard) || "AISSE - 2024 (QUALIFIED)",
+        board: safeStr(s.previousBoard) || "AISSE - " + new Date().getFullYear() + " (QUALIFIED)",
         failed: "NO",
         subjects: subjectsStr,
         qualified: "YES",
@@ -510,9 +510,9 @@ export default function TransferCertificatePage() {
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
                       <div style={{ fontSize: "18px", fontWeight: "bold", color: "#1a1a5e", letterSpacing: "1px" }}>INTERNATIONAL ACCESS SCHOOL</div>
                       <div style={{ fontSize: "8px", color: "#555", marginTop: "2px" }}>Managed by: International Board of Educational Research Trust (IBERT)</div>
-                      <div style={{ fontSize: "8px", color: "#555" }}>Affiliated to CBSE(II) New Delhi Aff. No.: 330691 | School Code: 65688</div>
-                      <div style={{ fontSize: "8px", color: "#555" }}>Siwan, Bihar – 841227  Ph: +91-9934776670, 8406000829/30/31/40</div>
-                      <div style={{ fontSize: "8px", color: "#555" }}>Email: info@aschool.edu.in | Web: www.iaschool.edu.in</div>
+                      <div style={{ fontSize: "8px", color: "#555" }}>Affiliated to CBSE(10+2) New Delhi Aff. No.: 330691 | School Code: 65688</div>
+                      <div style={{ fontSize: "8px", color: "#555" }}>Siwan, Bihar – 841227  Ph: +91-9934776670, 8406000829/30/33/40</div>
+                      <div style={{ fontSize: "8px", color: "#555" }}>Email: info@iaschool.edu.in | Web: www.iaschool.edu.in</div>
                     </td>
                     <td style={{ width: "65px", textAlign: "right", verticalAlign: "top", fontSize: "7px", color: "#888" }}>
                       <div style={{ border: "1px solid #ccc", padding: "2px 4px", display: "inline-block", marginBottom: "3px" }}>ISO 9001·2005</div><br />
