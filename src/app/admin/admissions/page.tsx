@@ -390,12 +390,13 @@ export default function AdminAdmissionsPage() {
         setIsLoading(true);
         setError(null);
         try {
-            // Check admission number not already in use
+            // Check admission number not already in use (check both studentLookup AND profiles)
             const admNoTrimmed = data.admissionNo.trim();
-            const existing = await getDocs(
-                query(collection(db, "studentLookup"), where("admissionNumber", "==", admNoTrimmed))
-            );
-            if (!existing.empty) {
+            const [lookupSnap, profilesSnap] = await Promise.all([
+                getDocs(query(collection(db, "studentLookup"), where("admissionNumber", "==", admNoTrimmed))),
+                getDocs(query(collectionGroup(db, "profiles"), where("admissionNumber", "==", admNoTrimmed))),
+            ]);
+            if (!lookupSnap.empty || !profilesSnap.empty) {
                 setError("This Admission Number is already used. Try a different one.");
                 return;
             }
