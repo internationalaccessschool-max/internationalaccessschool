@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collectionGroup, getDocs, doc, getDoc } from "firebase/firestore";
+import { collectionGroup, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Search, Printer, Loader2, UserCircle2, Edit3, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
@@ -263,17 +263,33 @@ export default function TransferCertificatePage() {
   const [tcData, setTcData] = useState<TCData>(defaultTC());
   const [notFound, setNotFound] = useState(false);
   const [udiseSchool, setUdiseSchool] = useState<"IAS" | "IPS">("IAS");
+  const [alreadyGenerated, setAlreadyGenerated] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string>("");
 
   const handleSearch = async () => {
     const trimmed = enr.trim();
     if (!trimmed) { toast.error("Enter an Admission Number"); return; }
-    setIsSearching(true); setNotFound(false); setStudent(null);
+    setIsSearching(true); setNotFound(false); setStudent(null); setAlreadyGenerated(false); setGeneratedAt("");
     try {
       const snap = await getDocs(collectionGroup(db, "profiles"));
       const found = snap.docs.find(d => safeStr(d.data().admissionNumber) === trimmed);
       if (!found) { setNotFound(true); return; }
       const s = { id: found.id, ...found.data() } as Student;
       setStudent(s);
+
+      // Check if TC already generated
+      const docKey = trimmed.replace(/\//g, "_");
+      const existingSnap = await getDoc(doc(db, "generatedTC", docKey));
+      if (existingSnap.exists()) {
+        const saved = existingSnap.data();
+        setTcData(saved.tcData as TCData);
+        setUdiseSchool(saved.udiseSchool || "IAS");
+        const at = saved.generatedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) || "";
+        setGeneratedAt(at);
+        setAlreadyGenerated(true);
+        toast("TC already generated — showing saved copy.", { icon: "📋" });
+        return;
+      }
 
       const today = new Date().toISOString().slice(0, 10);
       const todayFmt = formatDate(today);
@@ -340,9 +356,8 @@ export default function TransferCertificatePage() {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!student) return;
-    // Build absolute logo URL from current origin
     const logoUrl = `${window.location.origin}/LOGO.png`;
     const html = buildPrintHTML(tcData, student.admissionNumber, logoUrl, udiseSchool, UDISE_CODES[udiseSchool]);
     const win = window.open("", "_blank", "width=900,height=700");
@@ -350,9 +365,38 @@ export default function TransferCertificatePage() {
     win.document.open();
     win.document.write(html);
     win.document.close();
-    // Wait for logo to load before printing
     win.onload = () => { win.focus(); win.print(); };
     setTimeout(() => { try { win.focus(); win.print(); } catch { /* already printed */ } }, 1200);
+
+    // Save to Firestore on first print
+    if (!alreadyGenerated) {
+      try {
+        const docKey = student.admissionNumber.replace(/\//g, "_");
+        await setDoc(doc(db, "generatedTC", docKey), {
+          tcData,
+          udiseSchool,
+          studentName: tcData.studentName,
+          admissionNumber: student.admissionNumber,
+          generatedAt: serverTimestamp(),
+        });
+        setAlreadyGenerated(true);
+        setGeneratedAt(new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }));
+      } catch { /* silent — print still works */ }
+    }
+  };
+
+  const handleIssueNew = async () => {
+    if (!student) return;
+    if (!confirm("Issue a new TC for this student? The previous record will be removed.")) return;
+    try {
+      const docKey = student.admissionNumber.replace(/\//g, "_");
+      await deleteDoc(doc(db, "generatedTC", docKey));
+      setAlreadyGenerated(false);
+      setGeneratedAt("");
+      toast.success("Previous TC cleared. You can now edit and print a new one.");
+    } catch {
+      toast.error("Failed to clear. Try again.");
+    }
   };
 
   const field = (key: keyof TCData, label: string, multiline?: boolean) => (
@@ -398,7 +442,7 @@ export default function TransferCertificatePage() {
             {isSearching ? "Searching…" : "Search"}
           </button>
           {student && (
-            <button onClick={() => { setStudent(null); setEnr(""); setTcData(defaultTC()); setNotFound(false); }}
+            <button onClick={() => { setStudent(null); setEnr(""); setTcData(defaultTC()); setNotFound(false); setAlreadyGenerated(false); setGeneratedAt(""); }}
               className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors">
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
@@ -423,6 +467,25 @@ export default function TransferCertificatePage() {
         )}
       </div>
 
+      {/* Already Generated Banner */}
+      {student && alreadyGenerated && (
+        <div className="flex items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-bold text-amber-800 text-sm">TC Already Generated</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Previously issued{generatedAt ? ` on ${generatedAt}` : ""}. Showing saved copy — you can only print it.
+              </p>
+            </div>
+          </div>
+          <button onClick={handleIssueNew}
+            className="shrink-0 px-3 py-1.5 border border-amber-300 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
+            Issue New TC
+          </button>
+        </div>
+      )}
+
       {/* Form + Preview */}
       {student ? (
         <div className="grid xl:grid-cols-5 gap-6">
@@ -430,8 +493,13 @@ export default function TransferCertificatePage() {
           <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 space-y-1">
             <div className="flex items-center gap-2 mb-3">
               <Edit3 className="w-4 h-4 text-navy" />
-              <h2 className="font-bold text-navy text-sm">Customize TC Fields</h2>
+              <h2 className="font-bold text-navy text-sm">{alreadyGenerated ? "TC Fields (Read-only)" : "Customize TC Fields"}</h2>
             </div>
+            {alreadyGenerated && (
+              <div className="mb-3 p-2.5 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-700 font-medium">
+                🔒 Fields are locked. Click "Issue New TC" above to make changes.
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {field("bookNo", "Book No.")}
               {field("slNo", "Sl. No.")}
