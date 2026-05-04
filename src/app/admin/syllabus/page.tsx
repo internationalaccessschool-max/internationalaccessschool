@@ -3,13 +3,21 @@
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Plus, Trash2, Pencil, Save, X, ChevronUp, ChevronDown, BookOpen, Loader2, CheckCircle2, Clock, Circle } from "lucide-react";
+import { Plus, Trash2, Pencil, Save, X, ChevronUp, ChevronDown, BookOpen, Loader2, CheckCircle2, Clock, Circle, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 
 const CLASSES = ["NUR", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const DURATION_UNITS = ["Days", "Weeks", "Periods"];
 const STATUSES = ["upcoming", "ongoing", "completed"] as const;
 type ChapterStatus = typeof STATUSES[number];
+type ExamType = "unit_test_1" | "half_yearly" | "unit_test_2" | "annual";
+
+const EXAMS: { key: ExamType; label: string; color: string; bg: string; border: string; badge: string }[] = [
+    { key: "unit_test_1", label: "Unit Test 1",  color: "text-indigo-700",  bg: "bg-indigo-50",  border: "border-indigo-200",  badge: "bg-indigo-100 text-indigo-700"  },
+    { key: "half_yearly", label: "Half Yearly",  color: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   badge: "bg-amber-100 text-amber-700"    },
+    { key: "unit_test_2", label: "Unit Test 2",  color: "text-purple-700",  bg: "bg-purple-50",  border: "border-purple-200",  badge: "bg-purple-100 text-purple-700"  },
+    { key: "annual",      label: "Annual Exam",  color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", badge: "bg-emerald-100 text-emerald-700" },
+];
 
 interface Chapter {
     id: string;
@@ -19,6 +27,7 @@ interface Chapter {
     description: string;
     status: ChapterStatus;
     order: number;
+    exam: ExamType;
 }
 
 const STATUS_CONFIG: Record<ChapterStatus, { label: string; icon: any; color: string; bg: string }> = {
@@ -28,8 +37,7 @@ const STATUS_CONFIG: Record<ChapterStatus, { label: string; icon: any; color: st
 };
 
 const docId = (cls: string, subject: string) => `${cls}_${subject.replace(/\s+/g, "_")}`;
-
-const EMPTY_CHAPTER = (): Omit<Chapter, "id" | "order"> => ({
+const EMPTY_CHAPTER = (): Omit<Chapter, "id" | "order" | "exam"> => ({
     title: "", duration: "1", durationUnit: "Weeks", description: "", status: "upcoming"
 });
 
@@ -41,15 +49,15 @@ export default function AdminSyllabusPage() {
     const [chapters, setChapters] = useState<Chapter[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [openExams, setOpenExams] = useState<Set<ExamType>>(new Set(["unit_test_1"]));
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState(EMPTY_CHAPTER());
-    const [showAddForm, setShowAddForm] = useState(false);
+    const [addingExam, setAddingExam] = useState<ExamType | null>(null);
     const [addForm, setAddForm] = useState(EMPTY_CHAPTER());
 
     const key = docId(selectedClass, selectedSubject);
 
-    // Load configured subjects for selected class
     useEffect(() => {
         setSubjectsLoading(true);
         setSelectedSubject("");
@@ -64,19 +72,23 @@ export default function AdminSyllabusPage() {
     }, [selectedClass]);
 
     useEffect(() => {
+        if (!selectedSubject) return;
         const fetch = async () => {
             setLoading(true);
             setEditingId(null);
-            setShowAddForm(false);
+            setAddingExam(null);
             try {
                 const snap = await getDoc(doc(db, "syllabus", key));
-                if (snap.exists()) setChapters((snap.data().chapters || []).sort((a: Chapter, b: Chapter) => a.order - b.order));
-                else setChapters([]);
+                if (snap.exists()) {
+                    const raw: any[] = snap.data().chapters || [];
+                    // Backward compat: chapters without exam → unit_test_1
+                    setChapters(raw.map(c => ({ ...c, exam: c.exam || "unit_test_1" })).sort((a, b) => a.order - b.order));
+                } else setChapters([]);
             } catch { toast.error("Failed to load syllabus"); }
             finally { setLoading(false); }
         };
         fetch();
-    }, [key]);
+    }, [key, selectedSubject]);
 
     const save = async (updated: Chapter[]) => {
         setSaving(true);
@@ -90,12 +102,13 @@ export default function AdminSyllabusPage() {
         finally { setSaving(false); }
     };
 
-    const addChapter = async () => {
+    const addChapter = async (exam: ExamType) => {
         if (!addForm.title.trim()) { toast.error("Chapter title required"); return; }
-        const newChapter: Chapter = { ...addForm, id: Date.now().toString(), order: chapters.length + 1 };
+        const examChapters = chapters.filter(c => c.exam === exam);
+        const newChapter: Chapter = { ...addForm, id: Date.now().toString(), order: chapters.length + 1, exam };
         await save([...chapters, newChapter]);
         setAddForm(EMPTY_CHAPTER());
-        setShowAddForm(false);
+        setAddingExam(null);
         toast.success("Chapter added");
     };
 
@@ -115,23 +128,33 @@ export default function AdminSyllabusPage() {
     };
 
     const moveChapter = async (id: string, dir: "up" | "down") => {
-        const idx = chapters.findIndex(c => c.id === id);
+        const examType = chapters.find(c => c.id === id)?.exam;
+        if (!examType) return;
+        const examChaps = chapters.filter(c => c.exam === examType);
+        const idx = examChaps.findIndex(c => c.id === id);
         if (dir === "up" && idx === 0) return;
-        if (dir === "down" && idx === chapters.length - 1) return;
-        const arr = [...chapters];
+        if (dir === "down" && idx === examChaps.length - 1) return;
+        const arr = [...examChaps];
         const swapIdx = dir === "up" ? idx - 1 : idx + 1;
         [arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]];
-        const reordered = arr.map((c, i) => ({ ...c, order: i + 1 }));
-        await save(reordered);
+        const otherChaps = chapters.filter(c => c.exam !== examType);
+        await save([...otherChaps, ...arr].map((c, i) => ({ ...c, order: i + 1 })));
     };
 
     const changeStatus = async (id: string, status: ChapterStatus) => {
-        const updated = chapters.map(c => c.id === id ? { ...c, status } : c);
-        await save(updated);
+        await save(chapters.map(c => c.id === id ? { ...c, status } : c));
     };
 
-    const ChapterForm = ({ form, setForm, onSave, onCancel, label }: any) => (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+    const toggleExam = (exam: ExamType) => {
+        setOpenExams(prev => {
+            const next = new Set(prev);
+            next.has(exam) ? next.delete(exam) : next.add(exam);
+            return next;
+        });
+    };
+
+    const ChapterForm = ({ form, setForm, onSave, onCancel, label, examColor }: any) => (
+        <div className={`border rounded-xl p-4 space-y-3 ${examColor}`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Chapter Title *</label>
@@ -159,7 +182,7 @@ export default function AdminSyllabusPage() {
                 </div>
                 <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Description / Topics Covered</label>
-                    <textarea value={form.description} onChange={e => setForm((p: any) => ({ ...p, description: e.target.value }))} rows={3}
+                    <textarea value={form.description} onChange={e => setForm((p: any) => ({ ...p, description: e.target.value }))} rows={2}
                         placeholder="Topics, subtopics, learning objectives…"
                         className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white resize-none" />
                 </div>
@@ -174,8 +197,8 @@ export default function AdminSyllabusPage() {
         </div>
     );
 
-    const completed = chapters.filter(c => c.status === "completed").length;
-    const ongoing   = chapters.filter(c => c.status === "ongoing").length;
+    const totalCompleted = chapters.filter(c => c.status === "completed").length;
+    const totalOngoing   = chapters.filter(c => c.status === "ongoing").length;
 
     return (
         <div className="space-y-6">
@@ -184,7 +207,7 @@ export default function AdminSyllabusPage() {
                 <div className="relative z-10">
                     <p className="text-white/50 text-sm">Admin Console</p>
                     <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">📚 Syllabus Manager</h1>
-                    <p className="text-white/40 text-sm mt-2">Manage class-wise subject syllabus and chapter progress.</p>
+                    <p className="text-white/40 text-sm mt-2">Manage class-wise subject syllabus — exam section wise.</p>
                 </div>
             </div>
 
@@ -206,7 +229,7 @@ export default function AdminSyllabusPage() {
                             </div>
                         ) : classSubjects.length === 0 ? (
                             <div className="px-4 py-2.5 border border-amber-200 rounded-xl bg-amber-50 text-xs text-amber-700">
-                                No subjects configured for this class. Go to <span className="font-semibold">Class Subjects</span> to add them.
+                                No subjects configured. Go to <span className="font-semibold">Class Subjects</span> to add them.
                             </div>
                         ) : (
                             <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
@@ -218,112 +241,157 @@ export default function AdminSyllabusPage() {
                 </div>
                 {chapters.length > 0 && (
                     <div className="flex gap-4 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
-                        <span className="text-emerald-600 font-semibold">{completed} Completed</span>
-                        <span className="text-amber-600 font-semibold">{ongoing} Ongoing</span>
-                        <span className="text-gray-400">{chapters.length - completed - ongoing} Upcoming</span>
+                        <span className="text-emerald-600 font-semibold">{totalCompleted} Completed</span>
+                        <span className="text-amber-600 font-semibold">{totalOngoing} Ongoing</span>
+                        <span className="text-gray-400">{chapters.length - totalCompleted - totalOngoing} Upcoming</span>
                         <span className="ml-auto text-gray-400">{chapters.length} total chapters</span>
                     </div>
                 )}
             </div>
 
-            {/* Progress bar */}
+            {/* Overall progress */}
             {chapters.length > 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
                     <div className="flex justify-between text-xs text-gray-500 mb-2">
-                        <span className="font-semibold">Syllabus Progress — Class {selectedClass} · {selectedSubject}</span>
-                        <span className="font-bold text-emerald-600">{Math.round((completed / chapters.length) * 100)}% completed</span>
+                        <span className="font-semibold">Overall Progress — {selectedSubject}</span>
+                        <span className="font-bold text-emerald-600">{Math.round((totalCompleted / chapters.length) * 100)}% completed</span>
                     </div>
                     <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                        <div className="bg-emerald-500 h-full transition-all" style={{ width: `${(completed / chapters.length) * 100}%` }} />
-                        <div className="bg-amber-400 h-full transition-all" style={{ width: `${(ongoing / chapters.length) * 100}%` }} />
-                    </div>
-                    <div className="flex gap-4 mt-2 text-[10px] text-gray-400">
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Completed</span>
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Ongoing</span>
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200 inline-block" /> Upcoming</span>
+                        <div className="bg-emerald-500 h-full transition-all" style={{ width: `${(totalCompleted / chapters.length) * 100}%` }} />
+                        <div className="bg-amber-400 h-full transition-all" style={{ width: `${(totalOngoing / chapters.length) * 100}%` }} />
                     </div>
                 </div>
             )}
 
-            {/* Chapters */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-navy">Chapters</h2>
-                    <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_CHAPTER()); setEditingId(null); }}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-gold hover:bg-gold/90 text-navy text-xs font-semibold rounded-xl transition-colors">
-                        <Plus className="w-3.5 h-3.5" /> Add Chapter
-                    </button>
-                </div>
+            {/* Exam Sections */}
+            {loading ? (
+                <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-navy" /></div>
+            ) : !selectedSubject ? null : (
+                <div className="space-y-4">
+                    {EXAMS.map(exam => {
+                        const examChapters = chapters.filter(c => c.exam === exam.key);
+                        const examCompleted = examChapters.filter(c => c.status === "completed").length;
+                        const isOpen = openExams.has(exam.key);
 
-                {showAddForm && (
-                    <ChapterForm form={addForm} setForm={setAddForm} onSave={addChapter}
-                        onCancel={() => setShowAddForm(false)} label="Add Chapter" />
-                )}
-
-                {loading ? (
-                    <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-navy" /></div>
-                ) : chapters.length === 0 && !showAddForm ? (
-                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 py-14 text-center">
-                        <BookOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                        <p className="text-sm font-semibold text-gray-400">No chapters yet</p>
-                        <p className="text-xs text-gray-400 mt-1">Click "Add Chapter" to start building the syllabus</p>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {chapters.map((ch, idx) => {
-                            const cfg = STATUS_CONFIG[ch.status];
-                            const Icon = cfg.icon;
-                            return (
-                                <div key={ch.id}>
-                                    {editingId === ch.id ? (
-                                        <ChapterForm form={editForm} setForm={setEditForm}
-                                            onSave={updateChapter} onCancel={() => setEditingId(null)} label="Save Changes" />
-                                    ) : (
-                                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-                                            <div className="flex items-start gap-3">
-                                                {/* Order number */}
-                                                <div className="w-8 h-8 rounded-lg bg-navy/5 flex items-center justify-center shrink-0 font-bold text-navy text-sm">{idx + 1}</div>
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-bold text-navy">{ch.title}</span>
-                                                        <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
-                                                            <Icon className="w-3 h-3" /> {cfg.label}
-                                                        </span>
-                                                        <span className="text-xs text-gray-400">{ch.duration} {ch.durationUnit}</span>
-                                                    </div>
-                                                    {ch.description && <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{ch.description}</p>}
-                                                    {/* Status changer */}
-                                                    <div className="flex gap-1 mt-2">
-                                                        {STATUSES.map(s => (
-                                                            <button key={s} onClick={() => changeStatus(ch.id, s)}
-                                                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${ch.status === s ? `${STATUS_CONFIG[s].bg} ${STATUS_CONFIG[s].color} border-transparent` : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"}`}>
-                                                                {STATUS_CONFIG[s].label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                {/* Actions */}
-                                                <div className="flex flex-col gap-1 shrink-0">
-                                                    <div className="flex gap-1">
-                                                        <button onClick={() => moveChapter(ch.id, "up")} disabled={idx === 0} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
-                                                        <button onClick={() => moveChapter(ch.id, "down")} disabled={idx === chapters.length - 1} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button onClick={() => { setEditingId(ch.id); setEditForm({ title: ch.title, duration: ch.duration, durationUnit: ch.durationUnit, description: ch.description, status: ch.status }); setShowAddForm(false); }}
-                                                            className="p-1.5 rounded-lg hover:bg-navy/5 text-gray-400 hover:text-navy"><Pencil className="w-3.5 h-3.5" /></button>
-                                                        <button onClick={() => deleteChapter(ch.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                                                    </div>
-                                                </div>
+                        return (
+                            <div key={exam.key} className={`rounded-2xl border ${exam.border} overflow-hidden shadow-sm`}>
+                                {/* Section Header */}
+                                <button
+                                    onClick={() => toggleExam(exam.key)}
+                                    className={`w-full flex items-center justify-between px-5 py-4 ${exam.bg} hover:opacity-90 transition-opacity`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-base font-bold ${exam.color}`}>{exam.label}</span>
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${exam.badge}`}>
+                                            {examChapters.length} chapters
+                                        </span>
+                                        {examChapters.length > 0 && (
+                                            <span className="text-xs text-gray-500 font-medium">
+                                                {examCompleted}/{examChapters.length} done
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {examChapters.length > 0 && (
+                                            <div className="w-24 h-2 bg-white/60 rounded-full overflow-hidden hidden sm:block">
+                                                <div className="bg-emerald-500 h-full rounded-full transition-all"
+                                                    style={{ width: `${examChapters.length > 0 ? (examCompleted / examChapters.length) * 100 : 0}%` }} />
                                             </div>
+                                        )}
+                                        <ChevronDown className={`w-4 h-4 ${exam.color} transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                    </div>
+                                </button>
+
+                                {/* Section Body */}
+                                {isOpen && (
+                                    <div className="p-4 space-y-3 bg-white">
+                                        {/* Add Chapter button */}
+                                        <div className="flex justify-end">
+                                            <button
+                                                onClick={() => { setAddingExam(exam.key); setAddForm(EMPTY_CHAPTER()); setEditingId(null); }}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors ${exam.border} ${exam.color} ${exam.bg} hover:opacity-80`}>
+                                                <Plus className="w-3.5 h-3.5" /> Add Chapter
+                                            </button>
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+
+                                        {/* Add form */}
+                                        {addingExam === exam.key && (
+                                            <ChapterForm form={addForm} setForm={setAddForm}
+                                                onSave={() => addChapter(exam.key)}
+                                                onCancel={() => setAddingExam(null)}
+                                                label="Add Chapter"
+                                                examColor={`${exam.bg} border ${exam.border}`}
+                                            />
+                                        )}
+
+                                        {/* Empty state */}
+                                        {examChapters.length === 0 && addingExam !== exam.key && (
+                                            <div className="py-8 text-center">
+                                                <BookOpen className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                                                <p className="text-xs text-gray-400">No chapters added for {exam.label} yet.</p>
+                                            </div>
+                                        )}
+
+                                        {/* Chapters list */}
+                                        <div className="space-y-2">
+                                            {examChapters.map((ch, idx) => {
+                                                const cfg = STATUS_CONFIG[ch.status];
+                                                const Icon = cfg.icon;
+                                                return (
+                                                    <div key={ch.id}>
+                                                        {editingId === ch.id ? (
+                                                            <ChapterForm form={editForm} setForm={setEditForm}
+                                                                onSave={updateChapter} onCancel={() => setEditingId(null)}
+                                                                label="Save Changes"
+                                                                examColor={`${exam.bg} border ${exam.border}`}
+                                                            />
+                                                        ) : (
+                                                            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+                                                                <div className="flex items-start gap-3">
+                                                                    <div className={`w-7 h-7 rounded-lg ${exam.bg} flex items-center justify-center shrink-0 font-bold ${exam.color} text-xs`}>{idx + 1}</div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                            <span className="font-bold text-navy">{ch.title}</span>
+                                                                            <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
+                                                                                <Icon className="w-3 h-3" /> {cfg.label}
+                                                                            </span>
+                                                                            <span className="text-xs text-gray-400">{ch.duration} {ch.durationUnit}</span>
+                                                                        </div>
+                                                                        {ch.description && <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{ch.description}</p>}
+                                                                        <div className="flex gap-1 mt-2">
+                                                                            {STATUSES.map(s => (
+                                                                                <button key={s} onClick={() => changeStatus(ch.id, s)}
+                                                                                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${ch.status === s ? `${STATUS_CONFIG[s].bg} ${STATUS_CONFIG[s].color} border-transparent` : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"}`}>
+                                                                                    {STATUS_CONFIG[s].label}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex flex-col gap-1 shrink-0">
+                                                                        <div className="flex gap-1">
+                                                                            <button onClick={() => moveChapter(ch.id, "up")} disabled={idx === 0} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                                                                            <button onClick={() => moveChapter(ch.id, "down")} disabled={idx === examChapters.length - 1} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                                                                        </div>
+                                                                        <div className="flex gap-1">
+                                                                            <button onClick={() => { setEditingId(ch.id); setEditForm({ title: ch.title, duration: ch.duration, durationUnit: ch.durationUnit, description: ch.description, status: ch.status }); setAddingExam(null); }}
+                                                                                className="p-1.5 rounded-lg hover:bg-navy/5 text-gray-400 hover:text-navy"><Pencil className="w-3.5 h-3.5" /></button>
+                                                                            <button onClick={() => deleteChapter(ch.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }
