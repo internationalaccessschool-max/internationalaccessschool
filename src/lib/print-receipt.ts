@@ -45,6 +45,7 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f3f4f6; font-family: Arial, Helvetica, sans-serif; }
 
+    /* === LANDSCAPE (default / horizontal paper) === */
     .page {
       width: 210mm;
       height: 148.5mm;
@@ -54,26 +55,31 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
       flex-direction: row;
       box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     }
-
     .slip {
       width: 50%;
       height: 100%;
-      padding: 8mm 8mm;
+      padding: 6mm 7mm;
       overflow: hidden;
       border-right: 1.5px dashed #94a3b8;
+      border-bottom: none;
       position: relative;
     }
     .slip:last-child { border-right: none; }
 
-    /* Watermark — uses embedded base64 logo */
+    /* === PORTRAIT (vertical paper) === */
+    @media (orientation: portrait) {
+      .page { width: 148.5mm; height: 210mm; flex-direction: column; }
+      .slip { width: 100%; height: 50%; border-right: none; border-bottom: 1.5px dashed #94a3b8; }
+      .slip:last-child { border-bottom: none; }
+    }
+
+    /* Watermark */
     .slip::before {
       content: '';
       position: absolute;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 55%;
-      height: 55%;
+      width: 55%; height: 55%;
       background-image: url('${logoDataURI}');
       background-repeat: no-repeat;
       background-position: center;
@@ -104,9 +110,21 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
         color-adjust: exact !important;
       }
       body { background: #fff; }
-      .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; }
-      .slip { border-right: 1.5px dashed #94a3b8; }
-      @page { size: 210mm 148.5mm; margin: 0; }
+      @page { size: auto; margin: 0; }
+
+      /* Landscape print */
+      @media (orientation: landscape) {
+        .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; flex-direction: row; }
+        .slip { width: 50%; height: 100%; border-right: 1.5px dashed #94a3b8; border-bottom: none; }
+        .slip:last-child { border-right: none; border-bottom: none; }
+      }
+
+      /* Portrait print */
+      @media (orientation: portrait) {
+        .page { margin: 0; box-shadow: none; width: 148.5mm; height: 210mm; flex-direction: column; }
+        .slip { width: 100%; height: 50%; border-right: none; border-bottom: 1.5px dashed #94a3b8; }
+        .slip:last-child { border-right: none; border-bottom: none; }
+      }
     }
   </style>`;
 
