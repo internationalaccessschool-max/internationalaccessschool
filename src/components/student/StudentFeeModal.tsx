@@ -12,6 +12,7 @@ import {
     Loader2, School, Bus, RefreshCw, RotateCcw
 } from "lucide-react";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
+import { getNextReceiptNo } from "@/lib/receipt-counter";
 import toast from "react-hot-toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -102,14 +103,6 @@ const getDisplayName = (s: Student) =>
 const fmtDate = (d: Date | null): string =>
     d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
-const genReceiptNo = (prefix: "REC" | "TRP") => {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-    const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    const rnd = Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `${prefix}-${dateStr}-${timeStr}-${rnd}`;
-};
 
 const toFirestoreDate = (ts: any): Date | null => {
     if (!ts) return null;
@@ -284,8 +277,8 @@ export function StudentFeeModal({ student, onClose }: Props) {
         const rec = records[payDialog.month - 1];
         setPayLoading(true);
         try {
-            const schoolReceiptNo = genReceiptNo("REC");
-            const transportReceiptNo = genReceiptNo("TRP");
+            const schoolReceiptNo = await getNextReceiptNo();
+            const transportReceiptNo = await getNextReceiptNo();
             const paidOn = new Date();
             const markedBy = user?.uid || "";
 
