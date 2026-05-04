@@ -227,6 +227,88 @@ export default function AdminTimetablePage() {
     const filledCount = Object.values(slots).filter(s => s.subjectId || s.teacherId).length;
     const totalSlots = DAYS.length * periods.filter(p => !p.isBreak).length;
 
+    const handlePrint = () => {
+        const logoUrl = `${window.location.origin}/LOGO.png`;
+        const dayHeaders = DAYS.map(d => `<th style="padding:6px 8px;text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#fff;background:#0f2044;border:1px solid #1e3a6e">${d.slice(0,3)}</th>`).join("");
+
+        const rows = periods.map(timing => {
+            if (timing.isBreak) {
+                return `<tr><td colspan="${DAYS.length + 1}" style="padding:6px;text-align:center;background:#fef3c7;border:1px solid #fcd34d;font-size:10px;font-weight:700;color:#92400e;letter-spacing:2px;text-transform:uppercase">${timing.label || "BREAK"} &nbsp;(${timing.start} – ${timing.end})</td></tr>`;
+            }
+            const period = timing.period!;
+            const cells = DAYS.map(day => {
+                const slot = getSlot(day, period);
+                const hasData = slot.subjectName || slot.teacherName;
+                return `<td style="padding:4px 6px;border:1px solid #e5e7eb;vertical-align:middle;min-width:90px;background:${hasData ? "#f0fdf4" : "#fff"}">
+                    <div style="font-size:11px;font-weight:700;color:#0f2044;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${slot.subjectName || "<span style='color:#d1d5db'>—</span>"}</div>
+                    <div style="font-size:9px;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${slot.teacherName || ""}</div>
+                </td>`;
+            }).join("");
+            return `<tr>
+                <td style="padding:6px 8px;border:1px solid #e5e7eb;background:#f8fafc;text-align:center;white-space:nowrap">
+                    <div style="font-size:11px;font-weight:700;color:#0f2044;background:#0f2044;color:#fff;border-radius:6px;padding:2px 6px;display:inline-block;margin-bottom:3px">P${period}</div>
+                    <div style="font-size:9px;color:#6b7280">${timing.start}</div>
+                    <div style="font-size:9px;color:#6b7280">${timing.end}</div>
+                </td>
+                ${cells}
+            </tr>`;
+        }).join("");
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Timetable – Class ${cls} ${section}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:A4 landscape;margin:8mm}
+  table{border-collapse:collapse;width:100%}
+</style>
+</head>
+<body>
+<div style="padding:8px">
+  <!-- Header -->
+  <table style="width:100%;margin-bottom:8px;border-collapse:collapse">
+    <tr>
+      <td style="width:60px;vertical-align:middle;padding-right:10px">
+        <img src="${logoUrl}" style="width:56px;height:56px;object-fit:contain"/>
+      </td>
+      <td style="vertical-align:middle">
+        <div style="font-size:16px;font-weight:700;color:#0f2044;letter-spacing:0.5px">INTERNATIONAL ACCESS SCHOOL</div>
+        <div style="font-size:9px;color:#666;margin-top:2px">Barhan, Siwan, Bihar – 841227 | Ph: +91-9934776670 | Email: info@iaschool.edu.in</div>
+      </td>
+      <td style="text-align:right;vertical-align:middle">
+        <div style="display:inline-block;background:#0f2044;color:#c8a951;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700">CLASS TIMETABLE</div>
+        <div style="font-size:12px;font-weight:700;color:#0f2044;margin-top:4px">Class ${cls} – Section ${section}</div>
+      </td>
+    </tr>
+  </table>
+  <hr style="border:1px solid #0f2044;margin-bottom:8px"/>
+  <!-- Timetable -->
+  <table>
+    <thead>
+      <tr>
+        <th style="padding:6px 8px;text-align:center;font-size:11px;font-weight:700;color:#fff;background:#0f2044;border:1px solid #1e3a6e;width:72px">PERIOD</th>
+        ${dayHeaders}
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div style="text-align:right;font-size:9px;color:#aaa;margin-top:6px">Printed on ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</div>
+</div>
+</body>
+</html>`;
+
+        const win = window.open("", "_blank", "width=1000,height=700");
+        if (!win) { toast.error("Pop-up blocked — allow pop-ups."); return; }
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.onload = () => { win.focus(); win.print(); };
+        setTimeout(() => { try { win.focus(); win.print(); } catch { } }, 800);
+    };
+
     return (
         <div className="space-y-6 print:m-0 print:p-0">
             {/* Header */}
@@ -274,7 +356,7 @@ export default function AdminTimetablePage() {
                                 {saving ? "Saving..." : "Save Timetable"}
                             </button>
                         )}
-                        <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors">
+                        <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors">
                             <Printer className="w-4 h-4" /> Print
                         </button>
                     </div>
