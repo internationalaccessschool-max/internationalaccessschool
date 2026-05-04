@@ -13,6 +13,7 @@ import {
     Printer, RefreshCw, Calendar, Filter
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { getNextReceiptNo } from "@/lib/receipt-counter";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
 
 // ─── Bus Types (for transport fee lookup) ─────────────────────────────────────
@@ -88,15 +89,6 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function genSchoolReceiptNo(year: number, month: number) {
-    const seq = Math.floor(Math.random() * 900000) + 100000;
-    return `ADV-${year}-${String(month).padStart(2, "0")}-${seq}`;
-}
-
-function genTransportReceiptNo(year: number, month: number) {
-    const seq = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `TADV-${year}-${String(month).padStart(2, "0")}-${seq}`;
-}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -412,7 +404,7 @@ export default function AdvanceFeePage() {
 
                 // ── School fee ──────────────────────────────────────────
                 if (feeType !== "transport" && !row.schoolAlreadyPaid && row.schoolTotal > 0) {
-                    schoolReceiptNo = genSchoolReceiptNo(year, month);
+                    schoolReceiptNo = await getNextReceiptNo();
                     const recordId = `${selectedStudent.id}_${year}_${String(month).padStart(2, "0")}`;
                     const recordRef = doc(
                         db,
@@ -452,7 +444,7 @@ export default function AdvanceFeePage() {
 
                 // ── Transport fee ───────────────────────────────────────
                 if (feeType !== "school" && !row.transportAlreadyPaid && row.transportFee > 0 && selectedStudent.busId) {
-                    transportReceiptNo = genTransportReceiptNo(year, month);
+                    transportReceiptNo = await getNextReceiptNo();
                     const trRef = doc(
                         db,
                         "transportFeeRecords", year.toString(), "months", month.toString(), "students", selectedStudent.id
