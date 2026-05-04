@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/auth-guard";
 import { FieldValue } from "firebase-admin/firestore";
+import { getNextReceiptNoAdmin } from "@/lib/receipt-counter-admin";
 
 export async function POST(req: NextRequest) {
     try {
@@ -27,11 +28,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Already paid" }, { status: 400 });
         }
 
-        // Generate receipt number: TSAL-YYYYMMDD-xxxxx
-        const now = new Date();
-        const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-        const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
-        const receiptNo = `TSAL-${datePart}-${rand}`;
+        const receiptNo = await getNextReceiptNoAdmin();
 
         await recordRef.update({
             status: "paid",
