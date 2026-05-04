@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { buildReceiptHTML, printReceiptHTML } from "@/lib/print-receipt";
 import toast from "react-hot-toast";
+import { getNextReceiptNo } from "@/lib/receipt-counter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,7 +228,7 @@ export default function AnnualFeesPage() {
 
         setPayLoading(true);
         try {
-            const receiptNo = `ANN-${payModal.session}-${Date.now().toString().slice(-6)}`;
+            const receiptNo = await getNextReceiptNo();
             const newPayment: AnnualPayment = {
                 amount: payAmount,
                 date: new Date().toISOString(),
