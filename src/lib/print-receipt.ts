@@ -22,7 +22,7 @@ async function logoAsDataURI(): Promise<string> {
  * Left half = Student Copy, Right half = Office Copy.
  */
 export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"): Promise<void> {
-    const popup = window.open("", "_blank", "width=900,height=600,scrollbars=yes");
+    const popup = window.open("", "_blank", "width=700,height=450,scrollbars=yes");
     if (!popup) {
         alert("Please allow popups for this website to print/download receipts.");
         return;
