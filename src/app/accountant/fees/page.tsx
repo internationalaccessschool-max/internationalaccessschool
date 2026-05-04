@@ -13,6 +13,7 @@ import {
 
 import toast from "react-hot-toast";
 import FeeReceiptModal from "@/components/accountant/FeeReceiptModal";
+import { getNextReceiptNo } from "@/lib/receipt-counter";
 
 interface FeeRecord {
     id: string;
@@ -374,13 +375,7 @@ export default function ManageFeesPage() {
             const studentUid = record.studentId || record.id;
 
             if (markPaidType === "school" || markPaidType === "both") {
-                // Receipt format: REC-YYYYMMDD-HHMMSS e.g. REC-20260331-144523-A3F
-                const _now = new Date();
-                const _pad = (n: number) => String(n).padStart(2, "0");
-                const _dateStr = `${_now.getFullYear()}${_pad(_now.getMonth()+1)}${_pad(_now.getDate())}`;
-                const _timeStr = `${_pad(_now.getHours())}${_pad(_now.getMinutes())}${_pad(_now.getSeconds())}`;
-                const _rnd = Math.random().toString(36).substring(2, 5).toUpperCase();
-                const receiptNo = `REC-${_dateStr}-${_timeStr}-${_rnd}`;
+                const receiptNo = await getNextReceiptNo();
                 // CF records: only charge base fee — their previousDues have already
                 // been absorbed (and separately billed) in the next live month's bill.
                 const isRecordCF = record.status === "carried_forward";
@@ -563,13 +558,7 @@ export default function ManageFeesPage() {
             }
 
             if (markPaidType === "transport" || markPaidType === "both") {
-                // Receipt format: TRP-YYYYMMDD-HHMMSS e.g. TRP-20260331-144523-B7K
-                const _tnow = new Date();
-                const _tpad = (n: number) => String(n).padStart(2, "0");
-                const _tdateStr = `${_tnow.getFullYear()}${_tpad(_tnow.getMonth()+1)}${_tpad(_tnow.getDate())}`;
-                const _ttimeStr = `${_tpad(_tnow.getHours())}${_tpad(_tnow.getMinutes())}${_tpad(_tnow.getSeconds())}`;
-                const _trnd = Math.random().toString(36).substring(2, 5).toUpperCase();
-                const transportReceiptNo = `TRP-${_tdateStr}-${_ttimeStr}-${_trnd}`;
+                const transportReceiptNo = await getNextReceiptNo();
                 const isTranspCF = record.transportStatus === "carried_forward";
                 const transpBaseTotal = isTranspCF 
                     ? record.transportFeeAmount || 0 
