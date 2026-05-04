@@ -153,49 +153,6 @@ export default function AdminSyllabusPage() {
         });
     };
 
-    const ChapterForm = ({ form, setForm, onSave, onCancel, label, examColor }: any) => (
-        <div className={`border rounded-xl p-4 space-y-3 ${examColor}`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Chapter Title *</label>
-                    <input value={form.title} onChange={e => setForm((p: any) => ({ ...p, title: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white"
-                        placeholder="e.g. Chapter 1: Real Numbers" />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
-                    <div className="flex gap-2">
-                        <input type="number" min="1" value={form.duration} onChange={e => setForm((p: any) => ({ ...p, duration: e.target.value }))}
-                            className="w-20 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white" />
-                        <select value={form.durationUnit} onChange={e => setForm((p: any) => ({ ...p, durationUnit: e.target.value }))}
-                            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
-                            {DURATION_UNITS.map(u => <option key={u}>{u}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
-                    <select value={form.status} onChange={e => setForm((p: any) => ({ ...p, status: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
-                        {STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-                    </select>
-                </div>
-                <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Description / Topics Covered</label>
-                    <textarea value={form.description} onChange={e => setForm((p: any) => ({ ...p, description: e.target.value }))} rows={2}
-                        placeholder="Topics, subtopics, learning objectives…"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white resize-none" />
-                </div>
-            </div>
-            <div className="flex gap-2">
-                <button onClick={onSave} disabled={saving}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-navy text-white text-xs font-semibold rounded-lg hover:bg-navy/90 disabled:opacity-60">
-                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {label}
-                </button>
-                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50">Cancel</button>
-            </div>
-        </div>
-    );
 
     const totalCompleted = chapters.filter(c => c.status === "completed").length;
     const totalOngoing   = chapters.filter(c => c.status === "ongoing").length;
@@ -321,6 +278,7 @@ export default function AdminSyllabusPage() {
                                                 onCancel={() => setAddingExam(null)}
                                                 label="Add Chapter"
                                                 examColor={`${exam.bg} border ${exam.border}`}
+                                                saving={saving}
                                             />
                                         )}
 
@@ -344,6 +302,7 @@ export default function AdminSyllabusPage() {
                                                                 onSave={updateChapter} onCancel={() => setEditingId(null)}
                                                                 label="Save Changes"
                                                                 examColor={`${exam.bg} border ${exam.border}`}
+                                                                saving={saving}
                                                             />
                                                         ) : (
                                                             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
@@ -392,6 +351,69 @@ export default function AdminSyllabusPage() {
                     })}
                 </div>
             )}
+        </div>
+    );
+}
+
+// ─── Chapter Form — defined OUTSIDE main component to prevent focus loss ──────
+
+function ChapterForm({ form, setForm, onSave, onCancel, label, examColor, saving }: {
+    form: any; setForm: any; onSave: () => void; onCancel: () => void;
+    label: string; examColor: string; saving: boolean;
+}) {
+    return (
+        <div className={`border rounded-xl p-4 space-y-3 ${examColor}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Chapter Title *</label>
+                    <input
+                        autoFocus
+                        value={form.title}
+                        onChange={e => setForm((p: any) => ({ ...p, title: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white"
+                        placeholder="e.g. Chapter 1: Real Numbers"
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
+                    <div className="flex gap-2">
+                        <input type="number" min="1" value={form.duration}
+                            onChange={e => setForm((p: any) => ({ ...p, duration: e.target.value }))}
+                            className="w-20 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white" />
+                        <select value={form.durationUnit}
+                            onChange={e => setForm((p: any) => ({ ...p, durationUnit: e.target.value }))}
+                            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
+                            {["Days", "Weeks", "Periods"].map(u => <option key={u}>{u}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+                    <select value={form.status}
+                        onChange={e => setForm((p: any) => ({ ...p, status: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
+                        {(["upcoming", "ongoing", "completed"] as const).map(s => (
+                            <option key={s} value={s}>{s === "upcoming" ? "Upcoming" : s === "ongoing" ? "Ongoing" : "Completed"}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Description / Topics Covered</label>
+                    <textarea value={form.description}
+                        onChange={e => setForm((p: any) => ({ ...p, description: e.target.value }))}
+                        rows={2} placeholder="Topics, subtopics, learning objectives…"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white resize-none" />
+                </div>
+            </div>
+            <div className="flex gap-2">
+                <button onClick={onSave} disabled={saving}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-navy text-white text-xs font-semibold rounded-lg hover:bg-navy/90 disabled:opacity-60">
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {label}
+                </button>
+                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50">
+                    Cancel
+                </button>
+            </div>
         </div>
     );
 }
