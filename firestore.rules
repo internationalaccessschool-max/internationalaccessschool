@@ -270,6 +270,11 @@ service cloud.firestore {
       allow delete: if isAdminOrSupervisor();
     }
 
+    // ─── Receipt counter (globally sequential receipt numbers) ────────────────
+    match /counters/receiptNo {
+      allow read, write: if isAuth();
+    }
+
     // ─── Default deny ─────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
