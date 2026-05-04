@@ -24,6 +24,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { getNextReceiptNo } from "@/lib/receipt-counter";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -550,8 +551,7 @@ export default function AccountantAdmissionsPage() {
             // ── Always create a fee record for the current month ─────────────
             // If tuition was collected → status: paid
             // If tuition was NOT collected → status: pending (so accountant can track it)
-            const receiptSeq = Math.floor(Math.random() * 90000) + 10000;
-            const receiptNo = `ADM-${admYear}-${String(admMonth).padStart(2, "0")}-${receiptSeq}`;
+            const receiptNo = await getNextReceiptNo();
             const tuitionStatus = collectMonthlyFee && monthlyFeeAmt > 0 ? "paid" : "pending";
 
             // Idempotent doc ID — same as generate-fee-records route
@@ -601,7 +601,7 @@ export default function AccountantAdmissionsPage() {
                     : annualFeeCollected > 0 ? "partial"
                     : "unpaid";
                 const annualReceiptNo = annualFeeCollected > 0
-                    ? `ANN-ADM-${admYear}-${Date.now().toString().slice(-6)}`
+                    ? await getNextReceiptNo()
                     : "";
                 await setDoc(annualRef, {
                     studentId: uid,
