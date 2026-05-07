@@ -304,6 +304,7 @@ export default function AdminLeavePage() {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
                             );
                         })}
                     </div>
