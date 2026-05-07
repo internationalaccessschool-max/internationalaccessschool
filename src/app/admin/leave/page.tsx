@@ -6,7 +6,7 @@ import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
     FileText, Clock, CheckCircle2, XCircle, Search,
-    Loader2, CalendarDays, User, GraduationCap, X, Trash2, Paperclip
+    Loader2, CalendarDays, User, GraduationCap, X, Trash2, Paperclip, ExternalLink
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -226,8 +226,8 @@ export default function AdminLeavePage() {
                                             <p className="text-sm text-gray-500 mt-1.5 line-clamp-2">{app.reason}</p>
                                             {app.attachmentUrl && (
                                                 <a href={app.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:underline font-medium">
-                                                    <Paperclip className="w-3 h-3" /> {app.attachmentName || "View Attachment"}
+                                                    className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:underline font-medium bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                                    <Paperclip className="w-3 h-3" /> {app.attachmentName || "View Attachment"} <ExternalLink className="w-2.5 h-2.5" />
                                                 </a>
                                             )}
                                             {app.adminNote && (
@@ -274,13 +274,13 @@ export default function AdminLeavePage() {
 
             {/* Review Modal */}
             {reviewModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-                        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-lg max-h-[92dvh] flex flex-col">
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
                             <h3 className="font-bold text-navy text-lg">Review Leave Application</h3>
                             <button onClick={() => setReviewModal(null)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
                         </div>
-                        <div className="p-5 space-y-4">
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             {/* Applicant summary */}
                             <div className="bg-gray-50 rounded-xl p-4 space-y-2">
                                 <div className="flex items-center justify-between">
@@ -300,12 +300,44 @@ export default function AdminLeavePage() {
                                     <p className="text-xs text-gray-400 mb-1">Reason:</p>
                                     <p className="text-sm text-gray-700">{reviewModal.reason}</p>
                                 </div>
-                                {reviewModal.attachmentUrl && (
-                                    <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline font-semibold bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100">
-                                        <Paperclip className="w-3.5 h-3.5" /> {reviewModal.attachmentName || "View Attachment"} ↗
-                                    </a>
-                                )}
+                                {reviewModal.attachmentUrl && (() => {
+                                    const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(reviewModal.attachmentUrl) ||
+                                        reviewModal.attachmentUrl.includes("/image/upload/");
+                                    return (
+                                        <div className="mt-3 rounded-xl border border-blue-100 overflow-hidden bg-blue-50/40">
+                                            <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100">
+                                                <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+                                                    <Paperclip className="w-3.5 h-3.5" />
+                                                    {reviewModal.attachmentName || "Attachment"}
+                                                </span>
+                                                <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
+                                                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                                                    Open <ExternalLink className="w-3 h-3" />
+                                                </a>
+                                            </div>
+                                            {isImage ? (
+                                                <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                                    <img src={reviewModal.attachmentUrl} alt="Attachment"
+                                                        className="w-full max-h-48 object-contain bg-white p-2" />
+                                                </a>
+                                            ) : (
+                                                <div className="flex items-center gap-3 px-3 py-3">
+                                                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                                                        <FileText className="w-5 h-5 text-red-600" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-semibold text-gray-700 truncate">{reviewModal.attachmentName || "Document"}</p>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">PDF / Document</p>
+                                                    </div>
+                                                    <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
+                                                        className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700">
+                                                        View
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             {/* Admin Note */}
                             <div>
@@ -315,7 +347,7 @@ export default function AdminLeavePage() {
                                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy resize-none" />
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 border-t border-gray-100">
+                        <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
                             <button onClick={() => setReviewModal(null)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
                             <button onClick={() => handleDecision("rejected")} disabled={reviewing}
                                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-60 flex items-center justify-center gap-2">
