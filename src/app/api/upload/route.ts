@@ -13,7 +13,7 @@ cloudinary.config({
 const ALLOWED_FOLDERS = new Set([
     "homework", "student-profiles", "fee-receipts", "notices",
     "gallery", "id-cards", "admin-docs", "teachers",
-    "mark-sheets", "applications", "student-tcs",
+    "mark-sheets", "applications", "student-tcs", "leave-docs",
 ]);
 
 export async function POST(req: NextRequest) {
