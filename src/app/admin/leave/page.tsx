@@ -198,7 +198,7 @@ export default function AdminLeavePage() {
                             const StatusIcon = cfg.icon;
                             return (
                                 <div key={app.id} className="p-5 hover:bg-gray-50/50 transition-colors">
-                                    <div className="flex items-start gap-4 flex-wrap">
+                                    <div className="flex flex-col sm:flex-row items-start gap-4">
                                         {/* Avatar */}
                                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${app.applicantType === "teacher" ? "bg-blue-50" : "bg-purple-50"}`}>
                                             {app.applicantType === "teacher"
@@ -238,13 +238,14 @@ export default function AdminLeavePage() {
                                         </div>
 
                                         {/* Right side */}
-                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                        <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2 shrink-0 mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-gray-100">
                                             <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
                                                 <StatusIcon className="w-3.5 h-3.5" /> {cfg.label}
                                             </span>
-                                            <p className="text-[10px] text-gray-400">
-                                                {app.submittedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) || "—"}
-                                            </p>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <p className="text-[10px] text-gray-400">
+                                                    {app.submittedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) || "—"}
+                                                </p>
                                             <div className="flex items-center gap-1.5">
                                                 {app.status === "pending" ? (
                                                     <button onClick={() => openReview(app)}
@@ -290,7 +291,7 @@ export default function AdminLeavePage() {
                                     </span>
                                 </div>
                                 {reviewModal.class && <p className="text-xs text-gray-500">Class {reviewModal.class}{reviewModal.section ? `-${reviewModal.section}` : ""}</p>}
-                                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600 mt-2">
                                     <div><span className="text-gray-400">Leave Type:</span> <span className="font-semibold">{reviewModal.leaveType}</span></div>
                                     <div><span className="text-gray-400">Duration:</span> <span className="font-semibold">{reviewModal.totalDays} day{reviewModal.totalDays !== 1 ? "s" : ""}</span></div>
                                     <div><span className="text-gray-400">From:</span> <span className="font-semibold">{reviewModal.fromDate}</span></div>
@@ -347,14 +348,14 @@ export default function AdminLeavePage() {
                                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy resize-none" />
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
-                            <button onClick={() => setReviewModal(null)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+                        <div className="flex flex-col sm:flex-row gap-3 p-5 border-t border-gray-100 shrink-0">
+                            <button onClick={() => setReviewModal(null)} className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
                             <button onClick={() => handleDecision("rejected")} disabled={reviewing}
-                                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-60 flex items-center justify-center gap-2">
+                                className="w-full sm:w-auto flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-60 flex items-center justify-center gap-2">
                                 {reviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
                             </button>
                             <button onClick={() => handleDecision("approved")} disabled={reviewing}
-                                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2">
+                                className="w-full sm:w-auto flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2">
                                 {reviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
                             </button>
                         </div>
