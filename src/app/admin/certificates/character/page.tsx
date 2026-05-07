@@ -343,8 +343,8 @@ export default function CharacterCertificatePage() {
 
       {/* Search */}
       <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5">
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div className="flex-1 w-full">
             <label className="text-xs font-bold text-slate-600 mb-1.5 block">Admission Number (ENR)</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -354,13 +354,13 @@ export default function CharacterCertificatePage() {
             </div>
           </div>
           <button onClick={handleSearch} disabled={isSearching}
-            className="flex items-center gap-2 px-5 py-2.5 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 disabled:opacity-60 shadow-md shadow-navy/20 transition-colors">
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-navy text-white rounded-xl font-bold text-sm hover:bg-navy/90 disabled:opacity-60 shadow-md shadow-navy/20 transition-colors">
             {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {isSearching ? "Searching…" : "Search"}
           </button>
           {student && (
             <button onClick={() => { setStudent(null); setEnr(""); setCcData(defaultCC()); setNotFound(false); setAlreadyGenerated(false); setGeneratedAt(""); }}
-              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors">
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors">
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
           )}
@@ -385,9 +385,9 @@ export default function CharacterCertificatePage() {
 
       {/* Already Generated Banner */}
       {student && alreadyGenerated && (
-        <div className="flex items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <div className="flex items-start sm:items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
             <div>
               <p className="font-bold text-amber-800 text-sm">Certificate Already Generated</p>
               <p className="text-xs text-amber-700 mt-0.5">
@@ -396,7 +396,7 @@ export default function CharacterCertificatePage() {
             </div>
           </div>
           <button onClick={handleIssueNew}
-            className="shrink-0 px-3 py-1.5 border border-amber-300 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
+            className="w-full sm:w-auto shrink-0 px-4 py-2 border border-amber-300 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
             Issue New Certificate
           </button>
         </div>
@@ -442,10 +442,10 @@ export default function CharacterCertificatePage() {
 
           {/* On-screen Preview */}
           <div className="xl:col-span-3">
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 mb-3 flex items-center justify-between">
+            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 mb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <h2 className="font-bold text-navy text-sm flex items-center gap-2"><Printer className="w-4 h-4" /> Print Preview</h2>
               <button onClick={handlePrint}
-                className="flex items-center gap-1.5 px-4 py-2 bg-navy text-white rounded-xl font-bold text-xs hover:bg-navy/90 transition-colors">
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-navy text-white rounded-xl font-bold text-xs hover:bg-navy/90 transition-colors">
                 <Printer className="w-3.5 h-3.5" /> Print
               </button>
             </div>
