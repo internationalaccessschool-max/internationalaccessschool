@@ -24,34 +24,31 @@ const ALL_PAGES: { label: string; path: string; section: string }[] = [
     { label: "Dashboard", path: "/supervisor", section: "Overview" },
 
     // ── Management ───────────────────────────────────────────────
-    { label: "Students", path: "/supervisor/students", section: "Management" },
-    { label: "Promote / Transfer", path: "/supervisor/promote", section: "Management" },
-    { label: "Teachers", path: "/supervisor/teachers", section: "Management" },
-    { label: "Manage Subjects", path: "/supervisor/subjects", section: "Management" },
-    { label: "Class Teachers", path: "/supervisor/class-teacher", section: "Management" },
-    { label: "Classes", path: "/supervisor/classes", section: "Management" },
-    { label: "Timetable", path: "/supervisor/timetable", section: "Management" },
-    { label: "Attendance", path: "/supervisor/attendance", section: "Management" },
+    { label: "Students",           path: "/supervisor/students",           section: "Management" },
+    { label: "Teachers",           path: "/supervisor/teachers",           section: "Management" },
+    { label: "Class Teachers",     path: "/supervisor/class-teacher",      section: "Management" },
+    { label: "Classes",            path: "/supervisor/classes",            section: "Management" },
+    { label: "Attendance",         path: "/supervisor/attendance",         section: "Management" },
     { label: "Teacher Attendance", path: "/supervisor/teacher-attendance", section: "Management" },
-    { label: "Applications", path: "/supervisor/applications", section: "Management" },
-    { label: "Admissions", path: "/supervisor/admissions", section: "Management" },
+    { label: "Applications",       path: "/supervisor/applications",       section: "Management" },
+    { label: "Admissions",         path: "/supervisor/admissions",         section: "Management" },
 
     // ── Finance ───────────────────────────────────────────────────
-    { label: "Fee Overview", path: "/supervisor/fees", section: "Finance" },
-    { label: "Transport", path: "/supervisor/transport", section: "Finance" },
-    { label: "Teacher Salary", path: "/supervisor/teacher-salary", section: "Finance" },
+    { label: "Fee Overview", path: "/supervisor/fees",      section: "Finance" },
+    { label: "Transport",    path: "/supervisor/transport", section: "Finance" },
 
     // ── Content ──────────────────────────────────────────────────
-    { label: "Hero Slider", path: "/supervisor/hero", section: "Content" },
-    { label: "Academics Page", path: "/supervisor/academics", section: "Content" },
-    { label: "Homework", path: "/supervisor/homework", section: "Content" },
-    { label: "Notices", path: "/supervisor/notices", section: "Content" },
-    { label: "Gallery", path: "/supervisor/gallery", section: "Content" },
+    { label: "Hero Slider",   path: "/supervisor/hero",       section: "Content" },
+    { label: "Syllabus",      path: "/supervisor/syllabus",   section: "Content" },
+    { label: "Academics Page",path: "/supervisor/academics",  section: "Content" },
+    { label: "Homework",      path: "/supervisor/homework",   section: "Content" },
+    { label: "Notices",       path: "/supervisor/notices",    section: "Content" },
+    { label: "Gallery",       path: "/supervisor/gallery",    section: "Content" },
 
     // ── Examinations ─────────────────────────────────────────────
-    { label: "Exams", path: "/supervisor/exams", section: "Examinations" },
-    { label: "Class Subjects", path: "/supervisor/class-subjects", section: "Examinations" },
-    { label: "Marks Entry", path: "/supervisor/results/entry", section: "Examinations" },
+    { label: "Exams",          path: "/supervisor/exams",         section: "Examinations" },
+    { label: "Class Subjects", path: "/supervisor/class-subjects",section: "Examinations" },
+    { label: "Marks Entry",    path: "/supervisor/results/entry", section: "Examinations" },
 ];
 
 const SECTIONS = ["Overview", "Management", "Finance", "Content", "Examinations"];
