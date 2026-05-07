@@ -338,44 +338,9 @@ export default function AdminLeavePage() {
                                     <p className="text-xs text-gray-400 mb-1">Reason:</p>
                                     <p className="text-sm text-gray-700">{reviewModal.reason}</p>
                                 </div>
-                                {reviewModal.attachmentUrl && (() => {
-                                    const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(reviewModal.attachmentUrl) ||
-                                        reviewModal.attachmentUrl.includes("/image/upload/");
-                                    return (
-                                        <div className="mt-3 rounded-xl border border-blue-100 overflow-hidden bg-blue-50/40">
-                                            <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100">
-                                                <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
-                                                    <Paperclip className="w-3.5 h-3.5" />
-                                                    {reviewModal.attachmentName || "Attachment"}
-                                                </span>
-                                                <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                                                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
-                                                    Open <ExternalLink className="w-3 h-3" />
-                                                </a>
-                                            </div>
-                                            {isImage ? (
-                                                <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                                                    <img src={reviewModal.attachmentUrl} alt="Attachment"
-                                                        className="w-full max-h-48 object-contain bg-white p-2" />
-                                                </a>
-                                            ) : (
-                                                <div className="flex items-center gap-3 px-3 py-3">
-                                                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-                                                        <FileText className="w-5 h-5 text-red-600" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-semibold text-gray-700 truncate">{reviewModal.attachmentName || "Document"}</p>
-                                                        <p className="text-[10px] text-gray-400 mt-0.5">PDF / Document</p>
-                                                    </div>
-                                                    <a href={reviewModal.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                                                        className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700">
-                                                        View
-                                                    </a>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
+                                {reviewModal.attachmentUrl && (
+                                    <AttachmentPreview url={reviewModal.attachmentUrl} name={reviewModal.attachmentName} />
+                                )}
                             </div>
                             {/* Admin Note */}
                             <div>
