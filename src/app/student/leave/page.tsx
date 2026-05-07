@@ -178,24 +178,24 @@ export default function StudentLeavePage() {
                         const Icon = cfg.icon;
                         return (
                             <div key={app.id} className={`bg-white rounded-2xl border p-5 ${app.status === "pending" ? "border-gray-100" : cfg.bg}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0 w-full">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-bold text-navy">{app.leaveType}</span>
                                             <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
                                                 <Icon className="w-3 h-3" /> {cfg.label}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1.5">
-                                            <CalendarDays className="w-3.5 h-3.5" />
+                                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1.5 flex-wrap">
+                                            <CalendarDays className="w-3.5 h-3.5 shrink-0" />
                                             <span>{app.fromDate === app.toDate ? app.fromDate : `${app.fromDate} → ${app.toDate}`}</span>
                                             <span className="font-semibold text-navy">({app.totalDays} day{app.totalDays !== 1 ? "s" : ""})</span>
                                         </div>
                                         <p className="text-sm text-gray-600 mt-2">{app.reason}</p>
                                         {app.attachmentUrl && (
                                             <a href={app.attachmentUrl} target="_blank" rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline">
-                                                <Paperclip className="w-3 h-3" /> {app.attachmentName || "View Attachment"}
+                                                className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline break-all">
+                                                <Paperclip className="w-3 h-3 shrink-0" /> {app.attachmentName || "View Attachment"}
                                             </a>
                                         )}
                                         {app.adminNote && (
@@ -204,9 +204,11 @@ export default function StudentLeavePage() {
                                             </div>
                                         )}
                                     </div>
-                                    <p className="text-[10px] text-gray-400 shrink-0">
-                                        {app.submittedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) || "—"}
-                                    </p>
+                                    <div className="w-full sm:w-auto text-left sm:text-right shrink-0 mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-0 border-gray-100">
+                                        <p className="text-[10px] text-gray-400">
+                                            {app.submittedAt?.toDate?.()?.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) || "—"}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -234,7 +236,7 @@ export default function StudentLeavePage() {
                                     ))}
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">From Date</label>
                                     <input type="date" value={form.fromDate} min={today}
@@ -285,10 +287,10 @@ export default function StudentLeavePage() {
                                 <span>Once submitted, your application will be reviewed by the school admin. You will be notified of the decision.</span>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 border-t border-gray-100">
-                            <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+                        <div className="flex flex-col sm:flex-row gap-3 p-5 border-t border-gray-100">
+                            <button onClick={() => setShowForm(false)} className="w-full sm:w-auto flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
                             <button onClick={handleSubmit} disabled={submitting || totalDays <= 0}
-                                className="flex-1 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-60 flex items-center justify-center gap-2">
+                                className="w-full sm:w-auto flex-1 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-60 flex items-center justify-center gap-2">
                                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Submit Application
                             </button>
                         </div>
