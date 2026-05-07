@@ -220,7 +220,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
       </div>
     </div>
   </div>
-  
+
   <div style="text-align:center;margin-bottom:6px;margin-top:-2px;">
       <div style="display:inline-block;padding:2px 8px;background:${accentLight};color:${accentText};font-size:6.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border:1px solid ${accentBorder};border-radius:999px;">
         ${title}
