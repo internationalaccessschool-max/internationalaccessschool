@@ -196,13 +196,13 @@ export default function TeacherLeavePage() {
 
             {/* Apply Form Modal */}
             {showForm && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-                        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-lg max-h-[92dvh] flex flex-col">
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
                             <h3 className="font-bold text-navy text-lg">Apply for Leave</h3>
                             <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
                         </div>
-                        <div className="p-5 space-y-4">
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Leave Type</label>
                                 <div className="flex flex-wrap gap-2">
@@ -265,7 +265,7 @@ export default function TeacherLeavePage() {
                                 <span>Once submitted, your application will be reviewed by the admin. You cannot edit it after submission.</span>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 border-t border-gray-100">
+                        <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
                             <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
                             <button onClick={handleSubmit} disabled={submitting || totalDays <= 0}
                                 className="flex-1 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 disabled:opacity-60 flex items-center justify-center gap-2">
