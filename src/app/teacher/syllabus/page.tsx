@@ -179,15 +179,15 @@ export default function TeacherSyllabusPage() {
                         return (
                             <div key={exam.key} className={`rounded-2xl border ${exam.border} overflow-hidden shadow-sm`}>
                                 <button onClick={() => toggleExam(exam.key)}
-                                    className={`w-full flex items-center justify-between px-5 py-4 ${exam.bg} hover:opacity-90 transition-opacity`}>
-                                    <div className="flex items-center gap-3">
+                                    className={`w-full flex flex-col sm:flex-row items-start sm:items-center justify-between px-5 py-4 ${exam.bg} hover:opacity-90 transition-opacity gap-3 sm:gap-0`}>
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                                         <span className={`text-base font-bold ${exam.color}`}>{exam.label}</span>
                                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${exam.badge}`}>{examChapters.length} chapters</span>
                                         {examChapters.length > 0 && <span className="text-xs text-gray-500">{examCompleted}/{examChapters.length} done</span>}
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                                         {examChapters.length > 0 && (
-                                            <div className="w-20 h-1.5 bg-white/60 rounded-full overflow-hidden hidden sm:block">
+                                            <div className="w-20 h-1.5 bg-white/60 rounded-full overflow-hidden block">
                                                 <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${examChapters.length > 0 ? (examCompleted / examChapters.length) * 100 : 0}%` }} />
                                             </div>
                                         )}
@@ -216,7 +216,7 @@ export default function TeacherSyllabusPage() {
                                                                 <span className="text-xs text-gray-400">{ch.duration} {ch.durationUnit}</span>
                                                             </div>
                                                             {ch.description && <p className="text-xs text-gray-500 mt-1.5">{ch.description}</p>}
-                                                            <div className="flex gap-1 mt-2">
+                                                            <div className="flex flex-wrap gap-1 mt-2">
                                                                 {STATUSES.map(s => (
                                                                     <button key={s} onClick={() => changeStatus(ch.id, s)} disabled={saving}
                                                                         className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${ch.status === s ? `${STATUS_CONFIG[s].bg} ${STATUS_CONFIG[s].color} border-transparent` : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"}`}>
