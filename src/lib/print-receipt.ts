@@ -45,7 +45,6 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f3f4f6; font-family: Arial, Helvetica, sans-serif; }
 
-    /* === LANDSCAPE (default / horizontal paper) === */
     .page {
       width: 210mm;
       height: 148.5mm;
@@ -61,17 +60,9 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
       padding: 6mm 7mm;
       overflow: hidden;
       border-right: 1.5px dashed #94a3b8;
-      border-bottom: none;
       position: relative;
     }
     .slip:last-child { border-right: none; }
-
-    /* === PORTRAIT (vertical paper) === */
-    @media (orientation: portrait) {
-      .page { width: 148.5mm; height: 210mm; flex-direction: column; }
-      .slip { width: 100%; height: 50%; border-right: none; border-bottom: 1.5px dashed #94a3b8; }
-      .slip:last-child { border-bottom: none; }
-    }
 
     /* Watermark */
     .slip::before {
@@ -110,21 +101,8 @@ export async function printReceiptHTML(bodyHTML: string, title = "Fee Receipt"):
         color-adjust: exact !important;
       }
       body { background: #fff; }
+      .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; }
       @page { size: auto; margin: 0; }
-
-      /* Landscape print */
-      @media (orientation: landscape) {
-        .page { margin: 0; box-shadow: none; width: 210mm; height: 148.5mm; flex-direction: row; }
-        .slip { width: 50%; height: 100%; border-right: 1.5px dashed #94a3b8; border-bottom: none; }
-        .slip:last-child { border-right: none; border-bottom: none; }
-      }
-
-      /* Portrait print */
-      @media (orientation: portrait) {
-        .page { margin: 0; box-shadow: none; width: 148.5mm; height: 210mm; flex-direction: column; }
-        .slip { width: 100%; height: 50%; border-right: none; border-bottom: 1.5px dashed #94a3b8; }
-        .slip:last-child { border-right: none; border-bottom: none; }
-      }
     }
   </style>`;
 
@@ -301,6 +279,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
     <div style="font-size:5.5px;color:#94a3b8;line-height:1.4;">
       <div>Computer-generated receipt.</div>
       <div>No signature required if stamped.</div>
+      <div style="color:#be123c;font-weight:700;margin-top:1px;">Paid fee is not refundable.</div>
     </div>
     <div style="display:flex;gap:16px;align-items:flex-end;">
       <div style="text-align:center;">
