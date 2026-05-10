@@ -395,10 +395,11 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
       const results: StudentResult[] = profiles.map((p: any) => {
         const uid  = p.id;
         const recs = attPerStudent[uid] ?? [];
+        // Cumulative from April 1 → each exam's end date
         const t1  = countAtt(recs, sessionStart, u1End);
-        const hy  = countAtt(recs, u1End, hyEnd, true);
-        const t2  = countAtt(recs, hyEnd, u2End, true);
-        const yrl = countAtt(recs, u2End, annEnd, true);
+        const hy  = countAtt(recs, sessionStart, hyEnd);
+        const t2  = countAtt(recs, sessionStart, u2End);
+        const yrl = countAtt(recs, sessionStart, annEnd);
 
         const examMarks: Record<string, Record<string, MarksEntry>> = {};
         for (const eId of examIdsToFetch.filter(Boolean)) {
