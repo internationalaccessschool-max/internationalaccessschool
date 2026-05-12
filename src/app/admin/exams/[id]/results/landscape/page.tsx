@@ -92,9 +92,9 @@ function countAtt(
 
 // ─── Report type config ───────────────────────────────────────────────────────
 const REPORT_TYPES: { key: ReportType; label: string; desc: string; color: string }[] = [
-  { key: "unit1",      label: "Unit I Test",      desc: "Grade out of /20 per subject",                  color: "blue"    },
+  { key: "unit1",      label: "1st Unit Test",      desc: "Grade out of /20 per subject",                  color: "blue"    },
   { key: "halfYearly", label: "Half-Yearly",       desc: "Unit I + HY — grade /100 per subject",          color: "indigo"  },
-  { key: "unit2",      label: "Unit II Test",      desc: "Unit I + HY + Unit II — grade /120 per subject", color: "orange"  },
+  { key: "unit2",      label: "2nd Unit Test",      desc: "Unit I + HY + Unit II — grade /120 per subject", color: "orange"  },
   { key: "annual",     label: "Full Annual",       desc: "All 4 exams — grade /200 per subject",           color: "emerald" },
 ];
 
@@ -438,10 +438,22 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
   };
 
   // ── Print ───────────────────────────────────────────────────────────────────
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (students.length === 0) return;
     const n = subjects.length;
     const session = currentExam?.session ?? "—";
+
+    // Fetch logo as base64 so it renders in popup
+    let logoSrc = "/LOGO.png";
+    try {
+      const res = await fetch(window.location.origin + "/LOGO.png");
+      const blob = await res.blob();
+      logoSrc = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch { /* use URL fallback */ }
 
     const showU1  = true;
     const showHY  = ["halfYearly","unit2","annual"].includes(reportType);
@@ -536,14 +548,13 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
 
       // Attendance rows — based on report type
       const att = s.attendance;
-      let attRows = `<tr><td>T-1</td><td class="ctr">${att.t1WD}</td><td class="ctr">${att.t1P}</td></tr>`;
-      if (showHY) attRows += `<tr><td>HY</td><td class="ctr">${att.hyWD}</td><td class="ctr">${att.hyP}</td></tr>`;
-      if (showU2) attRows += `<tr><td>T-2</td><td class="ctr">${att.t2WD}</td><td class="ctr">${att.t2P}</td></tr>`;
+      const pct = (p: number, wd: number) => wd > 0 ? (p / wd * 100).toFixed(1) + "%" : "—";
+      let attRows = `<tr><td>1st Unit Test</td><td class="ctr">${att.t1WD}</td><td class="ctr">${att.t1P}</td><td class="ctr bold">${pct(att.t1P, att.t1WD)}</td></tr>`;
+      if (showHY) attRows += `<tr><td>Half Yearly</td><td class="ctr">${att.hyWD}</td><td class="ctr">${att.hyP}</td><td class="ctr bold">${pct(att.hyP, att.hyWD)}</td></tr>`;
+      if (showU2) attRows += `<tr><td>2nd Unit Test</td><td class="ctr">${att.t2WD}</td><td class="ctr">${att.t2P}</td><td class="ctr bold">${pct(att.t2P, att.t2WD)}</td></tr>`;
       if (showAnn) {
-        attRows += `<tr><td>YRLY</td><td class="ctr">${att.yrlWD}</td><td class="ctr">${att.yrlP}</td></tr>`;
-        const totWD = att.t1WD + att.hyWD + att.t2WD + att.yrlWD;
-        const totP  = att.t1P  + att.hyP  + att.t2P  + att.yrlP;
-        attRows += `<tr class="bold"><td>Total</td><td class="ctr">${totWD}</td><td class="ctr">${totP}</td></tr>`;
+        attRows += `<tr><td>Annual</td><td class="ctr">${att.yrlWD}</td><td class="ctr">${att.yrlP}</td><td class="ctr bold">${pct(att.yrlP, att.yrlWD)}</td></tr>`;
+        attRows += `<tr class="bold"><td>Total</td><td class="ctr">${att.yrlWD}</td><td class="ctr">${att.yrlP}</td><td class="ctr">${pct(att.yrlP, att.yrlWD)}</td></tr>`;
       }
 
       // Table header builder
@@ -572,7 +583,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             <th rowspan="3" class="grade-hd">Grade</th>
           </tr>
           <tr class="sub-header">
-            <th colspan="4" class="bdr-l">Unit I Test (20)</th>
+            <th colspan="4" class="bdr-l">1st Unit Test (20)</th>
             <th rowspan="2" class="bdr-l">Half<br/>Yearly<br/>/80</th>
             <th rowspan="2" class="bdr-r">TOTAL<br/>/100</th>
           </tr>
@@ -592,10 +603,10 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             <th rowspan="3" class="grade-hd">Grade</th>
           </tr>
           <tr class="sub-header">
-            <th colspan="4" class="bdr-l">Unit I Test (20)</th>
+            <th colspan="4" class="bdr-l">1st Unit Test (20)</th>
             <th rowspan="2" class="bdr-l">Half<br/>Yearly<br/>/80</th>
             <th rowspan="2" class="bdr-r">T-1<br/>TOTAL<br/>/100</th>
-            <th colspan="4" class="bdr-l">Unit II Test (20)</th>
+            <th colspan="4" class="bdr-l">2nd Unit Test (20)</th>
             <th rowspan="2" class="bdr-r">TOTAL<br/>/20</th>
           </tr>
           <tr class="sub-header2">
@@ -612,10 +623,10 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             <th colspan="2" class="term-hd">Over All</th>
           </tr>
           <tr class="sub-header">
-            <th colspan="4" class="bdr-l">Unit I Test (20)</th>
+            <th colspan="4" class="bdr-l">1st Unit Test (20)</th>
             <th rowspan="2" class="bdr-l">Half<br/>Yearly<br/>/80</th>
             <th rowspan="2" class="bdr-r">TOTAL<br/>/100</th>
-            <th colspan="4" class="bdr-l">Unit II Test (20)</th>
+            <th colspan="4" class="bdr-l">2nd Unit Test (20)</th>
             <th rowspan="2" class="bdr-l">Annual<br/>Exam<br/>/80</th>
             <th rowspan="2" class="bdr-r">TOTAL<br/>/100</th>
             <th rowspan="2" class="grand">Grand<br/>Total<br/>/200</th>
@@ -662,10 +673,17 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
       return `
 <div class="page">
   <div class="report-header">
-    <div class="school-logo">🏫</div>
+    <img src="${logoSrc}" class="school-logo-img" alt="IAS Logo" />
     <div class="header-text">
-      <div class="school-name">International Access School</div>
-      <div class="report-title">${reportLabel.toUpperCase()} — ACADEMIC SESSION ${session}</div>
+      <div class="school-name">INTERNATIONAL ACCESS SCHOOL</div>
+      <div class="school-sub">Affiliated to CBSE(10+2) New Delhi &nbsp;|&nbsp; Aff. No: 330691 &nbsp;|&nbsp; School Code: 65688</div>
+      <div class="school-sub">Siwan, Bihar – 841227 &nbsp;|&nbsp; Ph: +91 93477 76670, 84060 00830/33/40</div>
+      <div class="school-sub">Email: info@iaschool.edu.in &nbsp;|&nbsp; www.iaschool.edu.in</div>
+    </div>
+    <div class="header-right">
+      <div class="report-card-label">Report Card</div>
+      <div class="session-label">Academic Session: ${session}</div>
+      <div class="exam-label">${reportLabel.toUpperCase()}</div>
     </div>
   </div>
   <div class="student-info">
@@ -694,7 +712,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
     <div class="attendance-sec">
       <div class="sec-title">Attendance</div>
       <table class="att-table">
-        <thead><tr><th>Period</th><th>W.D.</th><th>Present</th></tr></thead>
+        <thead><tr><th>Period</th><th>W.D.</th><th>Present</th><th>%</th></tr></thead>
         <tbody>${attRows}</tbody>
       </table>
     </div>
@@ -723,11 +741,15 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
 .page{background:#fff;width:277mm;min-height:190mm;padding:5mm 6mm;margin:0 auto 8mm;page-break-after:always;page-break-inside:avoid;border:1px solid #ccc;}
-.report-header{display:flex;align-items:center;gap:8px;border-bottom:3px solid #1a2e4c;padding-bottom:5px;margin-bottom:5px;}
-.school-logo{font-size:24px;}
-.header-text{flex:1;}
-.school-name{font-size:17px;font-weight:900;color:#1a2e4c;letter-spacing:1px;}
-.report-title{font-size:9px;color:#555;font-weight:bold;text-transform:uppercase;letter-spacing:1.5px;margin-top:2px;}
+.report-header{display:flex;align-items:center;gap:8px;border-bottom:3px double #1a2e4c;padding-bottom:5px;margin-bottom:5px;}
+.school-logo-img{width:46px;height:46px;object-fit:contain;flex-shrink:0;}
+.header-text{flex:1;text-align:center;}
+.school-name{font-size:16px;font-weight:900;color:#1a2e4c;letter-spacing:1px;text-transform:uppercase;}
+.school-sub{font-size:7px;color:#444;margin-top:1px;line-height:1.3;}
+.header-right{text-align:right;min-width:110px;flex-shrink:0;}
+.report-card-label{font-size:12px;font-weight:900;color:#1a2e4c;border:2px solid #1a2e4c;padding:1px 6px;display:inline-block;letter-spacing:1px;}
+.session-label{font-size:7.5px;color:#555;font-weight:bold;margin-top:2px;}
+.exam-label{font-size:8px;color:#1a2e4c;font-weight:800;margin-top:1px;text-transform:uppercase;}
 .student-info{display:flex;flex-wrap:wrap;gap:2px 10px;background:#f0f4f8;padding:4px 8px;border-radius:4px;margin-bottom:5px;border:1px solid #dde3ea;}
 .info-group{display:flex;flex-direction:column;min-width:110px;max-width:160px;}
 .info-lbl{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;letter-spacing:.5px;}
@@ -898,7 +920,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
               {REPORT_TYPES.find(r => r.key === reportType)?.label} — Scope
             </p>
             <p className="text-muted-foreground text-xs">
-              {reportType === "unit1"      && "Shows only Unit I Test marks (PT/10 + NB/5 + SEA/5). Grade out of 20 per subject."}
+              {reportType === "unit1"      && "Shows only 1st Unit Test marks (PT/10 + NB/5 + SEA/5). Grade out of 20 per subject."}
               {reportType === "halfYearly" && "Shows Unit I + Half-Yearly marks. TERM-1 TOTAL = Unit I(20) + HY(80) = 100. Grade out of 100 per subject."}
               {reportType === "unit2"      && "Cumulative: Unit I + HY + Unit II. Cumulative Total = T1(100) + Unit II(20) = 120. Grade out of 120 per subject."}
               {reportType === "annual"     && "Full annual: TERM-1(100) + TERM-2(100) = 200. Grade out of 200 per subject with co-scholastic activities."}
