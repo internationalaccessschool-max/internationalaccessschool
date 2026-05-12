@@ -702,6 +702,24 @@ function openPrintWindow(html: string, w: number, h: number) {
     setTimeout(() => pw.print(), 600);
 }
 
+function schoolHeader(session: string, examLabel: string) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `<div style="display:flex;align-items:center;gap:8px;border-bottom:3px double #1a2e4c;padding-bottom:5px;margin-bottom:5px;">
+      <img src="${origin}/LOGO.png" style="width:46px;height:46px;object-fit:contain;flex-shrink:0;" alt="IAS"/>
+      <div style="flex:1;text-align:center;line-height:1.3;">
+        <div style="font-size:16px;font-weight:900;color:#1a2e4c;letter-spacing:1px;text-transform:uppercase;">INTERNATIONAL ACCESS SCHOOL</div>
+        <div style="font-size:7px;color:#444;margin-top:1px;">Affiliated to CBSE(10+2) New Delhi &nbsp;|&nbsp; Aff. No: 330691 &nbsp;|&nbsp; School Code: 65688</div>
+        <div style="font-size:7px;color:#444;">Siwan, Bihar – 841227 &nbsp;|&nbsp; Ph: +91 93477 76670, 84060 00830/33/40</div>
+        <div style="font-size:7px;color:#444;">Email: info@iaschool.edu.in &nbsp;|&nbsp; www.iaschool.edu.in</div>
+      </div>
+      <div style="text-align:right;min-width:110px;flex-shrink:0;">
+        <div style="font-size:12px;font-weight:900;color:#1a2e4c;border:2px solid #1a2e4c;padding:1px 6px;display:inline-block;letter-spacing:1px;">Report Card</div>
+        <div style="font-size:7.5px;color:#555;font-weight:bold;margin-top:2px;">Academic Session: ${session || new Date().getFullYear()}</div>
+        <div style="font-size:8px;color:#1a2e4c;font-weight:800;margin-top:1px;text-transform:uppercase;">${examLabel}</div>
+      </div>
+    </div>`;
+}
+
 function buildLandscapeHTML(p: {
     studentName: string; session: string; subjectRows: string;
     grandTotalObt: number; maxGrand: number; overallPct: number; overallGrade: string;
@@ -710,9 +728,7 @@ function buildLandscapeHTML(p: {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Report Card - ${p.studentName}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;font-size:10px;}
-.hdr{text-align:center;border-bottom:2px solid #1a2e4c;padding-bottom:4px;margin-bottom:6px;}
-.school{font-size:18px;font-weight:900;color:#1a2e4c;}.title{font-size:11px;color:#555;font-weight:bold;text-transform:uppercase;letter-spacing:1px;}
-.info{display:flex;gap:16px;flex-wrap:wrap;background:#f0f4f8;padding:5px 8px;border-radius:4px;margin-bottom:6px;}
+.info{display:flex;gap:16px;flex-wrap:wrap;background:#f0f4f8;padding:5px 8px;border-radius:4px;margin-bottom:6px;border:1px solid #dde3ea;}
 .ig{display:flex;flex-direction:column;min-width:100px;}.il{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;}.iv{font-size:11px;font-weight:700;color:#1a2e4c;}
 table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;}
 th,td{border:1px solid #ccc;padding:2px 3px;vertical-align:middle;}
@@ -731,8 +747,7 @@ thead th{background:#1a2e4c;color:#fff;text-align:center;font-size:8px;}
 .sign{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
 @page{size:A4 landscape;margin:5mm;}
 </style></head><body>
-<div class="hdr"><div class="school">International Access School</div>
-<div class="title">Report Card — Academic Session: ${p.session || new Date().getFullYear()}</div></div>
+${schoolHeader(p.session, "Annual Report")}
 <div class="info">
 <div class="ig"><span class="il">Student's Name</span><span class="iv">${p.studentName}</span></div>
 <div class="ig"><span class="il">Class</span><span class="iv">${p.cls}</span></div>
@@ -790,8 +805,7 @@ th,td{border:1px solid #ccc;padding:4px 6px;}thead th{background:#1a2e4c;color:#
 .sign{font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
 @page{size:A4 landscape;margin:8mm;}
 </style></head><body>
-<div class="hdr"><div class="school">International Access School</div>
-<div class="title">${p.term} Report Card — Session ${p.session || new Date().getFullYear()}</div></div>
+${schoolHeader(p.session, p.term)}
 <div class="info">
 <div class="ig"><span class="il">Student Name</span><span class="iv">${p.studentName}</span></div>
 <div class="ig"><span class="il">Class</span><span class="iv">${p.cls} — ${p.sec}</span></div>
@@ -896,39 +910,45 @@ function buildUnitTestHTML(p: {
 }) {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${p.examName} - ${p.studentName}</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;font-size:11px;}
-.hdr{text-align:center;border-bottom:2px solid #1a2e4c;padding-bottom:6px;margin-bottom:8px;}
-.school{font-size:20px;font-weight:900;color:#1a2e4c;}.title{font-size:12px;color:#555;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
-.info{display:flex;gap:20px;flex-wrap:wrap;background:#f0f4f8;padding:8px 12px;border-radius:6px;margin-bottom:10px;}
-.ig{display:flex;flex-direction:column;}.il{font-size:8px;color:#888;text-transform:uppercase;font-weight:bold;}.iv{font-size:13px;font-weight:700;color:#1a2e4c;}
-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;}
-th,td{border:1px solid #ccc;padding:4px 6px;}thead th{background:#1a2e4c;color:#fff;text-align:center;font-size:9px;}
-.sn{text-align:left;padding-left:6px;}.c{text-align:center;}.b{font-weight:bold;}.gr{background:#e8f5e9;color:#1a6b2e;font-weight:bold;}
-.sum{display:flex;gap:12px;margin-bottom:14px;}
-.sb{flex:1;padding:12px;border:1px solid #e5e7eb;border-radius:8px;}.sl{font-size:8px;font-weight:bold;text-transform:uppercase;color:#888;margin-bottom:4px;}
-.sv{font-size:26px;font-weight:900;color:#1a2e4c;}
-.sigs{display:flex;gap:20px;justify-content:space-around;padding-top:10px;border-top:1px solid #e5e7eb;margin-top:14px;}
-.sigb{text-align:center;flex:1;}.sigl{border-bottom:2px dashed #aaa;margin:0 auto 4px;height:28px;}
-.sign{font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
-@page{size:A4 portrait;margin:8mm;}
+*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;font-size:10px;}
+.info{display:flex;gap:16px;flex-wrap:wrap;background:#f0f4f8;padding:5px 8px;border-radius:4px;margin-bottom:6px;border:1px solid #dde3ea;}
+.ig{display:flex;flex-direction:column;min-width:100px;}.il{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;}.iv{font-size:11px;font-weight:700;color:#1a2e4c;}
+table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;}
+th,td{border:1px solid #ccc;padding:2px 4px;vertical-align:middle;}
+thead th{background:#1a2e4c;color:#fff;text-align:center;font-size:8px;}
+.sn{text-align:left;padding-left:5px;}.c{text-align:center;}.b{font-weight:bold;}.gr{background:#e8f5e9;color:#1a6b2e;font-weight:bold;}
+.sum{display:flex;gap:8px;margin-bottom:8px;}
+.sb{flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;}
+.sl{font-size:7px;font-weight:bold;text-transform:uppercase;color:#888;margin-bottom:3px;}
+.sv{font-size:20px;font-weight:900;color:#1a2e4c;}
+.sigs{display:flex;gap:15px;justify-content:space-around;padding-top:6px;border-top:1px solid #e5e7eb;margin-top:6px;}
+.sigb{text-align:center;flex:1;}.sigl{border-bottom:2px dashed #aaa;margin:0 auto 3px;height:20px;}
+.sign{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
+@page{size:A4 landscape;margin:6mm;}
+@media print{body{background:#fff;}}
 </style></head><body>
-<div class="hdr"><div class="school">International Access School</div>
-<div class="title">${p.examName} — Session ${p.session || new Date().getFullYear()}</div></div>
+${schoolHeader(p.session, p.examName)}
 <div class="info">
 <div class="ig"><span class="il">Student Name</span><span class="iv">${p.studentName}</span></div>
-<div class="ig"><span class="il">Class</span><span class="iv">${p.cls} — ${p.sec}</span></div>
+<div class="ig"><span class="il">Class &amp; Section</span><span class="iv">${p.cls} — ${p.sec}</span></div>
 </div>
 <table>
-<thead><tr><th style="text-align:left;width:160px">Subject</th><th>Per Test /10</th><th>Note Book /5</th><th>SEA /5</th><th>Total /20</th><th>Grade</th></tr></thead>
+<thead><tr>
+  <th style="text-align:left;width:140px">Subject</th>
+  <th>Per Test /10</th><th>Note Book /5</th><th>SEA /5</th>
+  <th>Total /20</th><th>Grade</th>
+</tr></thead>
 <tbody>${p.subjectRows}</tbody>
 </table>
 <div class="sum">
-<div class="sb"><div class="sl">Total Score</div><div class="sv">${p.totalObt} <span style="font-size:14px;color:#9ca3af">/ ${p.totalMax}</span></div></div>
+<div class="sb"><div class="sl">Total Score</div><div class="sv">${p.totalObt} <span style="font-size:12px;color:#9ca3af">/ ${p.totalMax}</span></div></div>
 <div class="sb"><div class="sl">Percentage</div><div class="sv">${p.pct.toFixed(1)}%</div></div>
-<div class="sb"><div class="sl">Overall Grade</div><div class="sv" style="color:#1a6b2e">${p.grade}</div></div>
+<div class="sb"><div class="sl">Overall Grade</div><div class="sv" style="color:#1a6b2e;font-size:24px">${p.grade}</div></div>
+<div class="sb"><div class="sl">Result</div><div class="sv" style="color:${p.pct >= 33 ? "#155724" : "#dc2626"}">${p.pct >= 33 ? "PASS" : "FAIL"}</div></div>
 </div>
 <div class="sigs">
 <div class="sigb"><div class="sigl"></div><div class="sign">Class Teacher</div></div>
+<div class="sigb"><div class="sigl"></div><div class="sign">Exam Controller</div></div>
 <div class="sigb"><div class="sigl"></div><div class="sign">Principal</div></div>
 <div class="sigb"><div class="sigl"></div><div class="sign">Parent / Guardian</div></div>
 </div></body></html>`;
