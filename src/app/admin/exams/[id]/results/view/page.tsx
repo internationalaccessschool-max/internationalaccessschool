@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { collection, query, where, getDocs, doc, getDoc, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, collectionGroup, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Result, Subject } from "@/types";
 import { Input } from "@/components/ui/input";
@@ -79,68 +79,57 @@ export default function AdminViewResultsPage({ params }: { params: Promise<{ id:
                 });
                 setSubjectsMap(globalSubjectsMap);
 
-                // 3. Fetch all profiles to map students and find sections
-                const profilesSnap = await getDocs(collectionGroup(db, "profiles"));
-                const profilesMap: Record<string, any> = {};
-                const classSectionsMap: Record<string, Set<string>> = {};
-
-                profilesSnap.docs.forEach(d => {
+                // 3. Fetch sections per class from classSubjects (already loaded above)
+                const classSectionsMap: Record<string, string[]> = {};
+                const classSubSnap = await getDocs(collection(db, "classes"));
+                classSubSnap.docs.forEach(d => {
                     const data = d.data();
-                    profilesMap[d.id] = data;
-                    if (data.className && data.section) {
-                        if (!classSectionsMap[data.className]) {
-                            classSectionsMap[data.className] = new Set();
-                        }
-                        classSectionsMap[data.className].add(data.section);
-                    }
+                    const cls = data.name || d.id;
+                    const sections: string[] = data.sections || ["A"];
+                    classSectionsMap[cls] = sections;
                 });
 
-                const loadedResults: AdminResultView[] = [];
+                // 4. Fetch ALL results in parallel (no sequential loop)
                 const seenStudentIds = new Set<string>();
+                const rawResults: { studentId: string; data: Result }[] = [];
 
-                // 4. Fetch results from the new nested path
-                for (const cls of classesApplicable) {
-                    const sections = classSectionsMap[cls] ? Array.from(classSectionsMap[cls]) : [];
-                    for (const sec of sections) {
-                        const resultsRef = collection(db, "results", examId, "classes", cls, "sections", sec, "students");
-                        const snap = await getDocs(resultsRef);
-                        snap.docs.forEach(docSnap => {
-                            const data = docSnap.data() as Result;
-                            const studentId = docSnap.id;
-                            if (!seenStudentIds.has(studentId)) {
-                                const profile = profilesMap[studentId] || {};
-                                loadedResults.push({
-                                    id: docSnap.id,
-                                    studentName: profile.firstName ? `${profile.firstName} ${profile.lastName || ""}`.trim() : "Unknown Student",
-                                    admissionNumber: profile.admissionNumber || "N/A",
-                                    ...data
-                                });
-                                seenStudentIds.add(studentId);
-                            }
-                        });
-                    }
-                }
-
-                // 5. Fallback: Check old flat collection
-                try {
-                    // This query might need an index if not present, but we catch errors
-                    const oldResultsSnap = await getDocs(query(collection(db, "results"), where("examId", "==", examId)));
-                    oldResultsSnap.forEach(docSnap => {
-                        const data = docSnap.data() as Result;
-                        if (data.studentId && !seenStudentIds.has(data.studentId)) {
-                            const profile = profilesMap[data.studentId] || {};
-                            loadedResults.push({
-                                id: docSnap.id,
-                                studentName: profile.firstName ? `${profile.firstName} ${profile.lastName || ""}`.trim() : "Unknown Student",
-                                admissionNumber: profile.admissionNumber || "N/A",
-                                ...data
+                await Promise.all(classesApplicable.map(async cls => {
+                    const sections = classSectionsMap[cls] || ["A", "B", "C"];
+                    await Promise.all(sections.map(async sec => {
+                        try {
+                            const snap = await getDocs(
+                                collection(db, "results", examId, "classes", cls, "sections", sec, "students")
+                            );
+                            snap.docs.forEach(docSnap => {
+                                if (!seenStudentIds.has(docSnap.id)) {
+                                    seenStudentIds.add(docSnap.id);
+                                    rawResults.push({ studentId: docSnap.id, data: docSnap.data() as Result });
+                                }
                             });
-                            seenStudentIds.add(data.studentId);
-                        }
-                    });
-                } catch (e) {
-                    console.log("Old flat results query failed, skipping (might be missing index)", e);
-                }
+                        } catch { /* section may not exist */ }
+                    }));
+                }));
+
+                // 5. Fetch ONLY the student profiles we actually need (not all 528+)
+                const profilesMap: Record<string, any> = {};
+                await Promise.all(Array.from(seenStudentIds).map(async id => {
+                    try {
+                        const snap = await getDoc(doc(db, "studentLookup", id));
+                        if (snap.exists()) profilesMap[id] = snap.data();
+                    } catch { /* skip */ }
+                }));
+
+                const loadedResults: AdminResultView[] = rawResults.map(({ studentId, data }) => {
+                    const profile = profilesMap[studentId] || {};
+                    const firstName = profile.firstName || (data as any).studentName || "";
+                    const lastName = profile.lastName || "";
+                    return {
+                        id: studentId,
+                        studentName: firstName ? `${firstName} ${lastName}`.trim() : "Unknown Student",
+                        admissionNumber: profile.admissionNumber || profile.admNo || "N/A",
+                        ...data,
+                    };
+                });
 
                 // Sort by class, section, name
                 loadedResults.sort((a, b) => {
@@ -195,86 +184,119 @@ export default function AdminViewResultsPage({ params }: { params: Promise<{ id:
         setFilteredResults(result);
     }, [allResults, searchQuery, selectedClass, selectedSection]);
 
-    const handlePrint = (res: AdminResultView) => {
+    const handlePrint = async (res: AdminResultView) => {
         const markEntries = Object.values(res.marks || {});
-        
-        const rows = markEntries.map(m => {
-            const subName = subjectsMap[m.subjectId]?.name || "Unknown Subject";
-            const obtained = m.obtained !== null ? String(m.obtained) : "ABSENT";
+        const eName = res.examName || examName || "Report Card";
+        const session = (res as any).session || "";
+
+        // Fetch logo as base64
+        let logoSrc = "/LOGO.png";
+        try {
+            const r = await fetch(window.location.origin + "/LOGO.png");
+            const blob = await r.blob();
+            logoSrc = await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+        } catch { /* use URL fallback */ }
+
+        const rows = markEntries.map((m, i) => {
+            const subName = subjectsMap[m.subjectId]?.name || "Subject";
+            const obtained = m.obtained !== null ? String(m.obtained) : "AB";
             const color = m.obtained !== null ? "#1a2e4c" : "#dc2626";
-            return `<tr>
-                <td style="padding:10px 16px;border-bottom:1px solid #f0f0f0;">${subName}</td>
-                <td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;">${m.total}</td>
-                <td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;font-weight:700;color:${color}">${obtained}</td>
+            return `<tr style="border-bottom:1px solid #bbb;">
+                <td style="padding:3px 5px;font-size:8.5px;">${subName}</td>
+                <td style="padding:3px 5px;text-align:center;font-size:8.5px;border-left:1px solid #bbb;">${m.total}</td>
+                <td style="padding:3px 5px;text-align:center;font-size:8.5px;font-weight:700;color:${color};border-left:1px solid #bbb;">${obtained}</td>
             </tr>`;
         }).join("");
 
-        const eName = res.examName || examName || "Report Card";
-        const eStart = res.examStartDate || examStartDate || "";
-        const eEnd = res.examEndDate || examEndDate || "";
-        const periodStr = eStart ? `${eStart} - ${eEnd}` : "N/A";
+        const pct = typeof res.percentage === "number" ? res.percentage.toFixed(1) : res.percentage;
 
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Report Card - ${res.studentName}</title>
+        const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
+<title>Report Card — ${res.studentName}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:Arial,sans-serif;background:#fff;color:#111;}
-.hdr{background:#1a2e4c;color:#fff;padding:28px 36px;display:flex;align-items:center;gap:18px;}
-.logo{width:60px;height:60px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
-.school{font-size:24px;font-weight:800;}
-.exam{font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
-.info{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:20px 36px;background:#f8fafc;border-bottom:1px solid #e5e7eb;}
-.info label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;display:block;margin-bottom:3px;}
-.info span{font-size:15px;font-weight:700;color:#1a2e4c;}
-.tbl{margin:20px 36px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;}
-table{width:100%;border-collapse:collapse;}
-th{padding:10px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;background:#f8fafc;}
-th:not(:first-child){text-align:right;}
-.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 36px 28px;}
-.sb{padding:18px;border-radius:10px;border:1px solid #e5e7eb;}
-.sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:5px;}
-.sv{font-size:30px;font-weight:900;color:#1a2e4c;}
-.sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:32px 36px 0;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;}
-.sline{border-bottom:2px dashed #d1d5db;margin:0 auto 8px;width:75%;height:36px;}
-.sname{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;}
-@page{size:A4 portrait;margin:8mm;}
+body{font-family:Arial,Helvetica,sans-serif;background:#fff;font-size:10px;}
+.page{width:277mm;min-height:190mm;padding:5mm 6mm;background:#fff;}
+.report-header{display:flex;align-items:center;gap:8px;border-bottom:3px double #1a2e4c;padding-bottom:5px;margin-bottom:5px;}
+.school-logo-img{width:46px;height:46px;object-fit:contain;flex-shrink:0;}
+.header-text{flex:1;text-align:center;line-height:1.3;}
+.school-name{font-size:16px;font-weight:900;color:#1a2e4c;letter-spacing:1px;text-transform:uppercase;}
+.school-sub{font-size:7px;color:#444;margin-top:1px;}
+.header-right{text-align:right;min-width:110px;flex-shrink:0;}
+.report-card-label{font-size:12px;font-weight:900;color:#1a2e4c;border:2px solid #1a2e4c;padding:1px 6px;display:inline-block;letter-spacing:1px;}
+.session-label{font-size:7.5px;color:#555;font-weight:bold;margin-top:2px;}
+.exam-label{font-size:8px;color:#1a2e4c;font-weight:800;margin-top:1px;text-transform:uppercase;}
+.student-info{display:flex;flex-wrap:wrap;gap:2px 10px;background:#f0f4f8;padding:4px 8px;border-radius:4px;margin-bottom:6px;border:1px solid #dde3ea;}
+.info-group{display:flex;flex-direction:column;min-width:100px;}
+.info-lbl{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;letter-spacing:.5px;}
+.info-val{font-size:10px;font-weight:700;color:#1a2e4c;}
+.marks-table{width:100%;border-collapse:collapse;border:1px solid #bbb;font-size:8.5px;margin-bottom:6px;}
+.marks-table th{background:#1a2e4c;color:#fff;padding:4px 5px;text-align:center;font-size:8px;border:1px solid #1a2e4c;}
+.marks-table th:first-child{text-align:left;min-width:80px;}
+.bottom-section{display:flex;gap:8px;margin-bottom:6px;}
+.summary-box{flex:1;border:1px solid #dde3ea;border-radius:4px;padding:6px 10px;}
+.s-lbl{font-size:7px;color:#888;text-transform:uppercase;font-weight:bold;letter-spacing:.5px;display:block;}
+.s-val{font-size:18px;font-weight:900;color:#1a2e4c;display:block;}
+.grade-val{font-size:22px;font-weight:900;color:#155724;}
+.signatures{display:flex;gap:10px;justify-content:space-around;padding-top:5px;border-top:1px solid #dde3ea;margin-top:4px;}
+.sig-box{text-align:center;flex:1;}
+.sig-line{border-bottom:1.5px dashed #aaa;margin:0 auto 3px;height:18px;}
+.sig-name{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
+@page{size:A4 landscape;margin:6mm;}
+@media print{body{background:#fff;}.page{width:100%;margin:0;}}
 </style></head><body>
-<div class="hdr"><div class="logo">🏫</div>
-<div><div class="school">International Access School</div>
-<div class="exam">${eName}</div></div></div>
-<div class="info">
-<div><label>Student Name</label><span>${res.studentName}</span></div>
-<div><label>Class</label><span>${res.classId} – ${res.sectionId}</span></div>
-<div><label>Period</label><span>${periodStr}</span></div>
-<div><label>Year</label><span>${new Date().getFullYear()}</span></div>
-</div>
-<div class="tbl"><table>
-<thead><tr><th>Subject</th><th style="text-align:right">Max Marks</th><th style="text-align:right">Obtained</th></tr></thead>
-<tbody>${rows}</tbody>
-</table></div>
-<div class="sum">
-<div class="sb"><div class="sl">Total Score</div><div class="sv">${res.totalObtained}<span style="font-size:16px;color:#9ca3af"> / ${res.totalMax}</span></div></div>
-<div class="sb"><div class="sl">Percentage</div><div class="sv">${res.percentage}%</div></div>
-<div class="sb"><div class="sl">Overall Grade</div><div class="sv">${res.overallGrade}</div></div>
-</div>
-<div class="sigs">
-<div><div class="sline"></div><div class="sname">Class Teacher</div></div>
-<div><div class="sline"></div><div class="sname">Principal</div></div>
-<div><div class="sline"></div><div class="sname">Parent / Guardian</div></div>
+<div class="page">
+  <div class="report-header">
+    <img src="${logoSrc}" class="school-logo-img" alt="IAS Logo"/>
+    <div class="header-text">
+      <div class="school-name">INTERNATIONAL ACCESS SCHOOL</div>
+      <div class="school-sub">Affiliated to CBSE(10+2) New Delhi &nbsp;|&nbsp; Aff. No: 330691 &nbsp;|&nbsp; School Code: 65688</div>
+      <div class="school-sub">Siwan, Bihar – 841227 &nbsp;|&nbsp; Ph: +91 93477 76670, 84060 00830/33/40</div>
+      <div class="school-sub">Email: info@iaschool.edu.in &nbsp;|&nbsp; www.iaschool.edu.in</div>
+    </div>
+    <div class="header-right">
+      <div class="report-card-label">Report Card</div>
+      <div class="session-label">Academic Session: ${session || new Date().getFullYear()}</div>
+      <div class="exam-label">${eName.toUpperCase()}</div>
+    </div>
+  </div>
+  <div class="student-info">
+    <div class="info-group"><span class="info-lbl">Student Name</span><span class="info-val">${res.studentName}</span></div>
+    <div class="info-group"><span class="info-lbl">Adm. No.</span><span class="info-val">${res.admissionNumber}</span></div>
+    <div class="info-group"><span class="info-lbl">Class &amp; Sec</span><span class="info-val">${res.classId} — ${res.sectionId}</span></div>
+    <div class="info-group"><span class="info-lbl">Exam</span><span class="info-val">${eName}</span></div>
+  </div>
+  <table class="marks-table">
+    <thead><tr>
+      <th style="text-align:left">Subject</th>
+      <th>Max Marks</th>
+      <th>Marks Obtained</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="bottom-section">
+    <div class="summary-box"><span class="s-lbl">Total Score</span><span class="s-val">${res.totalObtained} <span style="font-size:11px;color:#9ca3af">/ ${res.totalMax}</span></span></div>
+    <div class="summary-box"><span class="s-lbl">Percentage</span><span class="s-val">${pct}%</span></div>
+    <div class="summary-box"><span class="s-lbl">Overall Grade</span><span class="grade-val">${res.overallGrade}</span></div>
+    <div class="summary-box"><span class="s-lbl">Result</span><span class="s-val" style="color:${Number(pct) >= 33 ? "#155724" : "#dc2626"}">${Number(pct) >= 33 ? "PASS" : "FAIL"}</span></div>
+  </div>
+  <div class="signatures">
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Class Teacher</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Exam Controller</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Principal</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Parent / Guardian</div></div>
+  </div>
 </div></body></html>`;
 
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
-        iframe.contentDocument?.write(html);
-        iframe.contentDocument?.close();
-        setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 1000);
-        }, 500);
+        const pw = window.open("", "_blank", "width=1100,height=750");
+        if (!pw) { alert("Please allow popups to print."); return; }
+        pw.document.write(html);
+        pw.document.close();
+        pw.focus();
+        setTimeout(() => pw.print(), 800);
     };
 
     if (isLoading) {
