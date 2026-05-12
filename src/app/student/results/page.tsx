@@ -608,11 +608,6 @@ th:not(:first-child){text-align:right;}
                                 </div>
                             )}
 
-                            <div className="mt-16 grid grid-cols-3 gap-8 pt-8 border-t border-gray-100 text-center">
-                                <div className="space-y-8"><div className="border-b-2 border-dashed border-gray-300 mx-auto w-3/4" /><p className="text-sm text-gray-500 uppercase tracking-widest font-semibold">Class Teacher</p></div>
-                                <div className="space-y-8"><div className="border-b-2 border-dashed border-gray-300 mx-auto w-3/4" /><p className="text-sm text-gray-500 uppercase tracking-widest font-semibold">Principal</p></div>
-                                <div className="space-y-8"><div className="border-b-2 border-dashed border-gray-300 mx-auto w-3/4" /><p className="text-sm text-gray-500 uppercase tracking-widest font-semibold">Parent / Guardian</p></div>
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
