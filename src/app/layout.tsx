@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import Script from "next/script";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const inter = Inter({
@@ -46,6 +47,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased min-h-screen bg-background text-foreground`}>
         <Providers>{children}</Providers>
         <FloatingApplyButton />
+        <SpeedInsights />
         {/* OneSignal Push Notification SDK */}
         <Script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer strategy="afterInteractive" />
         <Script id="onesignal-init" strategy="afterInteractive">
