@@ -9,8 +9,9 @@ import toast from "react-hot-toast";
 import {
     Loader2, Search, CheckCircle2, Clock, AlertCircle,
     ChevronDown, PlusCircle, FileText, X, UserPlus, Pencil, Trash2, Users2,
-    ChevronRight, Calendar, TrendingDown, IndianRupee
+    ChevronRight, Calendar, TrendingDown, IndianRupee, Download
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 const MONTHS = [
     "January", "February", "March", "April", "May", "June",
@@ -28,6 +29,9 @@ interface TeacherInfo {
     otherAllowances: number;
     gross: number;
     staffType: "teacher" | "staff";
+    bankAccountNumber?: string;
+    ifscCode?: string;
+    joiningDate?: string;
 }
 
 interface StaffForm {
@@ -123,6 +127,9 @@ export default function AdminTeacherSalaryPage() {
                     basicSalary: basic, hra, da, otherAllowances: other,
                     gross: basic + hra + da + other,
                     staffType: "teacher" as const,
+                    bankAccountNumber: data.bankAccountNumber || data.accountNumber || "",
+                    ifscCode: data.ifscCode || data.ifsc || "",
+                    joiningDate: data.joiningDate || data.dateOfJoining || "",
                 };
             });
 
@@ -141,6 +148,9 @@ export default function AdminTeacherSalaryPage() {
                     basicSalary: basic, hra, da, otherAllowances: other,
                     gross: basic + hra + da + other,
                     staffType: "staff" as const,
+                    bankAccountNumber: data.bankAccountNumber || data.accountNumber || "",
+                    ifscCode: data.ifscCode || data.ifsc || "",
+                    joiningDate: data.joiningDate || data.dateOfJoining || "",
                 };
             });
 
@@ -160,6 +170,83 @@ export default function AdminTeacherSalaryPage() {
     };
 
     useEffect(() => { fetchData(); }, [selectedMonth, selectedYear]);
+
+    // ── Bank Transfer Excel ─────────────────────────────────────────────────
+    const exportBankExcel = () => {
+        const monthName = MONTHS[selectedMonth - 1].toUpperCase();
+        const rows = records
+            .filter(r => r.netSalary > 0)
+            .map(r => {
+                const t = teachers.find(t => t.id === r.teacherId);
+                const name = (r.teacherName || t?.name || "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 32);
+                return {
+                    "Transaction type\n(Within Bank (WIB)/NEFT (NFT))": "NFT",
+                    "IFSC (Always 11 character alphanumeric and 5th character always 0 (zero))": t?.ifscCode || "",
+                    "Beneficiary Account No": t?.bankAccountNumber || "",
+                    "Beneficiary Name (Max length 32 Character)": name,
+                    "Amount (₹)": r.netSalary,
+                    "Remarks for Beneficiary": "SALARY",
+                };
+            });
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        // Column widths
+        ws["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 22 }, { wch: 32 }, { wch: 14 }, { wch: 16 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Bank Transfer");
+        XLSX.writeFile(wb, `Salary_Bank_${monthName}_${selectedYear}.xlsx`);
+    };
+
+    // ── School Records Excel ────────────────────────────────────────────────
+    const exportSchoolExcel = async () => {
+        // Fetch previous month's records
+        const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
+        const prevYear  = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+        let prevRecords: SalaryRecord[] = [];
+        try {
+            const snap = await getDocs(collection(db, "teacherSalary", String(prevYear), "months", String(prevMonth), "records"));
+            prevRecords = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+        } catch { /* prev month may not exist */ }
+
+        const currMonthName = MONTHS[selectedMonth - 1].toUpperCase().slice(0, 3);
+        const prevMonthName = MONTHS[prevMonth - 1].toUpperCase().slice(0, 3);
+
+        const rows = records.map((r, i) => {
+            const t = teachers.find(t => t.id === r.teacherId);
+            const prev = prevRecords.find(p => p.teacherId === r.teacherId);
+            return {
+                "#": i + 1,
+                "JOINING": t?.joiningDate || "",
+                [`${prevMonthName} SAL`]: prev?.gross ?? "",
+                "ESIC SAL": r.esicDeduction,
+                "PF SAL": r.pfDeduction,
+                "EMPLOYEE NAME": r.teacherName || t?.name || "",
+                "ACC NO": t?.bankAccountNumber || "",
+                "IFSC": t?.ifscCode || "",
+                [`${currMonthName}`]: r.gross,
+                "CL": r.leaveDays || 0,
+                "ABS DAYS": r.absentDays || 0,
+                "ABS AMT": r.absentDeduction || 0,
+                "SAL": r.gross,
+                "PF": r.pfDeduction,
+                "ESIC": r.esicDeduction,
+                "PENALTY": r.otherDeductions || 0,
+                "ADV": 0,
+                "NET SAL": r.netSalary,
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws["!cols"] = [
+            { wch: 4 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+            { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 10 },
+            { wch: 5 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+            { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "School Records");
+        XLSX.writeFile(wb, `Salary_School_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`);
+    };
 
     const displayList = useMemo(() => {
         return teachers.map(t => {
@@ -275,11 +362,21 @@ export default function AdminTeacherSalaryPage() {
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">💰 Staff Salary</h1>
                         <p className="text-white/40 text-sm mt-1">Attendance-linked · 1 absent = 1 day cut · 3 lates = 1 day cut</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={openAddStaff}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/20 transition-colors border border-white/20">
                             <Users2 className="w-4 h-4" /> Manage Staff
                         </button>
+                        {records.length > 0 && (<>
+                            <button onClick={exportBankExcel}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors">
+                                <Download className="w-4 h-4" /> Bank Excel
+                            </button>
+                            <button onClick={exportSchoolExcel}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500 text-white font-semibold text-sm hover:bg-blue-600 transition-colors">
+                                <Download className="w-4 h-4" /> School Excel
+                            </button>
+                        </>)}
                         <Link href="/admin/teacher-salary/generate"
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy font-semibold text-sm hover:bg-gold-light transition-colors shadow-md">
                             <PlusCircle className="w-4 h-4" /> Generate Salaries
