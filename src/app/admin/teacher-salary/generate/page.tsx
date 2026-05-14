@@ -51,8 +51,8 @@ export default function GenerateTeacherSalaryPage() {
     const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
     const [loading, setLoading] = useState(true);
     const [teachers, setTeachers] = useState<TeacherRow[]>([]);
-    const [pfDefault, setPfDefault] = useState<number>(0);
-    const [esicDefault, setEsicDefault] = useState<number>(0);
+    const [pfDefault, setPfDefault] = useState<number>(24);
+    const [esicDefault, setEsicDefault] = useState<number>(0.75);
     const [generating, setGenerating] = useState(false);
     const [result, setResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
 
