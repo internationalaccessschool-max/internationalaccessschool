@@ -35,9 +35,10 @@ function SlipContent() {
                 const data = snap.data();
                 setRecord({ id: snap.id, ...data });
 
-                // Fetch teacher profile
+                // Fetch staff profile — check correct collection based on staffType
                 if (data.teacherId) {
-                    const tSnap = await getDoc(doc(db, "teachers", data.teacherId));
+                    const profileCollection = data.staffType === "staff" ? "nonTeachingStaff" : "teachers";
+                    const tSnap = await getDoc(doc(db, profileCollection, data.teacherId));
                     if (tSnap.exists()) setTeacherData(tSnap.data());
                 }
             } catch (err: any) {
