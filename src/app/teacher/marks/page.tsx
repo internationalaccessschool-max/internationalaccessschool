@@ -76,6 +76,7 @@ export default function TeacherMarksPage() {
     const [coSchoMap, setCoSchoMap] = useState<Record<string, Record<string, { hy: string; annual: string }>>>({});
 
     const [sortBy, setSortBy] = useState<"name" | "admNo">("name");
+    const [absentMap, setAbsentMap] = useState<Record<string, Record<string, boolean>>>({});
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState<TabKey | null>(null);
@@ -258,6 +259,7 @@ export default function TeacherMarksPage() {
             try {
                 const newMap: Record<string, Record<string, Record<string, string>>> = {};
                 const newCoScho: Record<string, Record<string, { hy: string; annual: string }>> = {};
+                const newAbsent: Record<string, Record<string, boolean>> = {};
 
                 for (const exam of sessionExams) {
                     if (!exam.id) continue;
@@ -281,6 +283,11 @@ export default function TeacherMarksPage() {
                                     });
                                     newMap[exam.id!][d.id] = entryMap;
 
+                                    if (data.absent === true) {
+                                        if (!newAbsent[exam.id!]) newAbsent[exam.id!] = {};
+                                        newAbsent[exam.id!][d.id] = true;
+                                    }
+
                                     // co-scholastic (stored on Annual exam)
                                     if (exam.examType === "Annual Exam" && data.coScholastic) {
                                         newCoScho[d.id] = data.coScholastic;
@@ -293,6 +300,7 @@ export default function TeacherMarksPage() {
                 }
                 setResultsMap(newMap);
                 setCoSchoMap(newCoScho);
+                setAbsentMap(newAbsent);
             } catch (err) {
                 console.error("Critical error in marks loader:", err);
             } finally {
@@ -367,10 +375,18 @@ export default function TeacherMarksPage() {
 
         try {
             for (const student of students) {
+                const studentAbsent = absentMap[examId]?.[student.id] === true;
                 const entry = resultsMap[examId]?.[student.id] || {};
                 const marks: Record<string, any> = {};
 
-                if (isUnit) {
+                if (studentAbsent) {
+                    subjects.forEach(sub => {
+                        const maxM = isUnit ? 20 : isTermOrAnnual ? 80 : sub.maxMarks;
+                        marks[sub.id] = isUnit
+                            ? { subjectId: sub.id, perTest: null, noteBook: null, sea: null, obtained: null, total: 20 }
+                            : { subjectId: sub.id, obtained: null, total: maxM };
+                    });
+                } else if (isUnit) {
                     subjects.forEach(sub => {
                         const pt  = parseFloat(entry[`${sub.id}__perTest`]  || "") || 0;
                         const nb  = parseFloat(entry[`${sub.id}__noteBook`] || "") || 0;
@@ -397,9 +413,9 @@ export default function TeacherMarksPage() {
                     });
                 }
 
-                const totalObtained = Object.values(marks).reduce((s, m) => s + (m.obtained || 0), 0);
                 const totalMax = subjects.reduce((s, sub) => s + (isUnit ? 20 : isTermOrAnnual ? 80 : sub.maxMarks), 0);
-                const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+                const totalObtained = studentAbsent ? 0 : Object.values(marks).reduce((s, m) => s + (m.obtained || 0), 0);
+                const pct = studentAbsent ? 0 : (totalMax > 0 ? (totalObtained / totalMax) * 100 : 0);
 
                 const payload: Record<string, any> = {
                     studentId: student.id,
@@ -411,10 +427,11 @@ export default function TeacherMarksPage() {
                     classId: normCls,
                     sectionId: myClass.section,
                     marks,
+                    absent: studentAbsent,
                     totalObtained,
                     totalMax,
-                    percentage: Math.round(pct * 10) / 10,
-                    overallGrade: calcGrade(pct),
+                    percentage: studentAbsent ? 0 : Math.round(pct * 10) / 10,
+                    overallGrade: studentAbsent ? "AB" : calcGrade(pct),
                     updatedAt: Date.now(),
                 };
 
@@ -439,6 +456,14 @@ export default function TeacherMarksPage() {
         }
         return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
     });
+
+    const isAbsent = (examId: string, studentId: string) => !!absentMap[examId]?.[studentId];
+    const toggleAbsent = (examId: string, studentId: string) => {
+        setAbsentMap(prev => ({
+            ...prev,
+            [examId]: { ...(prev[examId] || {}), [studentId]: !prev[examId]?.[studentId] },
+        }));
+    };
 
     // ─── Guard: not a class teacher ───────────────────────────────────────────
     if (isClassTeacher === null) {
@@ -736,90 +761,109 @@ export default function TeacherMarksPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {sortedStudents.map((student, idx) => (
+                                            {sortedStudents.map((student, idx) => {
+                                                const studentAbsent = exam.id ? isAbsent(exam.id, student.id) : false;
+                                                return (
                                                 <tr
                                                     key={student.id}
-                                                    className={`border-b border-border/40 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-primary/5`}
+                                                    className={`border-b border-border/40 transition-colors ${studentAbsent ? "bg-red-50/60" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-primary/5`}
                                                 >
                                                     <td className="px-4 py-2.5 text-muted-foreground text-xs font-medium">{idx + 1}</td>
                                                     <td className="px-4 py-2.5">
                                                         <p className="font-semibold text-sm leading-tight">
                                                             {student.firstName} {student.lastName}
                                                         </p>
+                                                        <button
+                                                            onClick={() => exam.id && canEditMarks && toggleAbsent(exam.id, student.id)}
+                                                            disabled={!canEditMarks}
+                                                            title={studentAbsent ? "Mark as Present" : "Mark as Absent"}
+                                                            className={`mt-0.5 text-[10px] px-1.5 py-0 rounded font-bold border transition-colors ${!canEditMarks ? "opacity-40 cursor-not-allowed" : ""} ${studentAbsent ? "bg-red-100 text-red-700 border-red-300" : "bg-gray-100 text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-500"}`}
+                                                        >
+                                                            AB
+                                                        </button>
                                                     </td>
                                                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{student.admissionNumber}</td>
 
-                                                    {/* Unit Test sub-cells */}
-                                                    {isUnit && subjects.map(sub => (
-                                                        <td key={sub.id} className="border-l border-border/30 px-1 py-1.5">
-                                                            <div className="flex justify-center gap-0.5">
-                                                                {(["perTest", "noteBook", "sea"] as const).map(field => {
-                                                                    const max = field === "perTest" ? 10 : 5;
-                                                                    const key = `${sub.id}__${field}`;
-                                                                    const val = markVal(exam.id!, student.id, key);
-                                                                    const numVal = parseFloat(val);
-                                                                    const isOver = !isNaN(numVal) && numVal > max;
-                                                                    return (
+                                                    {studentAbsent ? (
+                                                        <td colSpan={subjects.length + 1} className="border-l border-border/30 text-center py-2.5">
+                                                            <span className="text-red-600 font-bold text-sm tracking-wide">ABSENT</span>
+                                                        </td>
+                                                    ) : (
+                                                        <>
+                                                            {/* Unit Test sub-cells */}
+                                                            {isUnit && subjects.map(sub => (
+                                                                <td key={sub.id} className="border-l border-border/30 px-1 py-1.5">
+                                                                    <div className="flex justify-center gap-0.5">
+                                                                        {(["perTest", "noteBook", "sea"] as const).map(field => {
+                                                                            const max = field === "perTest" ? 10 : 5;
+                                                                            const key = `${sub.id}__${field}`;
+                                                                            const val = markVal(exam.id!, student.id, key);
+                                                                            const numVal = parseFloat(val);
+                                                                            const isOver = !isNaN(numVal) && numVal > max;
+                                                                            return (
+                                                                                <input
+                                                                                    key={field}
+                                                                                    type="number"
+                                                                                    min={0}
+                                                                                    max={max}
+                                                                                    value={val}
+                                                                                    disabled={!canEditMarks}
+                                                                                    onChange={e => setMarkVal(exam.id!, student.id, key, e.target.value)}
+                                                                                    className={`w-10 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                                />
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </td>
+                                                            ))}
+
+                                                            {/* Standard / Annual single cell */}
+                                                            {!isUnit && subjects.map(sub => {
+                                                                const val = markVal(exam.id!, student.id, sub.id);
+                                                                const numVal = parseFloat(val);
+                                                                const max = exam?.examType === "Term Exam" || isAnnual ? 80 : sub.maxMarks;
+                                                                const isOver = !isNaN(numVal) && numVal > max;
+                                                                return (
+                                                                    <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
                                                                         <input
-                                                                            key={field}
                                                                             type="number"
                                                                             min={0}
                                                                             max={max}
                                                                             value={val}
                                                                             disabled={!canEditMarks}
-                                                                            onChange={e => setMarkVal(exam.id!, student.id, key, e.target.value)}
-                                                                            className={`w-10 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                            onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
+                                                                            className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                         />
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </td>
-                                                    ))}
+                                                                    </td>
+                                                                );
+                                                            })}
 
-                                                    {/* Standard / Annual single cell */}
-                                                    {!isUnit && subjects.map(sub => {
-                                                        const val = markVal(exam.id!, student.id, sub.id);
-                                                        const numVal = parseFloat(val);
-                                                        const max = exam?.examType === "Term Exam" || isAnnual ? 80 : sub.maxMarks;
-                                                        const isOver = !isNaN(numVal) && numVal > max;
-                                                        return (
-                                                            <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
-                                                                <input
-                                                                    type="number"
-                                                                    min={0}
-                                                                    max={max}
-                                                                    value={val}
-                                                                    disabled={!canEditMarks}
-                                                                    onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
-                                                                    className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
-                                                                />
-                                                            </td>
-                                                        );
-                                                    })}
-
-                                                    {/* Total cell */}
-                                                    {(() => {
-                                                        let total = 0;
-                                                        if (isUnit) {
-                                                            subjects.forEach(sub => {
-                                                                const pt = parseFloat(markVal(exam.id!, student.id, `${sub.id}__perTest`) || "0") || 0;
-                                                                const nb = parseFloat(markVal(exam.id!, student.id, `${sub.id}__noteBook`) || "0") || 0;
-                                                                const se = parseFloat(markVal(exam.id!, student.id, `${sub.id}__sea`) || "0") || 0;
-                                                                total += pt + nb + se;
-                                                            });
-                                                        } else {
-                                                            subjects.forEach(sub => {
-                                                                total += parseFloat(markVal(exam.id!, student.id, sub.id) || "0") || 0;
-                                                            });
-                                                        }
-                                                        return (
-                                                            <td className="border-l-2 border-border/50 px-2 py-1.5 bg-slate-50/80 text-center">
-                                                                <span className="font-bold text-sm text-primary">{total}</span>
-                                                            </td>
-                                                        );
-                                                    })()}
+                                                            {/* Total cell */}
+                                                            {(() => {
+                                                                let total = 0;
+                                                                if (isUnit) {
+                                                                    subjects.forEach(sub => {
+                                                                        const pt = parseFloat(markVal(exam.id!, student.id, `${sub.id}__perTest`) || "0") || 0;
+                                                                        const nb = parseFloat(markVal(exam.id!, student.id, `${sub.id}__noteBook`) || "0") || 0;
+                                                                        const se = parseFloat(markVal(exam.id!, student.id, `${sub.id}__sea`) || "0") || 0;
+                                                                        total += pt + nb + se;
+                                                                    });
+                                                                } else {
+                                                                    subjects.forEach(sub => {
+                                                                        total += parseFloat(markVal(exam.id!, student.id, sub.id) || "0") || 0;
+                                                                    });
+                                                                }
+                                                                return (
+                                                                    <td className="border-l-2 border-border/50 px-2 py-1.5 bg-slate-50/80 text-center">
+                                                                        <span className="font-bold text-sm text-primary">{total}</span>
+                                                                    </td>
+                                                                );
+                                                            })()}
+                                                        </>
+                                                    )}
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -851,11 +895,17 @@ export default function TeacherMarksPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {sortedStudents.map((student, idx) => (
-                                                    <tr key={student.id} className={`border-b border-border/40 ${idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
+                                                {sortedStudents.map((student, idx) => {
+                                                    const studentAbsent = exam?.id ? isAbsent(exam.id, student.id) : false;
+                                                    return (
+                                                    <tr key={student.id} className={`border-b border-border/40 ${studentAbsent ? "bg-red-50/60" : idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
                                                         <td className="px-4 py-2.5 text-muted-foreground text-xs">{idx + 1}</td>
                                                         <td className="px-4 py-2.5 font-semibold text-sm">{student.firstName} {student.lastName}</td>
-                                                        {CO_SCHOLASTIC_ITEMS.map(cs => (
+                                                        {studentAbsent ? (
+                                                            <td colSpan={CO_SCHOLASTIC_ITEMS.length} className="border-l border-border/30 text-center py-2.5">
+                                                                <span className="text-red-600 font-bold text-sm">ABSENT</span>
+                                                            </td>
+                                                        ) : CO_SCHOLASTIC_ITEMS.map(cs => (
                                                             <td key={cs.id} className="border-l border-border/30 px-2 py-2">
                                                                 <div className="flex gap-2 justify-center">
                                                                     {(["hy", "annual"] as const).map(term => (
@@ -876,7 +926,8 @@ export default function TeacherMarksPage() {
                                                             </td>
                                                         ))}
                                                     </tr>
-                                                ))}
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
