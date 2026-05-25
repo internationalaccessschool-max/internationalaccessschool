@@ -659,6 +659,7 @@ export default function AdminAdmissionsPage() {
                 setActiveTab("accepted");
             }
         } catch (err: any) {
+            console.error("[Admission] onAcceptSubmit error:", err);
             if (err.code === "auth/email-already-in-use") {
                 setError("This Admission Number is already used. Try a different one.");
             } else {
