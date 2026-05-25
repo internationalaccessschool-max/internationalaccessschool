@@ -218,6 +218,7 @@ export default function GenerateTeacherSalaryPage() {
                     id: t.id, name: t.name, designation: t.designation,
                     basicSalary: t.basicSalary, hra: t.hra, da: t.da,
                     otherAllowances: t.otherAllowances, pfPct: t.pfPct, esicPct: t.esicPct,
+                    staffType: t.staffType,
                 })),
             };
             const res = await authFetch("/api/admin/teacher-salary/generate", {
