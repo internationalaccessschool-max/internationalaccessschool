@@ -405,18 +405,26 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;font-size:10px;}
                             </div>
                             
                             <div className="grid grid-cols-2 gap-2 text-sm pt-2 border-t border-dashed">
-                                <div>
-                                    <span className="text-muted-foreground block text-xs">Total Score</span>
-                                    <span className="font-medium text-blue-600">{res.totalObtained} / {res.totalMax}</span>
-                                </div>
-                                <div>
-                                    <span className="text-muted-foreground block text-xs">Percentage</span>
-                                    <span className="font-medium">{res.percentage}%</span>
-                                </div>
-                                <div>
-                                    <span className="text-muted-foreground block text-xs">Grade</span>
-                                    <span className="font-bold whitespace-nowrap">{res.overallGrade}</span>
-                                </div>
+                                {(res as any).absent === true ? (
+                                    <div className="col-span-2 flex items-center justify-center py-1">
+                                        <span className="px-3 py-1 rounded-full bg-red-100 text-red-700 font-bold text-sm">ABSENT</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs">Total Score</span>
+                                            <span className="font-medium text-blue-600">{res.totalObtained} / {res.totalMax}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs">Percentage</span>
+                                            <span className="font-medium">{res.percentage}%</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs">Grade</span>
+                                            <span className="font-bold whitespace-nowrap">{res.overallGrade}</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             
                             <Button variant="outline" className="w-full gap-2 mt-2" onClick={() => handlePrint(res)}>
