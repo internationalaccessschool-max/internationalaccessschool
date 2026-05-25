@@ -540,7 +540,16 @@ th:not(:first-child){text-align:right;}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50 bg-white">
-                                        {markEntries.map((m, idx) => {
+                                        {(er.result as any).absent === true ? (
+                                            <tr>
+                                                <td colSpan={examType === "Unit Test" ? 5 : 3} className="py-8 text-center">
+                                                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 text-red-700 font-bold text-base">
+                                                        ABSENT
+                                                    </span>
+                                                    <p className="text-muted-foreground text-sm mt-2">Student was absent for this exam.</p>
+                                                </td>
+                                            </tr>
+                                        ) : markEntries.map((m, idx) => {
                                             const subName = subjectsMap[m.subjectId]?.name || "Unknown Subject";
                                             if (examType === "Unit Test") {
                                                 const pt = m.perTest ?? 0, nb = m.noteBook ?? 0, sea = m.sea ?? 0;
@@ -559,7 +568,7 @@ th:not(:first-child){text-align:right;}
                                                     <td className="py-4 px-6 font-medium text-gray-900">{subName}</td>
                                                     <td className="py-4 px-6 text-gray-500 text-right font-medium">{m.total}</td>
                                                     <td className="py-4 px-6 text-[#1a2e4c] text-right font-bold text-lg">
-                                                        {m.obtained !== null ? m.obtained : <span className="text-red-500 text-sm">ABSENT</span>}
+                                                        {m.obtained !== null ? m.obtained : <span className="text-red-500 text-sm">AB</span>}
                                                     </td>
                                                 </tr>
                                             );
@@ -653,9 +662,13 @@ th:not(:first-child){text-align:right;}
                                                 <FileText className="h-6 w-6" />
                                             </div>
                                             <div className="flex flex-col items-end gap-1">
-                                                <Badge variant="secondary" className="bg-[#1a2e4c]/5 text-[#1a2e4c] font-semibold border-none">
-                                                    {er.result.percentage}%
-                                                </Badge>
+                                                {(er.result as any).absent === true ? (
+                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 font-bold">ABSENT</Badge>
+                                                ) : (
+                                                    <Badge variant="secondary" className="bg-[#1a2e4c]/5 text-[#1a2e4c] font-semibold border-none">
+                                                        {er.result.percentage}%
+                                                    </Badge>
+                                                )}
                                                 {examType && (
                                                     <Badge variant="outline" className={`text-xs ${typeColor}`}>{examType}</Badge>
                                                 )}
@@ -663,7 +676,7 @@ th:not(:first-child){text-align:right;}
                                         </div>
                                         <CardTitle className="text-xl line-clamp-1">{er.result.examName || er.exam.name}</CardTitle>
                                         <CardDescription>
-                                            {er.result.overallGrade} Grade • Class {er.result.classId}-{er.result.sectionId}
+                                            {(er.result as any).absent === true ? "Absent" : `${er.result.overallGrade} Grade`} • Class {er.result.classId}-{er.result.sectionId}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent>
