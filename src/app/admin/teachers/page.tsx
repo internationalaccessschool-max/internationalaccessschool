@@ -110,7 +110,17 @@ export default function AdminTeachersPage() {
     const [ntsEditing, setNtsEditing] = useState<any | null>(null);
     const [ntsSaving, setNtsSaving] = useState(false);
     const [ntsCreatedInfo, setNtsCreatedInfo] = useState<{ name: string; email: string; password: string } | null>(null);
-    const EMPTY_NTS = { name: "", designation: "", phone: "", email: "", password: "", basicSalary: "", hra: "0", da: "0", otherAllowances: "0", photoUrl: "", photoName: "" };
+    const EMPTY_NTS = {
+        name: "", designation: "", phone: "", email: "", password: "",
+        basicSalary: "", hra: "0", da: "0", otherAllowances: "0",
+        photoUrl: "", photoName: "",
+        // Bank
+        bankName: "", branchName: "", bankAccountNumber: "", ifscCode: "", accountHolderName: "",
+        // PF
+        uanNumber: "", epfAccountNumber: "", pfJoiningDate: "", pfExitDate: "", pfPct: "",
+        // ESIC
+        esicIpNumber: "", esicJoiningDate: "", esicExitDate: "", esicDispensary: "", esicPct: "",
+    };
     const [ntsForm, setNtsForm] = useState(EMPTY_NTS);
 
     const openEdit = (teacher: Teacher) => {
@@ -244,7 +254,25 @@ export default function AdminTeachersPage() {
     const openNtsCreate = () => { setNtsEditing(null); setNtsForm(EMPTY_NTS); setNtsModal(true); setNtsCreatedInfo(null); };
     const openNtsEdit = (s: any) => {
         setNtsEditing(s);
-        setNtsForm({ name: s.name || "", designation: s.designation || "", phone: s.phone || "", email: s.email || "", password: "", basicSalary: s.basicSalary || "", hra: s.hra || "0", da: s.da || "0", otherAllowances: s.otherAllowances || "0", photoUrl: s.photoUrl || "", photoName: s.photoName || "" });
+        setNtsForm({
+            name: s.name || "", designation: s.designation || "", phone: s.phone || "",
+            email: s.email || "", password: "",
+            basicSalary: s.basicSalary || "", hra: s.hra || "0", da: s.da || "0",
+            otherAllowances: s.otherAllowances || "0",
+            photoUrl: s.photoUrl || "", photoName: s.photoName || "",
+            // Bank
+            bankName: s.bankName || "", branchName: s.branchName || "",
+            bankAccountNumber: s.bankAccountNumber || "", ifscCode: s.ifscCode || "",
+            accountHolderName: s.accountHolderName || "",
+            // PF
+            uanNumber: s.uanNumber || "", epfAccountNumber: s.epfAccountNumber || "",
+            pfJoiningDate: s.pfJoiningDate || "", pfExitDate: s.pfExitDate || "",
+            pfPct: s.pfPct != null ? String(s.pfPct) : "",
+            // ESIC
+            esicIpNumber: s.esicIpNumber || "", esicJoiningDate: s.esicJoiningDate || "",
+            esicExitDate: s.esicExitDate || "", esicDispensary: s.esicDispensary || "",
+            esicPct: s.esicPct != null ? String(s.esicPct) : "",
+        });
         setNtsModal(true); setNtsCreatedInfo(null);
     };
 
@@ -264,6 +292,24 @@ export default function AdminTeachersPage() {
                 photoUrl: ntsForm.photoUrl,
                 photoName: ntsForm.photoName,
                 role: "staff",
+                // Bank
+                bankName: ntsForm.bankName.trim(),
+                branchName: ntsForm.branchName.trim(),
+                bankAccountNumber: ntsForm.bankAccountNumber.trim(),
+                ifscCode: ntsForm.ifscCode.trim().toUpperCase(),
+                accountHolderName: ntsForm.accountHolderName.trim(),
+                // PF
+                uanNumber: ntsForm.uanNumber.trim(),
+                epfAccountNumber: ntsForm.epfAccountNumber.trim(),
+                pfJoiningDate: ntsForm.pfJoiningDate,
+                pfExitDate: ntsForm.pfExitDate,
+                pfPct: ntsForm.pfPct !== "" ? Number(ntsForm.pfPct) : 0,
+                // ESIC
+                esicIpNumber: ntsForm.esicIpNumber.trim(),
+                esicJoiningDate: ntsForm.esicJoiningDate,
+                esicExitDate: ntsForm.esicExitDate,
+                esicDispensary: ntsForm.esicDispensary.trim(),
+                esicPct: ntsForm.esicPct !== "" ? Number(ntsForm.esicPct) : 0,
             };
 
             if (ntsEditing) {
@@ -504,7 +550,7 @@ export default function AdminTeachersPage() {
                     {/* NTS Modal */}
                     {ntsModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
                                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
                                     <h3 className="font-bold text-navy">{ntsEditing ? "Edit Staff Member" : "Add Non-Teaching Staff"}</h3>
                                     <button onClick={() => setNtsModal(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
@@ -550,6 +596,42 @@ export default function AdminTeachersPage() {
                                         ) : (
                                             <CloudinaryUpload folder="admin-docs" subFolder="teacher-photos" onUpload={(u, _id, n) => setNtsForm(p => ({ ...p, photoUrl: u, photoName: n ?? "" }))} acceptedFileTypes="images" maxSizeMB={1} />
                                         )}
+                                    </div>
+
+                                    {/* Bank Account Details */}
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2">Bank Account Details</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Account Holder Name</label><input value={ntsForm.accountHolderName} onChange={e => setNtsForm(p => ({ ...p, accountHolderName: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="As per bank records" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Bank Name</label><input value={ntsForm.bankName} onChange={e => setNtsForm(p => ({ ...p, bankName: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="e.g. SBI" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Branch Name</label><input value={ntsForm.branchName} onChange={e => setNtsForm(p => ({ ...p, branchName: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Branch name" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Account Number</label><input value={ntsForm.bankAccountNumber} onChange={e => setNtsForm(p => ({ ...p, bankAccountNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Account number" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">IFSC Code</label><input value={ntsForm.ifscCode} onChange={e => setNtsForm(p => ({ ...p, ifscCode: e.target.value.toUpperCase() }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono" placeholder="e.g. SBIN0001234" /></div>
+                                        </div>
+                                    </div>
+
+                                    {/* PF Details */}
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-2">PF (Provident Fund) Details</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">UAN Number</label><input value={ntsForm.uanNumber} onChange={e => setNtsForm(p => ({ ...p, uanNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="12-digit UAN" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">EPF Account No</label><input value={ntsForm.epfAccountNumber} onChange={e => setNtsForm(p => ({ ...p, epfAccountNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="EPF account number" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">PF Joining Date</label><input type="date" value={ntsForm.pfJoiningDate} onChange={e => setNtsForm(p => ({ ...p, pfJoiningDate: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">PF Exit Date</label><input type="date" value={ntsForm.pfExitDate} onChange={e => setNtsForm(p => ({ ...p, pfExitDate: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Employee PF % </label><input type="number" value={ntsForm.pfPct} onChange={e => setNtsForm(p => ({ ...p, pfPct: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="e.g. 12" /></div>
+                                        </div>
+                                    </div>
+
+                                    {/* ESIC Details */}
+                                    <div className="border-t border-gray-100 pt-3">
+                                        <p className="text-xs font-bold text-purple-600 uppercase tracking-wide mb-2">ESIC Details</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">ESIC IP Number</label><input value={ntsForm.esicIpNumber} onChange={e => setNtsForm(p => ({ ...p, esicIpNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="IP number" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Dispensary</label><input value={ntsForm.esicDispensary} onChange={e => setNtsForm(p => ({ ...p, esicDispensary: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="Dispensary name" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">ESIC Joining Date</label><input type="date" value={ntsForm.esicJoiningDate} onChange={e => setNtsForm(p => ({ ...p, esicJoiningDate: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">ESIC Exit Date</label><input type="date" value={ntsForm.esicExitDate} onChange={e => setNtsForm(p => ({ ...p, esicExitDate: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" /></div>
+                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">ESIC %</label><input type="number" value={ntsForm.esicPct} onChange={e => setNtsForm(p => ({ ...p, esicPct: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="e.g. 0.75" /></div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 p-5 border-t border-gray-100">
