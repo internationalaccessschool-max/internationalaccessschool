@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import {
     Loader2, Save, ShieldAlert, BookOpen, CheckCircle2, AlertCircle,
+    ArrowUpDown,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -75,6 +76,8 @@ export default function AdminBulkMarksEntryPage() {
     const [resultsMap, setResultsMap] = useState<Record<string, Record<string, Record<string, string>>>>({});
     // coSchoMap[studentId][actId] = { hy, annual }
     const [coSchoMap, setCoSchoMap] = useState<Record<string, Record<string, { hy: string; annual: string }>>>({});
+
+    const [sortBy, setSortBy] = useState<"name" | "admNo">("name");
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState<TabKey | null>(null);
@@ -394,6 +397,13 @@ export default function AdminBulkMarksEntryPage() {
         }
     };
 
+    const sortedStudents = [...students].sort((a, b) => {
+        if (sortBy === "admNo") {
+            return a.admissionNumber.localeCompare(b.admissionNumber, undefined, { numeric: true });
+        }
+        return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+    });
+
     // No guards needed for Admin
 
     // ─── Helpers for the active exam ──────────────────────────────────────────
@@ -425,6 +435,23 @@ export default function AdminBulkMarksEntryPage() {
                     </h1>
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                         <span className="text-muted-foreground text-sm">{students.length} students loaded</span>
+                        {students.length > 0 && (
+                            <div className="flex items-center gap-1">
+                                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                <button
+                                    onClick={() => setSortBy("name")}
+                                    className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${sortBy === "name" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                                >
+                                    A–Z
+                                </button>
+                                <button
+                                    onClick={() => setSortBy("admNo")}
+                                    className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${sortBy === "admNo" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                                >
+                                    Adm. No.
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -639,7 +666,7 @@ export default function AdminBulkMarksEntryPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {students.map((student, idx) => (
+                                            {sortedStudents.map((student, idx) => (
                                                 <tr
                                                     key={student.id}
                                                     className={`border-b border-border/40 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-primary/5`}
@@ -752,7 +779,7 @@ export default function AdminBulkMarksEntryPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {students.map((student, idx) => (
+                                                {sortedStudents.map((student, idx) => (
                                                     <tr key={student.id} className={`border-b border-border/40 ${idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
                                                         <td className="px-4 py-2.5 text-muted-foreground text-xs">{idx + 1}</td>
                                                         <td className="px-4 py-2.5 font-semibold text-sm">{student.firstName} {student.lastName}</td>
