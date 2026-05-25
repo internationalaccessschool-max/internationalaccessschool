@@ -324,57 +324,69 @@ export function StudentEditModal({ student, onClose, onSaved, role = "admin" }: 
                 );
             case "documents":
                 return (
-                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {[
-                            { title: "Student Photo", field: "childPhotoUrl" },
-                            { title: "Parents Photo (Joint)", field: "parentPhotoUrl" },
-                            { title: "Student Aadhaar Card", field: "aadharUrl" },
-                            { title: "APAR ID Document", field: "aparUrl" },
-                            { title: "Father Aadhaar Card", field: "fatherAadharUrl" },
-                            { title: "Mother Aadhaar Card", field: "motherAadharUrl" },
-                        ].map((doc) => (
-                            <div key={doc.field} className="border border-gray-200 rounded-2xl p-4 flex flex-col items-center text-center">
-                                <h3 className="font-bold text-navy mb-3 text-xs">{doc.title}</h3>
-                                {form[doc.field] ? (
-                                    <div className="w-full space-y-2">
-                                        <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center">
-                                            {form[doc.field].toLowerCase().includes('.pdf') ? (
-                                                <div className="text-red-400 flex flex-col items-center"><FileText className="w-8 h-8 mb-1" /><span className="text-[10px] font-bold">PDF</span></div>
-                                            ) : (
-                                                <img src={form[doc.field]} alt={doc.title} className="w-full h-full object-cover" />
-                                            )}
+                    <div className="space-y-5">
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            {[
+                                { title: "Student Photo", field: "childPhotoUrl" },
+                                { title: "Parents Photo (Joint)", field: "parentPhotoUrl" },
+                                { title: "Student Aadhaar Card", field: "aadharUrl" },
+                                { title: "APAR ID Document", field: "aparUrl" },
+                                { title: "Father Aadhaar Card", field: "fatherAadharUrl" },
+                                { title: "Mother Aadhaar Card", field: "motherAadharUrl" },
+                            ].map((doc) => (
+                                <div key={doc.field} className="border border-gray-200 rounded-2xl p-4 flex flex-col items-center text-center">
+                                    <h3 className="font-bold text-navy mb-3 text-xs">{doc.title}</h3>
+                                    {form[doc.field] ? (
+                                        <div className="w-full space-y-2">
+                                            <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center">
+                                                {form[doc.field].toLowerCase().includes('.pdf') ? (
+                                                    <div className="text-red-400 flex flex-col items-center"><FileText className="w-8 h-8 mb-1" /><span className="text-[10px] font-bold">PDF</span></div>
+                                                ) : (
+                                                    <img src={form[doc.field]} alt={doc.title} className="w-full h-full object-cover" />
+                                                )}
+                                            </div>
+                                            <a href={form[doc.field]} target="_blank" rel="noopener noreferrer" className="block w-full py-1.5 text-xs font-bold text-navy bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border">View File</a>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await authFetch("/api/delete-file", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ url: form[doc.field] })
+                                                        });
+                                                    } catch (e) { console.error(e); }
+                                                    set(doc.field, "");
+                                                }}
+                                                className="block w-full py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-100"
+                                            >
+                                                Remove / Replace
+                                            </button>
                                         </div>
-                                        <a href={form[doc.field]} target="_blank" rel="noopener noreferrer" className="block w-full py-1.5 text-xs font-bold text-navy bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border">View File</a>
-                                        <button
-                                            onClick={async () => {
-                                                try {
-                                                    await authFetch("/api/delete-file", {
-                                                        method: "POST",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ url: form[doc.field] })
-                                                    });
-                                                } catch (e) { console.error(e); }
-                                                set(doc.field, "");
-                                            }}
-                                            className="block w-full py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-100"
-                                        >
-                                            Remove / Replace
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="w-full flex flex-col items-center justify-center min-h-[140px] transform scale-90 origin-top">
-                                        <CloudinaryUpload
-                                            folder="student-profiles"
-                                            subFolder={student.id}
-                                            onUpload={(url) => set(doc.field, url)}
-                                            acceptedFileTypes={doc.field.includes("Photo") ? "images" : "all"}
-                                            maxSizeMB={5}
-                                            label={`Upload`}
-                                        />
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="w-full flex flex-col items-center justify-center min-h-[140px] transform scale-90 origin-top">
+                                            <CloudinaryUpload
+                                                folder="student-profiles"
+                                                subFolder={student.id}
+                                                onUpload={(url) => set(doc.field, url)}
+                                                acceptedFileTypes={doc.field.includes("Photo") ? "images" : "all"}
+                                                maxSizeMB={5}
+                                                label={`Upload`}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Aadhaar Numbers */}
+                        <div className="border border-gray-200 rounded-2xl p-5">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Aadhaar Numbers</h3>
+                            <div className="grid sm:grid-cols-3 gap-4">
+                                {F({ label: "Student Aadhaar No", field: "aadharNo" })}
+                                {F({ label: "Father's Aadhaar No", field: "fatherAadharNo" })}
+                                {F({ label: "Mother's Aadhaar No", field: "motherAadharNo" })}
                             </div>
-                        ))}
+                        </div>
                     </div>
                 );
             default: return null;
