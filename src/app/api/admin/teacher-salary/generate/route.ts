@@ -13,6 +13,7 @@ interface TeacherPayload {
     otherAllowances: number;
     pfPct: number;
     esicPct: number;
+    staffType?: "teacher" | "staff";
 }
 
 export async function POST(req: NextRequest) {
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
                     teacherId: t.id,
                     teacherName: t.name,
                     designation: t.designation,
+                    staffType: t.staffType || "teacher",
                     year: Number(year),
                     month: Number(month),
                     basicSalary: basic,
