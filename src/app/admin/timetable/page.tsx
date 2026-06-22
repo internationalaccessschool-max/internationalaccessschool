@@ -56,7 +56,11 @@ export default function AdminTimetablePage() {
 
     useEffect(() => {
         getDocs(query(collection(db, "teachers"), orderBy("firstName"))).then(snap => {
-            setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
+            setTeachers(
+                snap.docs
+                    .filter(d => (d.data() as any).status !== "DISABLED")
+                    .map(d => ({ id: d.id, ...d.data() } as Teacher))
+            );
         });
     }, []);
 
