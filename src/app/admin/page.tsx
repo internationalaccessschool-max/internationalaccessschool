@@ -49,7 +49,8 @@ export default function AdminDashboard() {
             // Total Teachers — stored in "teachers" collection
             try {
                 const snap = await getDocs(collection(db, "teachers"));
-                setTotalTeachers(snap.size);
+                const activeCount = snap.docs.filter(d => d.data().status !== "DISABLED").length;
+                setTotalTeachers(activeCount);
             } catch (e) { console.warn("totalTeachers:", e); }
 
             // Pending Admissions
