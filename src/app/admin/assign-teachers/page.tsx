@@ -46,7 +46,11 @@ export default function AssignTeachersPage() {
     useEffect(() => {
         const q = query(collection(db, "teachers"), orderBy("createdAt", "desc"));
         const unsub1 = onSnapshot(q, snap => {
-            setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
+            setTeachers(
+                snap.docs
+                    .filter(d => (d.data() as any).status !== "DISABLED")
+                    .map(d => ({ id: d.id, ...d.data() } as Teacher))
+            );
         });
         const q2 = query(collection(db, "teacherAssignments"), orderBy("createdAt", "desc"));
         const unsub2 = onSnapshot(q2, snap => {
