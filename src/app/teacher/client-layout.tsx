@@ -12,7 +12,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
-    const { user, role, loading } = useAuth();
+    const { user, role, status, loading } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
     const isLoginPage = pathname === "/teacher/login";
@@ -21,9 +21,14 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         if (!loading && !isLoginPage) {
             if (!user || role !== "teacher" && role !== "staff") {
                 router.push("/teacher/login");
+            } else if (status === "DISABLED") {
+                // Teacher is disabled — sign out and redirect
+                import("@/lib/firebase").then(({ auth }) => {
+                    auth.signOut().then(() => router.push("/teacher/login?disabled=1"));
+                });
             }
         }
-    }, [user, role, loading, router, isLoginPage]);
+    }, [user, role, status, loading, router, isLoginPage]);
 
     const links = [
         {
@@ -70,7 +75,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         );
     }
 
-    if (loading || !user || role !== "teacher" && role !== "staff") {
+    if (loading || !user || role !== "teacher" && role !== "staff" || status === "DISABLED") {
         return (
             <div className="h-screen w-full flex items-center justify-center bg-gray-50">
                 <Loader2 className="w-8 h-8 animate-spin text-navy" />
