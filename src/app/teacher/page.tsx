@@ -37,6 +37,12 @@ export default function TeacherDashboard() {
             if (user) {
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists() && userDoc.data().role === "teacher") {
+                    // Block disabled teachers from accessing the dashboard
+                    if (userDoc.data().status === "DISABLED") {
+                        await auth.signOut();
+                        router.push("/teacher/login?disabled=1");
+                        return;
+                    }
                     setUserData({ ...userDoc.data(), uid: user.uid });
                 } else {
                     router.push("/login");
