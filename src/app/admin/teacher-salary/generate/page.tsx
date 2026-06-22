@@ -80,7 +80,9 @@ export default function GenerateTeacherSalaryPage() {
 
                 const existingIds = new Set(recSnap.docs.map(d => (d.data() as any).teacherId));
 
-                const teacherList: TeacherRow[] = teacherSnap.docs.map(d => {
+                const teacherList: TeacherRow[] = teacherSnap.docs
+                    .filter(d => (d.data() as any).status !== "DISABLED") // exclude disabled teachers
+                    .map(d => {
                     const data = d.data() as any;
                     const basic = Number(data.basicSalary) || 0;
                     const hra = Number(data.hra) || 0;
