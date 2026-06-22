@@ -65,8 +65,10 @@ export default function StaffDirectoryPage() {
                     getDocs(collection(db, "nonTeachingStaff")),
                 ]);
 
-                const toStaff = (snap: any, role: StaffRole, displayRole: string): StaffMember[] =>
-                    snap.docs.map((d: any) => {
+                const toStaff = (snap: any, role: StaffRole, displayRole: string, filterDisabled = false): StaffMember[] =>
+                    snap.docs
+                        .filter((d: any) => !filterDisabled || d.data().status !== "DISABLED")
+                        .map((d: any) => {
                         const data = d.data();
                         return {
                             id: d.id,
@@ -90,7 +92,7 @@ export default function StaffDirectoryPage() {
                     ...toStaff(adminSnap, "admin", "Admin"),
                     ...toStaff(supervisorSnap, "supervisor", "Supervisor"),
                     ...toStaff(accountantSnap, "accountant", "Accountant"),
-                    ...toStaff(teacherSnap, "teacher", "Teacher"),
+                    ...toStaff(teacherSnap, "teacher", "Teacher", true), // exclude disabled teachers
                     ...toStaff(ntsSnap, "staff", "Non-Teaching"),
                 ];
                 all.sort((a, b) => a.name.localeCompare(b.name));
