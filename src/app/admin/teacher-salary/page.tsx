@@ -113,7 +113,9 @@ export default function AdminTeacherSalaryPage() {
         setLoading(true);
         try {
             const teacherSnap = await getDocs(query(collection(db, "teachers"), orderBy("createdAt", "desc")));
-            const teacherList: TeacherInfo[] = teacherSnap.docs.map(d => {
+            const teacherList: TeacherInfo[] = teacherSnap.docs
+                .filter(d => (d.data() as any).status !== "DISABLED") // exclude disabled teachers
+                .map(d => {
                 const data = d.data() as any;
                 const basic = Number(data.basicSalary) || 0;
                 const hra = Number(data.hra) || 0;
