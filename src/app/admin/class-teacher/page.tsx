@@ -48,7 +48,11 @@ export default function ClassTeacherPage() {
     useEffect(() => {
         const q = query(collection(db, "teachers"), orderBy("firstName"));
         return onSnapshot(q, snap => {
-            setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
+            setTeachers(
+                snap.docs
+                    .filter(d => (d.data() as any).status !== "DISABLED") // exclude disabled teachers
+                    .map(d => ({ id: d.id, ...d.data() } as Teacher))
+            );
         });
     }, []);
 
