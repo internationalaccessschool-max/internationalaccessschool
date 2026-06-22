@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import {
     Plus, Search, X, Loader2, User, Mail,
     Phone, GraduationCap, Pencil, Save, Trash2,
-    CheckCircle2, Eye, EyeOff, BookOpen
+    CheckCircle2, Eye, EyeOff, BookOpen, PowerOff, RotateCcw
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,12 +52,13 @@ interface Teacher {
     id: string; uid?: string; firstName: string; lastName: string;
     email: string; phone: string; subjects?: string[]; qualification?: string;
     assignment?: Assignment; createdAt?: any; role?: string; photoUrl?: string;
+    status?: string; disabledAt?: string; disableReason?: string;
 }
 
 const emptyAssignment = (): Assignment => ({ classSections: {}, subjects: [], streams: [] });
 
 export default function AdminTeachersPage() {
-    const [staffTab, setStaffTab] = useState<"teachers" | "nts">("teachers");
+    const [staffTab, setStaffTab] = useState<"teachers" | "nts" | "disabled">("teachers");
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -101,6 +102,58 @@ export default function AdminTeachersPage() {
     const [editData, setEditData] = useState(EMPTY_EDIT);
     const [savingEdit, setSavingEdit] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
+
+    // ── Disable / Re-enable Teacher ────────────────────────────────────────────
+    const [disableTarget, setDisableTarget] = useState<Teacher | null>(null);
+    const [disableReason, setDisableReason] = useState("");
+    const [isDisabling, setIsDisabling] = useState(false);
+
+    const [reEnableTarget, setReEnableTarget] = useState<Teacher | null>(null);
+    const [isReEnabling, setIsReEnabling] = useState(false);
+
+    const handleDisableTeacher = async () => {
+        if (!disableTarget) return;
+        setIsDisabling(true);
+        try {
+            const payload = {
+                status: "DISABLED",
+                disabledAt: new Date().toISOString(),
+                disableReason: disableReason.trim() || "",
+            };
+            await updateDoc(doc(db, "teachers", disableTarget.id), payload);
+            await updateDoc(doc(db, "users", disableTarget.id), payload).catch(() => {});
+            // update local state
+            setTeachers(prev => prev.map(t =>
+                t.id === disableTarget.id ? { ...t, ...payload } : t
+            ));
+            toast.success(`${disableTarget.firstName} ${disableTarget.lastName} has been disabled.`);
+            setDisableTarget(null);
+            setDisableReason("");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to disable teacher.");
+        } finally {
+            setIsDisabling(false);
+        }
+    };
+
+    const handleReEnableTeacher = async () => {
+        if (!reEnableTarget) return;
+        setIsReEnabling(true);
+        try {
+            const payload = { status: "ACTIVE", disabledAt: null, disableReason: "" };
+            await updateDoc(doc(db, "teachers", reEnableTarget.id), payload);
+            await updateDoc(doc(db, "users", reEnableTarget.id), payload).catch(() => {});
+            setTeachers(prev => prev.map(t =>
+                t.id === reEnableTarget.id ? { ...t, status: "ACTIVE", disabledAt: undefined, disableReason: undefined } : t
+            ));
+            toast.success(`${reEnableTarget.firstName} ${reEnableTarget.lastName} has been re-enabled.`);
+            setReEnableTarget(null);
+        } catch (err: any) {
+            toast.error(err.message || "Failed to re-enable teacher.");
+        } finally {
+            setIsReEnabling(false);
+        }
+    };
 
     // ── Non-Teaching Staff ─────────────────────────────────────────────────────
     const [ntsStaff, setNtsStaff] = useState<any[]>([]);
@@ -442,9 +495,17 @@ export default function AdminTeachersPage() {
 
 
 
-    const filtered = teachers.filter(t =>
+    const activeTeachers = teachers.filter(t => (t.status || "ACTIVE") !== "DISABLED");
+    const disabledTeachers = teachers.filter(t => t.status === "DISABLED");
+
+    const filtered = activeTeachers.filter(t =>
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
         (t.subjects || []).join(" ").toLowerCase().includes(search.toLowerCase()) ||
+        t.email?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const filteredDisabled = disabledTeachers.filter(t =>
+        `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
         t.email?.toLowerCase().includes(search.toLowerCase())
     );
 
@@ -458,7 +519,7 @@ export default function AdminTeachersPage() {
                         <p className="text-white/50 text-sm">Admin Console</p>
                         <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Manage Staff</h1>
                         <p className="text-white/40 text-sm mt-1">
-                            {staffTab === "teachers" ? `${teachers.length} teacher${teachers.length !== 1 ? "s" : ""} registered` : `${ntsStaff.length} non-teaching staff`}
+                            {staffTab === "teachers" ? `${activeTeachers.length} active teacher${activeTeachers.length !== 1 ? "s" : ""}` : staffTab === "disabled" ? `${disabledTeachers.length} disabled teacher${disabledTeachers.length !== 1 ? "s" : ""}` : `${ntsStaff.length} non-teaching staff`}
                         </p>
                     </div>
                     <div className="flex gap-3">
@@ -490,9 +551,67 @@ export default function AdminTeachersPage() {
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <button onClick={() => setStaffTab("teachers")} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${staffTab === "teachers" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Teaching Staff</button>
                 <button onClick={() => setStaffTab("nts")} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${staffTab === "nts" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Non-Teaching Staff</button>
+                <button onClick={() => setStaffTab("disabled")} className={`relative px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${staffTab === "disabled" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                    Disabled Staff
+                    {disabledTeachers.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{disabledTeachers.length}</span>}
+                </button>
             </div>
 
-            {staffTab === "nts" ? (
+            {staffTab === "disabled" ? (
+            /* ── Disabled Teachers Tab ── */
+            <>
+                <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="search" placeholder="Search disabled teachers…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm w-full focus:outline-none focus:border-navy" />
+                </div>
+                {loading ? (
+                    <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-navy" /></div>
+                ) : filteredDisabled.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
+                        <PowerOff className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                        <p className="text-sm font-semibold text-gray-400">No disabled teachers</p>
+                        <p className="text-xs text-gray-300 mt-1">Teachers you disable will appear here</p>
+                    </div>
+                ) : (
+                    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {filteredDisabled.map(teacher => (
+                            <div key={teacher.id} className="bg-white rounded-2xl shadow-sm border border-red-100 p-5 opacity-80">
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                        {(teacher as any).photoUrl ? (
+                                            <img src={(teacher as any).photoUrl} alt={teacher.firstName} className="w-11 h-11 rounded-xl object-cover border border-gray-200 shrink-0 grayscale" />
+                                        ) : (
+                                            <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center font-bold text-red-300 text-base shrink-0">
+                                                {(teacher.firstName || "T").charAt(0).toUpperCase()}
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-gray-500 text-sm">{teacher.firstName} {teacher.lastName}</p>
+                                            <span className="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-medium border border-red-100">Disabled</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-1 text-xs text-gray-400 mb-3">
+                                    <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{teacher.email}</span></div>
+                                    {teacher.disableReason && <div className="flex items-start gap-2"><span className="shrink-0">📝</span><span className="text-gray-400 italic">{teacher.disableReason}</span></div>}
+                                    {teacher.disabledAt && <div className="flex items-center gap-2"><span>📅</span><span>Disabled: {new Date(teacher.disabledAt).toLocaleDateString("en-IN")}</span></div>}
+                                </div>
+                                <div className="flex gap-2 pt-3 border-t border-gray-50">
+                                    <button onClick={() => setReEnableTarget(teacher)}
+                                        className="flex-1 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1.5 transition-colors">
+                                        <RotateCcw className="w-3.5 h-3.5" /> Re-enable
+                                    </button>
+                                    <button onClick={() => handleDelete(teacher.id, `${teacher.firstName} ${teacher.lastName}`)}
+                                        className="py-2 px-3 rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Permanently Delete">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </>
+            ) : staffTab === "nts" ? (
                 /* ── Non-Teaching Staff ── */
                 <>
                     <div className="relative max-w-sm">
@@ -705,10 +824,14 @@ export default function AdminTeachersPage() {
                                     </Link>
                                     <button onClick={() => openEdit(teacher)}
                                         className="py-2 px-3 rounded-xl text-gray-400 hover:text-navy hover:bg-navy/5 border border-gray-100 hover:border-navy/10 transition-colors" title="Edit Profile">
-                                        <BookOpen className="w-3.5 h-3.5" />
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => { setDisableTarget(teacher); setDisableReason(""); }}
+                                        className="py-2 px-3 rounded-xl text-gray-300 hover:text-amber-500 hover:bg-amber-50 transition-colors" title="Disable Teacher">
+                                        <PowerOff className="w-3.5 h-3.5" />
                                     </button>
                                     <button onClick={() => handleDelete(teacher.id, `${teacher.firstName} ${teacher.lastName}`)}
-                                        className="py-2 px-3 rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                        className="py-2 px-3 rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Permanently Delete">
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
@@ -1014,6 +1137,67 @@ export default function AdminTeachersPage() {
             }
             </> // end teacher tab
             )} {/* end staffTab ternary */}
+
+            {/* ── Disable Teacher Modal ── */}
+            {disableTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-5">
+                        <div className="flex flex-col items-center text-center gap-3 pt-2">
+                            <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center border border-amber-100">
+                                <PowerOff className="w-7 h-7 text-amber-500" strokeWidth={2.5} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900 mt-2">Disable Teacher?</h2>
+                            <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                                <span className="font-bold text-slate-800">{disableTarget.firstName} {disableTarget.lastName}</span> ka access application se hata diya jaayega.
+                                <span className="text-slate-400 text-xs mt-1 block">Ye action undo ki ja sakti hai — teacher ko baad mein re-enable kiya ja sakta hai.</span>
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500 block mb-1">Reason for disabling (optional)</label>
+                            <textarea
+                                value={disableReason}
+                                onChange={e => setDisableReason(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-amber-300 resize-none"
+                                placeholder="e.g. On extended leave, Contract ended..."
+                            />
+                        </div>
+                        <div className="flex gap-3 pt-1">
+                            <button onClick={() => setDisableTarget(null)} disabled={isDisabling} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors outline-none">
+                                Cancel
+                            </button>
+                            <button onClick={handleDisableTeacher} disabled={isDisabling} className="flex-1 px-4 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 outline-none shadow-sm">
+                                {isDisabling ? <><Loader2 className="w-4 h-4 animate-spin" /> Disabling...</> : <><PowerOff className="w-4 h-4" strokeWidth={2.5} /> Yes, Disable</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Re-enable Teacher Modal ── */}
+            {reEnableTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
+                        <div className="flex flex-col items-center text-center gap-3 pt-2">
+                            <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                                <RotateCcw className="w-7 h-7 text-emerald-500" strokeWidth={2.5} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900 mt-2">Re-enable Teacher?</h2>
+                            <p className="text-sm text-slate-500 font-medium">
+                                <span className="font-bold text-slate-800">{reEnableTarget.firstName} {reEnableTarget.lastName}</span> ko wapas active kar diya jaayega aur unka login access restore ho jaayega.
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => setReEnableTarget(null)} disabled={isReEnabling} className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 outline-none">
+                                Cancel
+                            </button>
+                            <button onClick={handleReEnableTeacher} disabled={isReEnabling} className="flex-1 px-4 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 outline-none shadow-sm">
+                                {isReEnabling ? <><Loader2 className="w-4 h-4 animate-spin" /> Enabling...</> : <><RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Yes, Re-enable</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
