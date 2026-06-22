@@ -8,8 +8,9 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { Loader2, BookOpen, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Loader2, BookOpen, ArrowLeft, Eye, EyeOff, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 const teacherLoginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -23,6 +24,8 @@ export default function TeacherLoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const isDisabledRedirect = searchParams.get("disabled") === "1";
 
     const {
         register,
@@ -48,6 +51,15 @@ export default function TeacherLoginPage() {
             if (userDoc.exists()) {
                 const userData = userDoc.data();
                 if (userData.role === "teacher") {
+                    // Check if teacher is disabled
+                    if (userData.status === "DISABLED") {
+                        setError("Your account has been disabled. Please contact the school administration.");
+                        await auth.signOut();
+                        document.cookie = "auth=; path=/; max-age=0";
+                        document.cookie = "email=; path=/; max-age=0";
+                        document.cookie = "role=; path=/; max-age=0";
+                        return;
+                    }
                     router.push("/teacher");
                 } else {
                     setError("Access denied. Not an authorized teacher account.");
@@ -125,6 +137,13 @@ export default function TeacherLoginPage() {
                         {error && (
                             <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm text-center font-medium">
                                 {error}
+                            </div>
+                        )}
+
+                        {!error && isDisabledRedirect && (
+                            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                <span>Your account has been disabled by the administration. Please contact the school office for assistance.</span>
                             </div>
                         )}
 
