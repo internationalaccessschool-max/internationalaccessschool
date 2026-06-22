@@ -81,7 +81,9 @@ export default function AdminTeacherAttendancePage() {
         const fetchTeachers = async () => {
             try {
                 const snap = await getDocs(query(collection(db, "teachers"), orderBy("createdAt", "desc")));
-                const teacherList: TeacherInfo[] = snap.docs.map(d => {
+                const teacherList: TeacherInfo[] = snap.docs
+                    .filter(d => (d.data() as any).status !== "DISABLED") // exclude disabled teachers
+                    .map(d => {
                     const data = d.data() as any;
                     return {
                         id: d.id,
