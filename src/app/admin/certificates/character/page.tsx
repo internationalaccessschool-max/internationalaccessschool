@@ -86,6 +86,7 @@ const defaultCC = (): CCData => ({
 function buildCCHtml(cc: CCData, logoUrl: string): string {
   const pronoun = cc.gender.toLowerCase().startsWith("f") ? "she" : "he";
   const pronounCap = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
+  const objectPronoun = cc.gender.toLowerCase().startsWith("f") ? "her" : "him";
   const possessive = cc.gender.toLowerCase().startsWith("f") ? "her" : "his";
   const relation = cc.gender.toLowerCase().startsWith("f") ? "daughter" : "son";
 
@@ -167,11 +168,11 @@ function buildCCHtml(cc: CCData, logoUrl: string): string {
     </p>
 
     <p style="margin-bottom:16px">
-      This certificate is being issued to ${pronoun} on ${possessive} request for the purpose of
+      This certificate is being issued to ${objectPronoun} on ${possessive} request for the purpose of
       <b>${cc.purpose}</b>.
     </p>
 
-    <p>We wish ${pronoun} all the best for ${possessive} future endeavours.</p>
+    <p>We wish ${objectPronoun} all the best for ${possessive} future endeavours.</p>
   </div>
 
   <!-- Signatures -->
@@ -326,6 +327,7 @@ export default function CharacterCertificatePage() {
   // Live text preview helpers
   const pronoun = ccData.gender?.toLowerCase().startsWith("f") ? "she" : "he";
   const pronounCap = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
+  const objectPronoun = ccData.gender?.toLowerCase().startsWith("f") ? "her" : "him";
   const possessive = ccData.gender?.toLowerCase().startsWith("f") ? "her" : "his";
   const relation = ccData.gender?.toLowerCase().startsWith("f") ? "daughter" : "son";
 
@@ -513,9 +515,9 @@ export default function CharacterCertificatePage() {
                     has been <b>{ccData.behaviour}</b>. {pronounCap} has never been involved in any indiscipline or misconduct.
                   </p>
                   <p style={{ marginBottom: "12px" }}>
-                    This certificate is being issued to {pronoun} on {possessive} request for the purpose of <b>{ccData.purpose}</b>.
+                    This certificate is being issued to {objectPronoun} on {possessive} request for the purpose of <b>{ccData.purpose}</b>.
                   </p>
-                  <p>We wish {pronoun} all the best for {possessive} future endeavours.</p>
+                  <p>We wish {objectPronoun} all the best for {possessive} future endeavours.</p>
                 </div>
 
                 {/* Signatures */}
