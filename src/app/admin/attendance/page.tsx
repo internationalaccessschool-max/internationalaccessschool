@@ -87,6 +87,18 @@ function getMonthsBetween(from: string, to: string): string[] {
     return months;
 }
 
+// Count Mon–Sat (school days) between two YYYY-MM-DD strings, inclusive
+function getExpectedWorkingDays(from: string, to: string): number {
+    let count = 0;
+    const cur = new Date(from + "T00:00:00");
+    const end = new Date(to + "T00:00:00");
+    while (cur <= end) {
+        if (cur.getDay() !== 0) count++; // exclude Sunday
+        cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+}
+
 interface AttendanceDoc {
     date: string;
     month: string;
@@ -160,6 +172,10 @@ export default function AdminAttendancePage() {
     const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split("T")[0]);
     const [periodData, setPeriodData] = useState<ClassPeriodSummary[]>([]);
     const [periodLoading, setPeriodLoading] = useState(false);
+    // Month picker for monthly overview (separate from the daily date picker)
+    const [overviewMonth, setOverviewMonth] = useState(currentYearMonth);
+    // Expected school working days for the selected period
+    const [overviewExpectedDays, setOverviewExpectedDays] = useState(0);
 
     // Fetch students for selected class-section
     useEffect(() => {
@@ -345,13 +361,28 @@ export default function AdminAttendancePage() {
 
     // Period summary fetch (only when ALL classes selected and period !== daily)
     useEffect(() => {
-        if (selectedClass !== "ALL" || overviewPeriod === "daily") { setPeriodData([]); return; }
+        if (selectedClass !== "ALL" || overviewPeriod === "daily") {
+            setPeriodData([]);
+            setOverviewExpectedDays(0);
+            return;
+        }
 
         let from = "", to = "";
-        if (overviewPeriod === "weekly") { const r = getWeekRange(selectedDate); from = r.from; to = r.to; }
-        else if (overviewPeriod === "monthly") { const r = getMonthRange(selectedDate); from = r.from; to = r.to; }
-        else { from = periodFrom; to = periodTo; }
+        if (overviewPeriod === "weekly") {
+            const r = getWeekRange(selectedDate);
+            from = r.from; to = r.to;
+        } else if (overviewPeriod === "monthly") {
+            // Use dedicated month picker — not the daily date picker
+            const r = getMonthRange(overviewMonth + "-01");
+            from = r.from; to = r.to;
+        } else {
+            from = periodFrom; to = periodTo;
+        }
         if (!from || !to || from > to) return;
+
+        // Calculate expected school days (Mon–Sat) for the selected period
+        const expected = getExpectedWorkingDays(from, to);
+        setOverviewExpectedDays(expected);
 
         const fetchPeriod = async () => {
             setPeriodLoading(true);
@@ -393,7 +424,7 @@ export default function AdminAttendancePage() {
         };
 
         fetchPeriod();
-    }, [selectedClass, overviewPeriod, selectedDate, periodFrom, periodTo]);
+    }, [selectedClass, overviewPeriod, selectedDate, overviewMonth, periodFrom, periodTo]);
 
     // Apply fetched attendance statuses to student list (skip if day is holiday)
     useEffect(() => {
@@ -600,16 +631,36 @@ export default function AdminAttendancePage() {
                     </div>
                 )}
 
-                {/* Date — in Day View or ALL */}
-                {(viewMode === "date" || selectedClass === "ALL") && (
+                {/* Date picker — Day View, or ALL-classes daily/weekly/custom */}
+                {(viewMode === "date" || (selectedClass === "ALL" && overviewPeriod !== "monthly")) && (
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Date</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">
+                            {selectedClass === "ALL" && overviewPeriod === "weekly" ? "Week containing Date" : "Date"}
+                        </label>
                         <input
                             type="date"
                             value={selectedDate}
                             onChange={e => setSelectedDate(e.target.value)}
                             className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none text-sm"
                         />
+                    </div>
+                )}
+                {/* Month picker — only for Monthly overview */}
+                {selectedClass === "ALL" && overviewPeriod === "monthly" && (
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Month</label>
+                        <div className="relative">
+                            <select
+                                value={overviewMonth}
+                                onChange={e => setOverviewMonth(e.target.value)}
+                                className="px-4 py-2 pr-8 border border-gray-200 rounded-xl focus:ring-2 focus:ring-navy/20 outline-none appearance-none bg-white text-sm min-w-[170px]"
+                            >
+                                {monthOptions.map(m => (
+                                    <option key={m.value} value={m.value}>{m.label}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                        </div>
                     </div>
                 )}
 
@@ -741,6 +792,11 @@ export default function AdminAttendancePage() {
                         const totPct = totSlots > 0 ? Math.round(((totPresent + totLate) / totSlots) * 100) : null;
                         const pctClr = (p: number | null) => p === null ? "text-gray-400" : p >= 90 ? "text-emerald-600" : p >= 75 ? "text-amber-600" : "text-red-600";
 
+                        // Coverage: max recorded days across all classes in this period
+                        const maxRecorded = periodData.length > 0 ? Math.max(...periodData.map(r => r.workingDays)) : 0;
+                        const coveragePct = overviewExpectedDays > 0 ? Math.round((maxRecorded / overviewExpectedDays) * 100) : 0;
+                        const missingDays = overviewExpectedDays - maxRecorded;
+
                         return (
                             <>
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -749,6 +805,18 @@ export default function AdminAttendancePage() {
                                             <h3 className="font-bold text-navy capitalize">{overviewPeriod === "period" ? "Custom Period" : overviewPeriod.charAt(0).toUpperCase() + overviewPeriod.slice(1)} Summary</h3>
                                             <p className="text-xs text-gray-400 mt-0.5">{label}</p>
                                         </div>
+                                        {/* Coverage badge */}
+                                        {overviewExpectedDays > 0 && (
+                                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${
+                                                missingDays <= 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                : missingDays <= 3 ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                : "bg-red-50 text-red-700 border-red-200"
+                                            }`}>
+                                                {missingDays <= 0 ? "✅" : "⚠️"}
+                                                {maxRecorded}/{overviewExpectedDays} days recorded
+                                                {missingDays > 0 && <span className="font-normal opacity-70">({missingDays} missing)</span>}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="grid grid-cols-4 gap-3 text-center">
                                         <div className="bg-blue-50 rounded-xl py-3">
@@ -785,23 +853,34 @@ export default function AdminAttendancePage() {
 
                                 {filteredPeriodData.length > 0 && (
                                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                                        <div className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
+                                        <div className="grid grid-cols-[80px_60px_90px_70px_70px_70px_80px] px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
                                             <span>Class</span>
                                             <span className="text-center">Sec</span>
-                                            <span className="text-center">Days</span>
+                                            <span className="text-center">Days<span className="font-normal text-gray-400 ml-0.5">(rec/exp)</span></span>
                                             <span className="text-center text-emerald-600">Present</span>
                                             <span className="text-center text-amber-600">Late</span>
                                             <span className="text-center text-red-600">Absent</span>
-                                            <span className="text-center">Avg %</span>
+                                            <span className="text-center">Avg %*</span>
                                         </div>
                                         <div className="divide-y divide-gray-50">
                                             {filteredPeriodData.map((row, i) => {
                                                 const rowPct = row.totalSlots > 0 ? Math.round(((row.present + row.late) / row.totalSlots) * 100) : null;
+                                                const isIncomplete = overviewExpectedDays > 0 && row.workingDays < overviewExpectedDays;
+                                                const coverageClr = row.workingDays === 0 ? "text-red-500"
+                                                    : isIncomplete ? "text-amber-600"
+                                                    : "text-emerald-600";
                                                 return (
-                                                    <div key={i} className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 items-center hover:bg-gray-50/50 transition-colors">
+                                                    <div key={i} className="grid grid-cols-[80px_60px_90px_70px_70px_70px_80px] px-4 py-3 items-center hover:bg-gray-50/50 transition-colors">
                                                         <span className="font-bold text-navy text-sm">{row.cls}</span>
                                                         <span className="text-center text-xs text-gray-500 font-medium">{row.section}</span>
-                                                        <span className="text-center text-sm font-semibold text-gray-700">{row.workingDays}</span>
+                                                        <div className="text-center">
+                                                            <span className={`text-sm font-semibold ${coverageClr}`}>
+                                                                {row.workingDays}{overviewExpectedDays > 0 ? `/${overviewExpectedDays}` : ""}
+                                                            </span>
+                                                            {isIncomplete && (
+                                                                <div className="text-[10px] text-amber-500 leading-none mt-0.5">⚠️ partial</div>
+                                                            )}
+                                                        </div>
                                                         <span className="text-center text-sm font-bold text-emerald-600">{row.present}</span>
                                                         <span className="text-center text-sm font-bold text-amber-600">{row.late}</span>
                                                         <span className="text-center text-sm font-bold text-red-600">{row.absent}</span>
@@ -819,6 +898,12 @@ export default function AdminAttendancePage() {
                                     <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
                                         {globalSearch ? `No classes match "${globalSearch}".` : "No attendance data found for this period."}
                                     </div>
+                                )}
+                                {/* Footnote explaining Avg % */}
+                                {filteredPeriodData.length > 0 && (
+                                    <p className="text-[11px] text-gray-400 px-4 py-2 border-t border-gray-50">
+                                        * Avg % is calculated based on <strong>recorded days only</strong>. Days where attendance was not saved are not included.
+                                    </p>
                                 )}
                             </>
                         );
