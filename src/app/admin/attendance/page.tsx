@@ -130,7 +130,8 @@ export default function AdminAttendancePage() {
     const [viewMode, setViewMode] = useState<"date" | "summary">("date");
     const [summarySortKey, setSummarySortKey] = useState<"name" | "present" | "late" | "absent" | "pct">("name");
     const [summarySortDir, setSummarySortDir] = useState<"asc" | "desc">("asc");
-    const [summarySearch, setSummarySearch] = useState("");
+    // Universal search — used in all views
+    const [globalSearch, setGlobalSearch] = useState("");
 
     const currentYearMonth = (() => {
         const now = new Date();
@@ -511,7 +512,7 @@ export default function AdminAttendancePage() {
     };
 
     const sortedSummaryStudents = [...students]
-        .filter(s => !summarySearch || s.name.toLowerCase().includes(summarySearch.toLowerCase()) || s.regNo.includes(summarySearch))
+        .filter(s => !globalSearch || s.name.toLowerCase().includes(globalSearch.toLowerCase()) || s.regNo.toLowerCase().includes(globalSearch.toLowerCase()))
         .sort((a, b) => {
         const sa = getStudentSummary(a.id);
         const sb = getStudentSummary(b.id);
@@ -528,6 +529,23 @@ export default function AdminAttendancePage() {
     const dayPresent = students.filter(s => s.status === "present").length + dayLate;
     const dayAbsent = students.filter(s => s.status === "absent").length;
     const dayTotal = students.length;
+
+    // Filtered students for Day View (uses globalSearch)
+    const filteredDayStudents = globalSearch.trim()
+        ? students.filter(s =>
+            s.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+            s.regNo.toLowerCase().includes(globalSearch.toLowerCase())
+        )
+        : students;
+
+    // Filtered class rows for ALL classes views (uses globalSearch)
+    const filteredSchoolOverview = globalSearch.trim()
+        ? schoolOverview.filter(r => r.cls.toLowerCase().includes(globalSearch.toLowerCase()) || r.section.toLowerCase().includes(globalSearch.toLowerCase()))
+        : schoolOverview;
+
+    const filteredPeriodData = globalSearch.trim()
+        ? periodData.filter(r => r.cls.toLowerCase().includes(globalSearch.toLowerCase()) || r.section.toLowerCase().includes(globalSearch.toLowerCase()))
+        : periodData;
 
     const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
         weekday: "long", day: "numeric", month: "long", year: "numeric"
@@ -677,6 +695,28 @@ export default function AdminAttendancePage() {
                 </div>
             )}
 
+            {/* ── Universal Search Bar (all views) ── */}
+            <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                    id="attendance-global-search"
+                    type="search"
+                    placeholder={selectedClass === "ALL" ? "Search by class (e.g. NUR, 5, 10)…" : "Search student by name or Reg No…"}
+                    value={globalSearch}
+                    onChange={e => setGlobalSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy bg-white transition-all"
+                />
+                {globalSearch && (
+                    <button
+                        onClick={() => setGlobalSearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        aria-label="Clear search"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
             {loading ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-navy" />
@@ -743,7 +783,7 @@ export default function AdminAttendancePage() {
                                     )}
                                 </div>
 
-                                {periodData.length > 0 && (
+                                {filteredPeriodData.length > 0 && (
                                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                         <div className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
                                             <span>Class</span>
@@ -755,7 +795,7 @@ export default function AdminAttendancePage() {
                                             <span className="text-center">Avg %</span>
                                         </div>
                                         <div className="divide-y divide-gray-50">
-                                            {periodData.map((row, i) => {
+                                            {filteredPeriodData.map((row, i) => {
                                                 const rowPct = row.totalSlots > 0 ? Math.round(((row.present + row.late) / row.totalSlots) * 100) : null;
                                                 return (
                                                     <div key={i} className="grid grid-cols-[80px_60px_70px_70px_70px_70px_80px] px-4 py-3 items-center hover:bg-gray-50/50 transition-colors">
@@ -775,8 +815,10 @@ export default function AdminAttendancePage() {
                                         </div>
                                     </div>
                                 )}
-                                {periodData.length === 0 && (
-                                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">No attendance data found for this period.</div>
+                                {filteredPeriodData.length === 0 && (
+                                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
+                                        {globalSearch ? `No classes match "${globalSearch}".` : "No attendance data found for this period."}
+                                    </div>
                                 )}
                             </>
                         );
@@ -868,6 +910,10 @@ export default function AdminAttendancePage() {
                                 <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
                                     No attendance marked for this date yet.
                                 </div>
+                            ) : filteredSchoolOverview.length === 0 ? (
+                                <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
+                                    No classes match &ldquo;{globalSearch}&rdquo;.
+                                </div>
                             ) : (
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                     <div className="grid grid-cols-[80px_60px_60px_60px_60px_60px_80px] px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-500">
@@ -880,7 +926,7 @@ export default function AdminAttendancePage() {
                                         <span className="text-center">Attendance %</span>
                                     </div>
                                     <div className="divide-y divide-gray-50">
-                                        {schoolOverview.map((row, i) => {
+                                        {filteredSchoolOverview.map((row, i) => {
                                             const rowAttended = row.present + row.late;
                                             const rowPct = row.holiday ? null : row.total > 0 ? Math.round((rowAttended / row.total) * 100) : null;
                                             const rowPctColor = rowPct === null ? "text-gray-400"
@@ -1001,13 +1047,20 @@ export default function AdminAttendancePage() {
                         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
                             No students found for this class &amp; section.
                         </div>
+                    ) : filteredDayStudents.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
+                            No students match &ldquo;{daySearch}&rdquo;.
+                        </div>
                     ) : (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                            {students.map((student, idx) => (
+                            {filteredDayStudents.map((student, idx) => {
+                                // Show the actual position in the full student list, not the filtered index
+                                const globalIdx = students.findIndex(s => s.id === student.id);
+                                return (
                                 <div key={student.id} className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs shrink-0">
-                                            {idx + 1}
+                                            {globalIdx + 1}
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-semibold text-navy truncate">{student.name}</p>
@@ -1047,7 +1100,8 @@ export default function AdminAttendancePage() {
                                         )}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
@@ -1077,17 +1131,7 @@ export default function AdminAttendancePage() {
             ) : (
                 /* Summary View */
                 <>
-                    {/* Search bar */}
-                    <div className="relative max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="search"
-                            placeholder="Search student name or reg no…"
-                            value={summarySearch}
-                            onChange={e => setSummarySearch(e.target.value)}
-                            className="pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm w-full focus:outline-none focus:border-navy bg-white"
-                        />
-                    </div>
+
                     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="font-bold text-navy">
@@ -1137,37 +1181,76 @@ export default function AdminAttendancePage() {
                         return (
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                 {/* Total summary bar */}
-                                <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-navy/5 border-b border-navy/10 text-xs font-bold text-navy">
+                                <div className="grid grid-cols-[1fr_70px_70px_70px_80px] sm:grid-cols-[1fr_90px_90px_90px_90px] gap-2 px-5 py-3 bg-navy/5 border-b border-navy/10 text-xs font-bold text-navy">
                                     <span>Total — {students.length} students</span>
-                                    <span className="text-center text-emerald-700">{totalPresent}</span>
-                                    <span className="text-center text-amber-700">{totalLate}</span>
-                                    <span className="text-center text-red-700">{totalAbsent}</span>
+                                    <div className="text-center">
+                                        <div className="text-emerald-700">{totalSlots > 0 ? `${Math.round(((totalPresent) / totalSlots) * 100)}%` : "—"}</div>
+                                        <div className="text-[10px] font-normal text-gray-400">{totalPresent} days</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-amber-700">{totalSlots > 0 ? `${Math.round((totalLate / totalSlots) * 100)}%` : "—"}</div>
+                                        <div className="text-[10px] font-normal text-gray-400">{totalLate} days</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-red-700">{totalSlots > 0 ? `${Math.round((totalAbsent / totalSlots) * 100)}%` : "—"}</div>
+                                        <div className="text-[10px] font-normal text-gray-400">{totalAbsent} days</div>
+                                    </div>
                                     <span className={`text-center ${totalPct >= 75 ? "text-emerald-700" : totalPct >= 50 ? "text-amber-700" : "text-red-700"}`}>{totalSlots > 0 ? `${totalPct}%` : "—"}</span>
                                 </div>
                                 {/* Sortable headers */}
-                                <div className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
+                                <div className="grid grid-cols-[1fr_70px_70px_70px_80px] sm:grid-cols-[1fr_90px_90px_90px_90px] gap-2 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b border-gray-100">
                                     <SortTh col="name" label="Student" className="justify-start" />
                                     <SortTh col="present" label="Present" />
                                     <SortTh col="late" label="Late" />
                                     <SortTh col="absent" label="Absent" />
-                                    <SortTh col="pct" label="%" />
+                                    <SortTh col="pct" label="Attendance %" />
                                 </div>
                                 <div className="divide-y divide-gray-50">
                                     {sortedSummaryStudents.map(student => {
                                         const s = getStudentSummary(student.id);
+                                        const presentPct  = s.total > 0 ? Math.round((s.present / s.total) * 100) : null;
+                                        const latePct     = s.total > 0 ? Math.round((s.late    / s.total) * 100) : null;
+                                        const absentPct   = s.total > 0 ? Math.round((s.absent  / s.total) * 100) : null;
                                         return (
-                                            <div key={student.id} className="grid grid-cols-[1fr_60px_60px_60px_70px] sm:grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
+                                            <div key={student.id} className="grid grid-cols-[1fr_70px_70px_70px_80px] sm:grid-cols-[1fr_90px_90px_90px_90px] gap-2 px-5 py-3 items-center hover:bg-gray-50/50 transition-colors">
                                                 <div>
                                                     <p className="text-sm font-semibold text-navy truncate">{student.name}</p>
                                                     <p className="text-xs text-gray-400">{student.regNo}</p>
                                                 </div>
-                                                <span className="text-center text-sm font-bold text-emerald-600">{s.present}</span>
-                                                <span className="text-center text-sm font-bold text-amber-600">{s.late}</span>
-                                                <span className="text-center text-sm font-bold text-red-600">{s.absent}</span>
+                                                {/* Present % */}
+                                                <div className="text-center">
+                                                    <span className="block text-sm font-bold text-emerald-600">
+                                                        {presentPct !== null ? `${presentPct}%` : "—"}
+                                                    </span>
+                                                    {s.total > 0 && <span className="block text-[10px] text-gray-400">{s.present}/{s.total}</span>}
+                                                </div>
+                                                {/* Late % */}
+                                                <div className="text-center">
+                                                    <span className="block text-sm font-bold text-amber-600">
+                                                        {latePct !== null ? `${latePct}%` : "—"}
+                                                    </span>
+                                                    {s.total > 0 && <span className="block text-[10px] text-gray-400">{s.late}/{s.total}</span>}
+                                                </div>
+                                                {/* Absent % */}
+                                                <div className="text-center">
+                                                    <span className="block text-sm font-bold text-red-600">
+                                                        {absentPct !== null ? `${absentPct}%` : "—"}
+                                                    </span>
+                                                    {s.total > 0 && <span className="block text-[10px] text-gray-400">{s.absent}/{s.total}</span>}
+                                                </div>
+                                                {/* Overall attendance % with mini bar */}
                                                 <div className="text-center">
                                                     <span className={`text-sm font-bold ${s.pct >= 75 ? "text-emerald-600" : s.pct >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                                         {s.total > 0 ? `${s.pct}%` : "—"}
                                                     </span>
+                                                    {s.total > 0 && (
+                                                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+                                                            <div
+                                                                className={`h-full rounded-full ${s.pct >= 75 ? "bg-emerald-500" : s.pct >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                                                                style={{ width: `${s.pct}%` }}
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
