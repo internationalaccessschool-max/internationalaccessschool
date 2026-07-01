@@ -1049,7 +1049,7 @@ export default function AdminAttendancePage() {
                         </div>
                     ) : filteredDayStudents.length === 0 ? (
                         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
-                            No students match &ldquo;{daySearch}&rdquo;.
+                            No students match &ldquo;{globalSearch}&rdquo;.
                         </div>
                     ) : (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
