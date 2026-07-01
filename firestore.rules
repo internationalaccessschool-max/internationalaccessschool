@@ -29,7 +29,10 @@ service cloud.firestore {
         (hasRole('accountant') && (
           request.resource.data.role == 'student' ||
           !('role' in request.resource.data)
-        ));
+        )) ||
+        // Self-heal: student can create their own doc if role == 'student'
+        // This fixes login when users/{uid} doc is missing after admission.
+        (isAuth() && uid() == userId && request.resource.data.role == 'student' && request.resource.data.uid == uid());
       allow update: if isAdmin() ||
         (hasRole('accountant') && (
           !('role' in resource.data) ||
