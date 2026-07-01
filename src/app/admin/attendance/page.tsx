@@ -631,8 +631,8 @@ export default function AdminAttendancePage() {
                     </div>
                 )}
 
-                {/* Date picker — Day View, or ALL-classes daily/weekly/custom */}
-                {(viewMode === "date" || (selectedClass === "ALL" && overviewPeriod !== "monthly")) && (
+                {/* Date picker — Day View, or ALL-classes daily/weekly/custom (NOT monthly) */}
+                {((viewMode === "date" && selectedClass !== "ALL") || (selectedClass === "ALL" && overviewPeriod !== "monthly")) && (
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1">
                             {selectedClass === "ALL" && overviewPeriod === "weekly" ? "Week containing Date" : "Date"}
