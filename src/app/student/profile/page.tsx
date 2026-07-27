@@ -3,7 +3,7 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, updateDoc, collectionGroup, getDocs } from "firebase/firestore";
+import { doc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ import {
     FileText, Camera, Landmark, Save, CheckCircle2, Lock
 } from "lucide-react";
 import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
+import { fetchStudentProfile } from "@/lib/utils/studentProfile";
 
 type Tab = "personal" | "academic" | "parents" | "medical" | "bank" | "documents";
 
@@ -38,13 +39,12 @@ export default function StudentProfilePage() {
             let rawData: any = null;
 
             try {
-                const allProfiles = await getDocs(collectionGroup(db, "profiles"));
-                const match = allProfiles.docs.find(d => d.id === user.uid);
-                if (match) {
-                    rawData = { id: user.uid, role: "student", ...match.data() };
+                const { profile, profilePath } = await fetchStudentProfile(user.uid);
+                if (profile) {
+                    rawData = { id: user.uid, role: "student", profilePath, ...profile };
                 }
             } catch (e) {
-                console.warn("Could not search profiles collectionGroup:", e);
+                console.warn("Could not fetch student profile:", e);
             }
 
             if (rawData) {
@@ -71,11 +71,11 @@ export default function StudentProfilePage() {
     };
 
     const handleSave = async () => {
-        if (!userData?.id) return;
+        if (!userData?.id || !userData?.profilePath) return;
         setSaving(true);
         try {
             // Strip read-only and system fields before saving
-            const { id, role, ...rest } = formData;
+            const { id, role, profilePath, ...rest } = formData;
             const sanitized: any = {};
             for (const key of Object.keys(rest)) {
                 if (!READ_ONLY_FIELDS.includes(key)) {
@@ -100,13 +100,7 @@ export default function StudentProfilePage() {
 
             // Update the nested profiles doc
             try {
-                const allProfiles = await getDocs(collectionGroup(db, "profiles"));
-                const nestedDoc = allProfiles.docs.find(d => d.id === userData.id);
-                if (nestedDoc) {
-                    await setDoc(nestedDoc.ref, sanitized, { merge: true });
-                } else {
-                    console.error("No profile document found for student.");
-                }
+                await setDoc(doc(db, userData.profilePath), sanitized, { merge: true });
             } catch (e) {
                 console.warn("Could not update nested profile doc:", e);
             }
@@ -139,15 +133,9 @@ export default function StudentProfilePage() {
     };
 
     const handleDocumentUpdate = async (field: string, url: string) => {
-        if (!userData?.id) return;
+        if (!userData?.id || !userData?.profilePath) return;
         try {
-            const allProfiles = await getDocs(collectionGroup(db, "profiles"));
-            const nestedDoc = allProfiles.docs.find(d => d.id === userData.id);
-            if (nestedDoc) {
-                await updateDoc(nestedDoc.ref, { [field]: url });
-            } else {
-                throw new Error("Profile not found");
-            }
+            await updateDoc(doc(db, userData.profilePath), { [field]: url });
             setUserData((prev: any) => ({ ...prev, [field]: url }));
             setFormData((prev: any) => ({ ...prev, [field]: url }));
         } catch (error) {
