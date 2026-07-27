@@ -753,7 +753,7 @@ export default function AdvanceFeePage() {
                         {feeStructure && (
                             <div className="text-right text-sm">
                                 <div className="text-xs text-gray-400">Monthly Fee</div>
-                                <div className="font-bold text-navy text-lg">₹{feeStructure.monthly?.toLocaleString()}</div>
+                                <div className="font-bold text-navy text-lg">₹{(feeStructure.tuitionFee || 0).toLocaleString()}</div>
                             </div>
                         )}
                     </div>
