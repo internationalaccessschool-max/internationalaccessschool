@@ -90,6 +90,7 @@ export default function AdminTeachersPage() {
         aadhaarUrl: "", aadhaarName: "",
         drivingLicenceUrl: "", drivingLicenceName: "",
         passportUrl: "", passportName: "",
+        signatureUrl: "", signatureName: "",
         // PF & ESIC
         pfPct: "", esicPct: "",
         uanNumber: "", epfAccountNumber: "", pfJoiningDate: "", pfExitDate: "",
@@ -220,6 +221,8 @@ export default function AdminTeachersPage() {
             drivingLicenceName: d.drivingLicenceName || "",
             passportUrl: d.passportUrl || "",
             passportName: d.passportName || "",
+            signatureUrl: d.signatureUrl || "",
+            signatureName: d.signatureName || "",
             // PF & ESIC
             pfPct: d.pfPct != null ? String(d.pfPct) : "",
             esicPct: d.esicPct != null ? String(d.esicPct) : "",
@@ -1050,6 +1053,15 @@ export default function AdminTeachersPage() {
                                             <DocUploadSlot label="Driving Licence" url={editData.drivingLicenceUrl} name={editData.drivingLicenceName || "driving-licence"} onUpload={(url, name) => setEditData(p => ({ ...p, drivingLicenceUrl: url, drivingLicenceName: name }))} onRemove={() => setEditData(p => ({ ...p, drivingLicenceUrl: "", drivingLicenceName: "" }))} />
                                             <DocUploadSlot label="Passport" url={editData.passportUrl} name={editData.passportName || "passport"} onUpload={(url, name) => setEditData(p => ({ ...p, passportUrl: url, passportName: name }))} onRemove={() => setEditData(p => ({ ...p, passportUrl: "", passportName: "" }))} />
                                         </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-1 mb-3">✍️ Signature</p>
+                                            <SignatureUploadSlot
+                                                url={editData.signatureUrl}
+                                                name={editData.signatureName || "signature"}
+                                                onUpload={(url, name) => setEditData(p => ({ ...p, signatureUrl: url, signatureName: name }))}
+                                                onRemove={() => setEditData(p => ({ ...p, signatureUrl: "", signatureName: "" }))}
+                                            />
+                                        </div>
                                     </div>
                                 )}
 
@@ -1239,6 +1251,43 @@ function DocUploadSlot({ label, url, name, onUpload, onRemove }: {
                     onUpload={(u, _id, n) => onUpload(u, n ?? "")}
                     acceptedFileTypes="all"
                     maxSizeMB={1}
+                />
+            )}
+        </div>
+    );
+}
+
+// Signature preview rendered on a clean white "paper" card so faint pen strokes
+// stay clearly visible instead of getting lost against a colored upload panel.
+function SignatureUploadSlot({ url, name, onUpload, onRemove }: {
+    url: string; name: string;
+    onUpload: (url: string, name: string) => void;
+    onRemove: () => void;
+}) {
+    return (
+        <div>
+            {url ? (
+                <div className="flex items-start gap-3">
+                    <div className="w-56 h-28 bg-white border border-gray-200 rounded-xl shadow-sm flex items-center justify-center overflow-hidden shrink-0">
+                        <img src={url} alt="Signature" className="max-w-[90%] max-h-[80%] object-contain" />
+                    </div>
+                    <div className="flex flex-col gap-1.5 pt-1">
+                        <p className="text-xs font-medium text-gray-700 truncate max-w-[10rem]">{name}</p>
+                        <p className="text-[10px] text-green-600">Uploaded ✓</p>
+                        <div className="flex gap-1">
+                            <FileViewerTrigger url={url} fileName={name} label="View" className="text-xs" />
+                            <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Remove</button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <CloudinaryUpload
+                    folder="admin-docs"
+                    subFolder="staff-docs"
+                    onUpload={(u, _id, n) => onUpload(u, n ?? "signature")}
+                    acceptedFileTypes="images"
+                    maxSizeMB={1}
+                    label="Upload Signature"
                 />
             )}
         </div>
