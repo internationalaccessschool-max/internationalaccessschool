@@ -2,13 +2,15 @@
 
 import { useState, useEffect, use } from "react";
 import { collection, getDocs, doc, getDoc, collectionGroup } from "firebase/firestore";
+import * as XLSX from "xlsx";
 import { db } from "@/lib/firebase";
 import { Exam, Subject } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Printer, FileText, Users, BookOpen, CheckCircle2 } from "lucide-react";
+import { CloudinaryUpload } from "@/components/ui/cloudinary-upload";
+import { Loader2, Printer, FileText, Users, BookOpen, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 
 // ─── Grading ─────────────────────────────────────────────────────────────────
@@ -105,6 +107,28 @@ const RT_COLOR: Record<string, string> = {
   emerald: "border-emerald-500 bg-emerald-50 text-emerald-800",
 };
 
+// ─── Per-subject contribution (shared by print + Excel export) ────────────────
+function calcSubjectContribution(
+  s: StudentResult,
+  sub: Subject,
+  reportType: ReportType,
+  unit1Id: string, hyId: string, unit2Id: string, annualId: string
+): number {
+  const sid = String(sub.id || sub.name);
+  const u1m = s.examMarks[unit1Id]?.[sid];
+  const hym = s.examMarks[hyId]?.[sid];
+  const u2m = s.examMarks[unit2Id]?.[sid];
+  const anm = s.examMarks[annualId]?.[sid];
+  const u1o = u1m ? (u1m.obtained ?? ((u1m.perTest ?? 0) + (u1m.noteBook ?? 0) + (u1m.sea ?? 0))) : 0;
+  const hyo = hym?.obtained ?? 0;
+  const u2o = u2m ? (u2m.obtained ?? ((u2m.perTest ?? 0) + (u2m.noteBook ?? 0) + (u2m.sea ?? 0))) : 0;
+  const ano = anm?.obtained ?? 0;
+  if      (reportType === "unit1")      return u1o;
+  else if (reportType === "halfYearly") return u1o + hyo;
+  else if (reportType === "unit2")      return u1o + hyo + u2o;   // cumulative /120
+  else                                   return u1o + hyo + u2o + ano;
+}
+
 // ─── Grand total calculator ───────────────────────────────────────────────────
 function calcGrandTotal(
   s: StudentResult,
@@ -112,23 +136,83 @@ function calcGrandTotal(
   reportType: ReportType,
   unit1Id: string, hyId: string, unit2Id: string, annualId: string
 ): number {
-  let total = 0;
-  subjects.forEach(sub => {
-    const sid = String(sub.id || sub.name);
-    const u1m = s.examMarks[unit1Id]?.[sid];
-    const hym = s.examMarks[hyId]?.[sid];
-    const u2m = s.examMarks[unit2Id]?.[sid];
-    const anm = s.examMarks[annualId]?.[sid];
-    const u1o = u1m ? (u1m.obtained ?? ((u1m.perTest ?? 0) + (u1m.noteBook ?? 0) + (u1m.sea ?? 0))) : 0;
-    const hyo = hym?.obtained ?? 0;
-    const u2o = u2m ? (u2m.obtained ?? ((u2m.perTest ?? 0) + (u2m.noteBook ?? 0) + (u2m.sea ?? 0))) : 0;
-    const ano = anm?.obtained ?? 0;
-    if      (reportType === "unit1")      total += u1o;
-    else if (reportType === "halfYearly") total += u1o + hyo;
-    else if (reportType === "unit2")      total += u1o + hyo + u2o;   // cumulative /120
-    else                                   total += u1o + hyo + u2o + ano;
-  });
-  return total;
+  return subjects.reduce(
+    (total, sub) => total + calcSubjectContribution(s, sub, reportType, unit1Id, hyId, unit2Id, annualId),
+    0
+  );
+}
+
+// ─── Signature picker — select an existing staff signature (from Staff → Documents)
+// or upload one directly. Fully optional; leaving it blank keeps the printed
+// line empty for a manual/wet signature. ─────────────────────────────────────
+function ReportSignatureField({
+  label, teacherList, value, onChange,
+}: {
+  label: string;
+  teacherList: { id: string; name: string; signatureUrl: string; designation?: string }[];
+  value: { name: string; url: string };
+  onChange: (v: { name: string; url: string }) => void;
+}) {
+  return (
+    <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/5">
+      <p className="text-xs font-semibold text-foreground">
+        {label} <span className="text-muted-foreground font-normal">(optional)</span>
+      </p>
+
+      {value.url ? (
+        <div className="flex items-center gap-3 bg-white border rounded-lg p-2">
+          <div className="h-12 w-24 flex items-center justify-center border rounded bg-white shrink-0">
+            <img src={value.url} alt={label} className="max-h-[85%] max-w-[85%] object-contain" />
+          </div>
+          <input
+            value={value.name}
+            onChange={e => onChange({ ...value, name: e.target.value })}
+            placeholder="Name (for reference only)"
+            className="flex-1 text-xs px-2 py-1.5 border rounded-md outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ name: "", url: "" })}
+            className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 shrink-0"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <>
+          <Select
+            value=""
+            onValueChange={(v) => {
+              const t = teacherList.find(t => t.id === v);
+              if (t) onChange({ name: t.name, url: t.signatureUrl });
+            }}
+          >
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue placeholder={teacherList.length ? "Select from staff signatures" : "No staff signatures uploaded yet"} />
+            </SelectTrigger>
+            <SelectContent>
+              {teacherList.map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}{t.designation ? ` — ${t.designation}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex-1 h-px bg-border" />or upload directly<div className="flex-1 h-px bg-border" />
+          </div>
+          <CloudinaryUpload
+            folder="admin-docs"
+            subFolder="report-signatures"
+            acceptedFileTypes="images"
+            maxSizeMB={1}
+            label={`Upload ${label} Signature`}
+            onUpload={(url) => onChange({ name: value.name, url })}
+          />
+        </>
+      )}
+    </div>
+  );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -155,6 +239,34 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
   const [isGenerating,  setIsGenerating]  = useState(false);
   const [reportReady,   setReportReady]   = useState(false);
+
+  // ── Signatures (optional, printed on every report card) ────────────────────
+  const [teacherSigList, setTeacherSigList] = useState<{ id: string; name: string; signatureUrl: string; designation?: string }[]>([]);
+  const [classTeacherSig,   setClassTeacherSig]   = useState<{ name: string; url: string }>({ name: "", url: "" });
+  const [examControllerSig, setExamControllerSig] = useState<{ name: string; url: string }>({ name: "", url: "" });
+  const [principalSig,      setPrincipalSig]      = useState<{ name: string; url: string }>({ name: "", url: "" });
+
+  useEffect(() => {
+    const loadTeacherSignatures = async () => {
+      try {
+        const snap = await getDocs(collection(db, "teachers"));
+        const list = snap.docs
+          .map(d => {
+            const data = d.data() as any;
+            return {
+              id: d.id,
+              name: `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+              signatureUrl: data.signatureUrl || "",
+              designation: data.designation || "",
+            };
+          })
+          .filter(t => t.name && t.signatureUrl);
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        setTeacherSigList(list);
+      } catch { /* ignore — signatures are optional */ }
+    };
+    loadTeacherSignatures();
+  }, []);
 
   // ── Load exam + session exams ───────────────────────────────────────────────
   useEffect(() => {
@@ -727,9 +839,9 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
     </div>
   </div>
   <div class="signatures">
-    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Class Teacher</div></div>
-    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Exam Controller</div></div>
-    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Principal</div></div>
+    <div class="sig-box"><div class="sig-line">${classTeacherSig.url ? `<img src="${classTeacherSig.url}" class="sig-img" alt="signature"/>` : ""}</div><div class="sig-name">Class Teacher</div></div>
+    <div class="sig-box"><div class="sig-line">${examControllerSig.url ? `<img src="${examControllerSig.url}" class="sig-img" alt="signature"/>` : ""}</div><div class="sig-name">Exam Controller</div></div>
+    <div class="sig-box"><div class="sig-line">${principalSig.url ? `<img src="${principalSig.url}" class="sig-img" alt="signature"/>` : ""}</div><div class="sig-name">Principal</div></div>
     <div class="sig-box"><div class="sig-line"></div><div class="sig-name">Parent / Guardian</div></div>
   </div>
 </div>`;
@@ -785,7 +897,8 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
 .grade-big{color:#155724;font-size:20px;}
 .signatures{display:flex;gap:10px;justify-content:space-around;padding-top:5px;border-top:1px solid #dde3ea;margin-top:4px;}
 .sig-box{text-align:center;flex:1;}
-.sig-line{border-bottom:1.5px dashed #aaa;margin:0 auto 3px;height:18px;}
+.sig-line{border-bottom:1.5px dashed #aaa;margin:0 auto 3px;height:18px;display:flex;align-items:flex-end;justify-content:center;}
+.sig-img{max-height:17px;max-width:85%;object-fit:contain;}
 .sig-name{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
 @page{size:A4 landscape;margin:6mm;}
 @media print{body{background:#fff;}.page{margin:0;box-shadow:none;border:none;width:100%;}}
@@ -797,6 +910,60 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
     pw.document.close();
     pw.focus();
     setTimeout(() => pw.print(), 900);
+  };
+
+  // ── Export to Excel ─────────────────────────────────────────────────────────
+  const handleExportExcel = () => {
+    if (students.length === 0) return;
+    const maxPerSub = MAX_PER_SUBJECT[reportType];
+    const showU2  = ["unit2", "annual"].includes(reportType);
+    const showHY  = ["halfYearly", "unit2", "annual"].includes(reportType);
+    const showAnn = reportType === "annual";
+    const displayMax = subjects.length * maxPerSub;
+
+    const rows = students.map((s, i) => {
+      const row: Record<string, any> = {
+        "S.No": i + 1,
+        "Name": s.name,
+        "Adm No": s.admissionNumber,
+        "Roll No": s.rollNo ?? "",
+        "Father's Name": s.fatherName ?? "",
+      };
+
+      let grandTotalObt = 0;
+      subjects.forEach(sub => {
+        const contrib = calcSubjectContribution(s, sub, reportType, unit1Id, hyId, unit2Id, annualId);
+        grandTotalObt += contrib;
+        row[`${sub.name} (/${maxPerSub})`] = contrib;
+      });
+
+      const overallPct = displayMax > 0 ? (grandTotalObt / displayMax) * 100 : 0;
+      row["Total"] = grandTotalObt;
+      row["Max"] = displayMax;
+      row["Percentage"] = Number(overallPct.toFixed(2));
+      row["Grade"] = getGrade(overallPct);
+      row["Rank"] = s.rank ?? "";
+
+      // Attendance for the period matching the selected report type
+      const att = s.attendance;
+      const wd = showAnn ? att.yrlWD : showU2 ? att.t2WD : showHY ? att.hyWD : att.t1WD;
+      const p  = showAnn ? att.yrlP  : showU2 ? att.t2P  : showHY ? att.hyP  : att.t1P;
+      row["Working Days"] = wd;
+      row["Present"] = p;
+      row["Attendance %"] = wd > 0 ? Number(((p / wd) * 100).toFixed(1)) : "";
+
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = Object.keys(rows[0] ?? {}).map(key =>
+      ["Name", "Father's Name"].includes(key) ? { wch: 24 } : { wch: 12 }
+    );
+    const wb = XLSX.utils.book_new();
+    const sheetName = `${selectedClass}-${selectedSection}`.slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const reportLabel = (REPORT_TYPES.find(r => r.key === reportType)?.label ?? "Report").replace(/\s+/g, "_");
+    XLSX.writeFile(wb, `ReportCards_${selectedClass}${selectedSection}_${reportLabel}.xlsx`);
   };
 
   // ── Preview helpers ─────────────────────────────────────────────────────────
@@ -927,6 +1094,18 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
             </p>
           </div>
 
+          {/* Signatures — optional, printed on every report card */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">
+              Signatures <span className="text-muted-foreground font-normal text-xs">(optional — printed on every report card)</span>
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <ReportSignatureField label="Class Teacher" teacherList={teacherSigList} value={classTeacherSig} onChange={setClassTeacherSig} />
+              <ReportSignatureField label="Exam Controller" teacherList={teacherSigList} value={examControllerSig} onChange={setExamControllerSig} />
+              <ReportSignatureField label="Principal" teacherList={teacherSigList} value={principalSig} onChange={setPrincipalSig} />
+            </div>
+          </div>
+
           {/* Action buttons */}
           <div className="flex gap-3 pt-1 flex-wrap">
             <Button
@@ -942,6 +1121,12 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
               <Button onClick={handlePrint} variant="outline" className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                 <Printer className="h-4 w-4" />
                 Print All {students.length} Cards (A4 Landscape)
+              </Button>
+            )}
+            {reportReady && (
+              <Button onClick={handleExportExcel} variant="outline" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50">
+                <FileSpreadsheet className="h-4 w-4" />
+                Export to Excel
               </Button>
             )}
           </div>
