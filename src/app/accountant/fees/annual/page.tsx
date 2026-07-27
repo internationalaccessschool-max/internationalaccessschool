@@ -74,6 +74,9 @@ export default function AnnualFeesPage() {
     const [payModal, setPayModal] = useState<AnnualFeeRecord | null>(null);
     const [payAmount, setPayAmount] = useState<number>(0);
     const [payMode, setPayMode] = useState<"CASH" | "UPI" | "CHEQUE">("CASH");
+    // Date the payment was actually received — defaults to today, but editable
+    // so back-dated payments (e.g. received Saturday, marked paid Monday) tally correctly.
+    const [payDate, setPayDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
     const [payLoading, setPayLoading] = useState(false);
 
     // History modal
@@ -217,6 +220,7 @@ export default function AnnualFeesPage() {
         setPayModal(record);
         setPayAmount(record.balance); // default = remaining balance
         setPayMode("CASH");
+        setPayDate(new Date().toISOString().split("T")[0]);
     };
 
     const handleRecordPayment = async () => {
@@ -229,9 +233,10 @@ export default function AnnualFeesPage() {
         setPayLoading(true);
         try {
             const receiptNo = await getNextReceiptNo();
+            const paymentDateObj = payDate ? new Date(`${payDate}T12:00:00`) : new Date();
             const newPayment: AnnualPayment = {
                 amount: payAmount,
-                date: new Date().toISOString(),
+                date: paymentDateObj.toISOString(),
                 paymentMode: payMode,
                 receiptNo,
                 markedBy: user?.uid || "",
@@ -506,6 +511,18 @@ export default function AnnualFeesPage() {
                         </div>
 
                         <div className="px-6 py-5 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Date</label>
+                                <input
+                                    type="date"
+                                    value={payDate}
+                                    max={new Date().toISOString().split("T")[0]}
+                                    onChange={e => setPayDate(e.target.value)}
+                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-amber-400"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">Defaults to today — change this if the payment was actually received earlier.</p>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Amount Paying Now (₹)</label>
                                 <input

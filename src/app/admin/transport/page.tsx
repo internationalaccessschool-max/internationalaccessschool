@@ -127,6 +127,10 @@ export default function TransportAdminPage() {
     const [loadingFees, setLoadingFees] = useState(false);
     const [generatingFees, setGeneratingFees] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    // Mark-paid confirm dialog — lets the date be back-dated (e.g. payment
+    // received on a Saturday but only marked paid on Monday when school reopens).
+    const [markPaidTarget, setMarkPaidTarget] = useState<TransportFeeRecord | null>(null);
+    const [transportPaidDate, setTransportPaidDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
     const [busView, setBusView] = useState<"all" | string>("all");
     const [filterClass, setFilterClass] = useState("all");
     const [filterSection, setFilterSection] = useState("all");
@@ -294,18 +298,19 @@ export default function TransportAdminPage() {
         }
     };
 
-    const handleMarkTransportPaid = async (record: TransportFeeRecord) => {
+    const handleMarkTransportPaid = async (record: TransportFeeRecord, paidDateStr: string) => {
         setActionLoading(record.id);
         try {
             const receiptNo = await getNextReceiptNo();
+            const paidOnDate = paidDateStr ? new Date(`${paidDateStr}T12:00:00`) : new Date();
             const path = record.path || `transportFeeRecords/${record.year}/months/${record.month}/students/${record.id}`;
             await updateDoc(doc(db, path), {
                 status: "paid",
-                paidOn: new Date(),
+                paidOn: paidOnDate,
                 receiptNo,
             });
             setFeeRecords(prev => prev.map(r => r.id === record.id
-                ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } }
+                ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => paidOnDate } }
                 : r
             ));
             showToast(`Marked paid — Receipt: ${receiptNo}`);
@@ -314,6 +319,7 @@ export default function TransportAdminPage() {
             showToast("Failed to mark paid.", "error");
         } finally {
             setActionLoading(null);
+            setMarkPaidTarget(null);
         }
     };
 
@@ -950,7 +956,10 @@ export default function TransportAdminPage() {
                                                                 <div className="flex gap-2">
                                                                     {record.status !== "paid" && (
                                                                         <button
-                                                                            onClick={() => handleMarkTransportPaid(record)}
+                                                                            onClick={() => {
+                                                                                setMarkPaidTarget(record);
+                                                                                setTransportPaidDate(new Date().toISOString().split("T")[0]);
+                                                                            }}
                                                                             disabled={actionLoading === record.id}
                                                                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors"
                                                                         >
@@ -979,6 +988,49 @@ export default function TransportAdminPage() {
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ─── Mark Transport Fee Paid — confirm date ─── */}
+            {markPaidTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-base font-bold text-navy">Mark Transport Fee Paid</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">{markPaidTarget.studentName} · ₹{markPaidTarget.amount?.toLocaleString()}</p>
+                            </div>
+                            <button onClick={() => setMarkPaidTarget(null)} className="p-2 text-gray-400 hover:text-rose-500 rounded-xl">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Date</label>
+                                <input
+                                    type="date"
+                                    value={transportPaidDate}
+                                    max={new Date().toISOString().split("T")[0]}
+                                    onChange={e => setTransportPaidDate(e.target.value)}
+                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-emerald-400"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">Defaults to today — change this if the payment was actually received earlier.</p>
+                            </div>
+                        </div>
+                        <div className="p-5 pt-0 flex gap-3">
+                            <button onClick={() => setMarkPaidTarget(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleMarkTransportPaid(markPaidTarget, transportPaidDate)}
+                                disabled={actionLoading === markPaidTarget.id}
+                                className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {actionLoading === markPaidTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Confirm Payment
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

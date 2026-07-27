@@ -217,8 +217,11 @@ export default function AdvanceFeePage() {
 
     // ── Step 4: Payment ───────────────────────────────────────────────────
     const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
+    // Date the payment was actually received — defaults to today, but editable
+    // so back-dated payments (e.g. received Saturday, marked paid Monday) tally correctly.
+    const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
     const [paying, setPaying]           = useState(false);
-    const [paidResult, setPaidResult]   = useState<{ receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[]; discountAmount: number } | null>(null);
+    const [paidResult, setPaidResult]   = useState<{ receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[]; discountAmount: number; paidOnDisplay: string } | null>(null);
     // Discount
     const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
     const [discountValue, setDiscountValue] = useState<number>(0);
@@ -386,7 +389,8 @@ export default function AdvanceFeePage() {
     const handleConfirmPayment = async () => {
         if (!selectedStudent || monthRows.length === 0) return;
         setPaying(true);
-        const paidOn = new Date();
+        const paidOn = paymentDate ? new Date(`${paymentDate}T12:00:00`) : new Date();
+        const paidOnDisplay = paidOn.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
         const receipts: { month: number; year: number; schoolReceiptNo?: string; transportReceiptNo?: string; schoolTotal: number; transportTotal: number }[] = [];
 
         try {
@@ -472,7 +476,7 @@ export default function AdvanceFeePage() {
                 });
             }
 
-            setPaidResult({ receipts, discountAmount: computedDiscountAmt });
+            setPaidResult({ receipts, discountAmount: computedDiscountAmt, paidOnDisplay });
             toast.success(`Advance payment recorded for ${monthRows.length} month${monthRows.length > 1 ? "s" : ""}!`);
 
             // --- SEND COMBINED EMAIL RECEIPT ---
@@ -508,7 +512,7 @@ export default function AdvanceFeePage() {
                             ...(allSchoolReceipts    ? [{ label: "School Receipt Nos",    value: allSchoolReceipts }] : []),
                             ...(allTransportReceipts ? [{ label: "Transport Receipt Nos", value: allTransportReceipts }] : []),
                         ],
-                        paidOn:       new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                        paidOn:       paidOnDisplay,
                         feeMonth:     "Multiple Months (Advance)",
                         lineItems,
                         totalAmount:  lineItems.reduce((s, i) => s + i.amount, 0),
@@ -552,7 +556,7 @@ export default function AdvanceFeePage() {
                 ...(allSchoolReceipts    ? [{ label: "School Receipt Nos",    value: allSchoolReceipts }] : []),
                 ...(allTransportReceipts ? [{ label: "Transport Receipt Nos", value: allTransportReceipts }] : []),
             ],
-            paidOn:       new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+            paidOn:       paidResult.paidOnDisplay,
             feeMonth:     "Multiple Months (Advance)",
             lineItems,
             totalAmount:  lineItems.reduce((s, i) => s + i.amount, 0),
@@ -570,6 +574,7 @@ export default function AdvanceFeePage() {
         setMonthRows([]);
         setPaidResult(null);
         setSearchQuery("");
+        setPaymentDate(new Date().toISOString().split("T")[0]);
     };
 
     // ─── UI helpers ───────────────────────────────────────────────────────
@@ -1029,6 +1034,19 @@ export default function AdvanceFeePage() {
                                     <span>₹{grandTotal.toLocaleString()}</span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Payment Date */}
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700 mb-2">Payment Date</p>
+                            <input
+                                type="date"
+                                value={paymentDate}
+                                max={new Date().toISOString().split("T")[0]}
+                                onChange={e => setPaymentDate(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-100 text-sm font-medium text-gray-700 focus:border-emerald-400 focus:outline-none"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Defaults to today — change this if the payment was actually received on an earlier date.</p>
                         </div>
 
                         {/* Payment Mode */}

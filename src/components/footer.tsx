@@ -13,6 +13,14 @@ const quickLinks = [
     { href: "/gallery", label: "Gallery" },
     { href: "/contact", label: "Contact" },
     { href: "/login", label: "Login Portal" },
+    { href: "/payment", label: "Pay Fees Online" },
+];
+
+const legalLinks = [
+    { href: "/privacy-policy", label: "Privacy Policy" },
+    { href: "/terms", label: "Terms & Conditions" },
+    { href: "/refund-policy", label: "Refund Policy" },
+    { href: "/cancellation-policy", label: "Cancellation Policy" },
 ];
 
 export function Footer() {
@@ -163,13 +171,12 @@ export function Footer() {
                     <p className="text-xs text-white/40">
                         © {new Date().getFullYear()} International Access School. All rights reserved.
                     </p>
-                    <div className="flex gap-6">
-                        <Link href="#" className="text-xs text-white/40 hover:text-white/60 transition-colors">
-                            Privacy Policy
-                        </Link>
-                        <Link href="#" className="text-xs text-white/40 hover:text-white/60 transition-colors">
-                            Terms of Service
-                        </Link>
+                    <div className="flex flex-wrap gap-4 justify-center">
+                        {legalLinks.map((link) => (
+                            <Link key={link.href} href={link.href} className="text-xs text-white/40 hover:text-white/60 transition-colors">
+                                {link.label}
+                            </Link>
+                        ))}
                     </div>
                 </div>
             </div>

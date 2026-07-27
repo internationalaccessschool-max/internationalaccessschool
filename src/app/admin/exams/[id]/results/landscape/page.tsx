@@ -895,10 +895,10 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;font-size:10px;}
 .s-lbl{font-size:7px;color:#888;text-transform:uppercase;letter-spacing:.5px;}
 .s-val{font-size:14px;font-weight:900;color:#1a2e4c;}
 .grade-big{color:#155724;font-size:20px;}
-.signatures{display:flex;gap:10px;justify-content:space-around;padding-top:5px;border-top:1px solid #dde3ea;margin-top:4px;}
+.signatures{display:flex;gap:10px;justify-content:space-around;padding-top:14px;border-top:1px solid #dde3ea;margin-top:10px;}
 .sig-box{text-align:center;flex:1;}
-.sig-line{border-bottom:1.5px dashed #aaa;margin:0 auto 3px;height:18px;display:flex;align-items:flex-end;justify-content:center;}
-.sig-img{max-height:17px;max-width:85%;object-fit:contain;}
+.sig-line{border-bottom:1.5px dashed #aaa;margin:0 auto 4px;height:34px;display:flex;align-items:flex-end;justify-content:center;}
+.sig-img{max-height:32px;max-width:90%;object-fit:contain;}
 .sig-name{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#555;font-weight:bold;}
 @page{size:A4 landscape;margin:6mm;}
 @media print{body{background:#fff;}.page{margin:0;box-shadow:none;border:none;width:100%;}}

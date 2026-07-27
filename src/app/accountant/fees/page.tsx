@@ -79,6 +79,9 @@ export default function ManageFeesPage() {
     const [markPaidRecord, setMarkPaidRecord] = useState<FeeRecord | null>(null);
     const [markPaidType, setMarkPaidType] = useState<MarkPaidType>("school");
     const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI">("CASH");
+    // Date the payment was actually received — defaults to today, but editable
+    // so back-dated payments (e.g. received Saturday, marked paid Monday) tally correctly.
+    const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
     const [markPaidLoading, setMarkPaidLoading] = useState(false);
     // Discount
     const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
@@ -333,6 +336,7 @@ export default function ManageFeesPage() {
         }
         setMarkPaidRecord(record);
         setPaymentMode("CASH");
+        setPaymentDate(new Date().toISOString().split("T")[0]);
         setDiscountType("none");
         setDiscountValue(0);
         // Pre-fill notification email if stored on record (parentEmail that's not an auth email)
@@ -373,6 +377,10 @@ export default function ManageFeesPage() {
         setMarkPaidLoading(true);
         try {
             const studentUid = record.studentId || record.id;
+            // Use the admin-selected payment date (defaults to today) at noon local
+            // time to avoid UTC date-shift when Firestore stores it as a Timestamp.
+            const paymentDateObj = paymentDate ? new Date(`${paymentDate}T12:00:00`) : new Date();
+            const paymentDateDisplay = paymentDateObj.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 
             if (markPaidType === "school" || markPaidType === "both") {
                 const receiptNo = await getNextReceiptNo();
@@ -389,7 +397,7 @@ export default function ManageFeesPage() {
                 } : {};
                 await updateDoc(doc(db, record.path), {
                     status: "paid",
-                    paidOn: new Date(),
+                    paidOn: paymentDateObj,
                     receiptNo,
                     paymentMode,
                     markedBy: user?.uid || "",
@@ -429,7 +437,7 @@ export default function ManageFeesPage() {
                     for (const past of olderCF) {
                         await updateDoc(past.ref, {
                             status: "paid",
-                            paidOn: new Date(),
+                            paidOn: paymentDateObj,
                             receiptNo,
                             paymentMode,
                             markedBy: user?.uid || "",
@@ -547,7 +555,7 @@ export default function ManageFeesPage() {
                             studentName: record.studentName,
                             classSection: `Class ${record.class}${record.section ? ` - ${record.section}` : ""}`,
                             rollNo: record.rollNo || undefined,
-                            paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                            paidOn: paymentDateDisplay,
                             feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
                             lineItems: schoolBreakdownItems,
                             totalAmount: schoolTotalPaid,
@@ -586,7 +594,7 @@ export default function ManageFeesPage() {
                     year: record.year,
                     dueDate: record.dueDate,
                     status: "paid",
-                    paidOn: new Date(),
+                    paidOn: paymentDateObj,
                     receiptNo: transportReceiptNo,
                     paymentMode,
                     parentEmail: record.parentEmail || "",
@@ -616,7 +624,7 @@ export default function ManageFeesPage() {
                             if (prevNtd.status === "carried_forward") {
                                 await updateDoc(prevTransRef, {
                                     status: "paid",
-                                    paidOn: new Date(),
+                                    paidOn: paymentDateObj,
                                     receiptNo: transportReceiptNo,
                                     paymentMode,
                                     markedBy: user?.uid || "",
@@ -731,7 +739,7 @@ export default function ManageFeesPage() {
                             studentName: record.studentName,
                             classSection: `Class ${record.class}${record.section ? ` - ${record.section}` : ""}`,
                             rollNo: record.rollNo || undefined,
-                            paidOn: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+                            paidOn: paymentDateDisplay,
                             feeMonth: `${MONTHS[(record.month || 1) - 1]} ${record.year}`,
                             lineItems: transportLineItems,
                             totalAmount: transpTotalPaid,
@@ -1543,6 +1551,18 @@ export default function ManageFeesPage() {
                             ));
                             })()}
                             
+                            <div className="pt-3 mt-3 border-t border-gray-100">
+                                <p className="text-sm font-semibold text-gray-700 mb-2">Payment Date</p>
+                                <input
+                                    type="date"
+                                    value={paymentDate}
+                                    max={new Date().toISOString().split("T")[0]}
+                                    onChange={e => setPaymentDate(e.target.value)}
+                                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-100 text-sm font-medium text-gray-700 focus:border-emerald-400 focus:outline-none"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">Defaults to today — change this if the payment was actually received on an earlier date.</p>
+                            </div>
+
                             <div className="pt-3 mt-3 border-t border-gray-100">
                                 <p className="text-sm font-semibold text-gray-700 mb-3">Payment Mode</p>
                                 <div className="grid grid-cols-2 gap-3">
