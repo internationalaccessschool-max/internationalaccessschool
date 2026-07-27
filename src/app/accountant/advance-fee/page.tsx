@@ -62,12 +62,11 @@ interface FeeStructure {
 interface MonthFeeRow {
     month: number;   // 1–12
     year: number;
-    // School fee breakdown — each editable (Annual Fee excluded — handled via Annual Fees module)
+    // School fee — monthly recurring charge only. Admission Fee (one-time,
+    // collected at admission) and Annual Fee (once/session, Annual Fees module)
+    // and Registration/Sports/Misc Fee (not part of the monthly bill) are
+    // intentionally excluded here, matching the regular monthly fee generator.
     tuitionFee: number;
-    admissionFee: number;
-    registrationFee: number;
-    sportsFee: number;
-    miscFee: number;
     // Transport
     transportFee: number;   // 0 if school-only
     // Derived
@@ -333,10 +332,6 @@ export default function AdvanceFeePage() {
                         month,
                         year,
                         tuitionFee:      feeStructure.tuitionFee      || 0,
-                        admissionFee:    feeStructure.admissionFee     || 0,
-                        registrationFee: feeStructure.registrationFee  || 0,
-                        sportsFee:       feeStructure.sportsFee        || 0,
-                        miscFee:         feeStructure.miscFee          || 0,
                         transportFee:    tFee,
                         schoolTotal:     0,
                         grandTotal:      0,
@@ -344,8 +339,7 @@ export default function AdvanceFeePage() {
                         transportAlreadyPaid,
                     };
 
-                    row.schoolTotal = row.tuitionFee + row.admissionFee +
-                        row.registrationFee + row.sportsFee + row.miscFee;
+                    row.schoolTotal = row.tuitionFee;
                     row.grandTotal  = row.schoolTotal + row.transportFee;
 
                     return row;
@@ -362,14 +356,13 @@ export default function AdvanceFeePage() {
     // ─── Auto-recalculate totals when a row field changes ─────────────────
     const updateRowField = (
         idx: number,
-        field: keyof Pick<MonthFeeRow, "tuitionFee" | "admissionFee" | "registrationFee" | "sportsFee" | "miscFee" | "transportFee">,
+        field: keyof Pick<MonthFeeRow, "tuitionFee" | "transportFee">,
         value: number
     ) => {
         setMonthRows(prev => {
             const rows = [...prev];
             const row = { ...rows[idx], [field]: value };
-            row.schoolTotal = row.tuitionFee + row.admissionFee +
-                row.registrationFee + row.sportsFee + row.miscFee;
+            row.schoolTotal = row.tuitionFee;
             row.grandTotal  = row.schoolTotal + row.transportFee;
             rows[idx] = row;
             return rows;
@@ -423,11 +416,7 @@ export default function AdvanceFeePage() {
                         parentPhone: selectedStudent.parentPhone,
                         amount:      row.schoolTotal,
                         breakdown: {
-                            tuitionFee:      row.tuitionFee,
-                            admissionFee:    row.admissionFee,
-                            registrationFee: row.registrationFee,
-                            sportsFee:       row.sportsFee,
-                            miscFee:         row.miscFee,
+                            tuitionFee: row.tuitionFee,
                         },
                         month,
                         year,
@@ -956,11 +945,7 @@ export default function AdvanceFeePage() {
                                                         )}
                                                     </div>
                                                     {([
-                                                        { field: "tuitionFee" as const,      label: "Tuition Fee" },
-                                                        { field: "admissionFee" as const,     label: "Admission Fee" },
-                                                        { field: "registrationFee" as const,  label: "Registration Fee" },
-                                                        { field: "sportsFee" as const,        label: "Sports Fee" },
-                                                        { field: "miscFee" as const,          label: "Miscellaneous Fee" },
+                                                        { field: "tuitionFee" as const, label: "Tuition Fee" },
                                                     ]).map(item => (
                                                         <div key={item.field} className="flex items-center gap-3">
                                                             <label className="text-xs text-gray-500 flex-1">{item.label}</label>
