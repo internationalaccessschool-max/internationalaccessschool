@@ -149,10 +149,13 @@ export default function StudentResultsPage() {
         const sessionExams = allExams.filter(e => e.session === session);
         const unitTests = sessionExams.filter(e => e.examType === "Unit Test").sort((a, b) =>
             (a.startDate || "").localeCompare(b.startDate || ""));
+        // Identify Unit I vs Unit II by exam name first (dates can be mis-set), falling back to sort order
+        const unit1 = unitTests.find(e => /unit[\s-]*(i|1)(?![i\d])/i.test(e.name || "")) ?? unitTests[0] ?? null;
+        const unit2 = unitTests.find(e => /unit[\s-]*(ii|2)/i.test(e.name || "")) ?? unitTests[1] ?? null;
         return {
-            unit1: unitTests[0] || null,
+            unit1,
             hy: sessionExams.find(e => e.examType === "Term Exam") || null,
-            unit2: unitTests[1] || null,
+            unit2,
             annual: sessionExams.find(e => e.examType === "Annual Exam") || null,
         };
     };
