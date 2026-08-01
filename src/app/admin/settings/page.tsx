@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Save, Loader2, Globe, Share2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube } from "lucide-react";
+import { Save, Loader2, Globe, Share2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube, Banknote, MessageCircle, QrCode } from "lucide-react";
 
 interface GlobalSettings {
     contact: {
@@ -18,6 +18,13 @@ interface GlobalSettings {
         twitter: string;
         instagram: string;
         youtube: string;
+    };
+    /** Online fee payment — shown to parents on the student "My Fees" page. */
+    payment: {
+        upiId: string;
+        payeeName: string;
+        whatsapp: string;   // digits with country code, e.g. 919347776670
+        note: string;
     };
 }
 
@@ -33,10 +40,16 @@ const DEFAULT_SETTINGS: GlobalSettings = {
         twitter: "https://twitter.com",
         instagram: "https://instagram.com",
         youtube: "https://youtube.com"
+    },
+    payment: {
+        upiId: "INTERNATIONALACCESS974@icici",
+        payeeName: "International Access School",
+        whatsapp: "",
+        note: "Payment ke baad screenshot ya UTR number WhatsApp par bhejein taki status jaldi update ho sake."
     }
 };
 
-type TabNode = "contact" | "social";
+type TabNode = "contact" | "social" | "payment";
 
 export default function AdminSettingsPage() {
     const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_SETTINGS);
@@ -50,7 +63,14 @@ export default function AdminSettingsPage() {
                 const docRef = doc(db, "settings", "global");
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
-                    setSettings(docSnap.data() as GlobalSettings);
+                    // Merge over the defaults — a doc saved before a section existed
+                    // would otherwise leave that section undefined and crash the form.
+                    const saved = docSnap.data() as Partial<GlobalSettings>;
+                    setSettings({
+                        contact: { ...DEFAULT_SETTINGS.contact, ...(saved.contact || {}) },
+                        social: { ...DEFAULT_SETTINGS.social, ...(saved.social || {}) },
+                        payment: { ...DEFAULT_SETTINGS.payment, ...(saved.payment || {}) },
+                    });
                 } else {
                     // Create default if it doesn't exist
                     await setDoc(docRef, DEFAULT_SETTINGS);
@@ -65,7 +85,7 @@ export default function AdminSettingsPage() {
         fetchSettings();
     }, []);
 
-    const handleChange = (section: "contact" | "social", field: string, value: string) => {
+    const handleChange = (section: TabNode, field: string, value: string) => {
         setSettings(prev => ({
             ...prev,
             [section]: {
@@ -129,6 +149,13 @@ export default function AdminSettingsPage() {
                     >
                         <Share2 className="w-4 h-4 opacity-70" />
                         Social Media
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("payment")}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === "payment" ? "bg-navy text-white shadow-md" : "text-gray-600 hover:bg-gray-100"}`}
+                    >
+                        <Banknote className="w-4 h-4 opacity-70" />
+                        Fee Payment
                     </button>
                 </div>
 
@@ -225,6 +252,92 @@ export default function AdminSettingsPage() {
                                         value={settings.social.youtube}
                                         onChange={(e) => handleChange("social", "youtube", e.target.value)}
                                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === "payment" && (
+                        <div className="space-y-6">
+                            <div className="border-b border-gray-100 pb-4">
+                                <h2 className="text-lg font-bold text-navy">Online Fee Payment</h2>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Ye details parents ko student portal ke <strong>My Fees</strong> page par dikhengi —
+                                    UPI ID, uska QR code, aur payment proof bhejne ka WhatsApp number.
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1.5">
+                                        <QrCode className="w-4 h-4 text-gray-400" /> UPI ID
+                                    </label>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        QR code isi se automatically banta hai — ID badlo, QR khud badal jayega. Khali chhodne par
+                                        parents ko online payment ka option nahi dikhega.
+                                    </p>
+                                    <input
+                                        type="text"
+                                        value={settings.payment.upiId}
+                                        onChange={(e) => handleChange("payment", "upiId", e.target.value.trim())}
+                                        placeholder="school@bank"
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all font-mono"
+                                    />
+                                    {settings.payment.upiId && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(settings.payment.upiId) && (
+                                        <p className="text-xs text-amber-600 mt-1.5">
+                                            ⚠️ Ye UPI ID jaisi nahi lag rahi. Format hona chahiye: <code>name@bank</code>
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1.5">
+                                        <Banknote className="w-4 h-4 text-gray-400" /> Payee Name
+                                    </label>
+                                    <p className="text-xs text-gray-500 mb-2">Parent ke UPI app me yahi naam dikhega.</p>
+                                    <input
+                                        type="text"
+                                        value={settings.payment.payeeName}
+                                        onChange={(e) => handleChange("payment", "payeeName", e.target.value)}
+                                        placeholder="International Access School"
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all"
+                                    />
+                                </div>
+
+                                <div className="pt-4 border-t border-gray-100">
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1.5">
+                                        <MessageCircle className="w-4 h-4 text-[#25D366]" /> WhatsApp Number (payment proof)
+                                    </label>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        Country code ke saath, bina + ya space ke — jaise <code>919347776670</code>.
+                                        Parents isi number par screenshot / UTR bhejenge.
+                                    </p>
+                                    <input
+                                        type="tel"
+                                        inputMode="numeric"
+                                        value={settings.payment.whatsapp}
+                                        onChange={(e) => handleChange("payment", "whatsapp", e.target.value.replace(/\D/g, ""))}
+                                        placeholder="919347776670"
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all font-mono"
+                                    />
+                                    {settings.payment.whatsapp && settings.payment.whatsapp.length < 11 && (
+                                        <p className="text-xs text-amber-600 mt-1.5">
+                                            ⚠️ Country code lagana mat bhoolna — India ke liye <code>91</code> se shuru karo.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1.5">
+                                        <Mail className="w-4 h-4 text-gray-400" /> Instruction Note (optional)
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        value={settings.payment.note}
+                                        onChange={(e) => handleChange("payment", "note", e.target.value)}
+                                        placeholder="Parents ko kya karna hai — chhota sa message"
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all resize-none"
                                     />
                                 </div>
                             </div>

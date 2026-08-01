@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X } from "lucide-react";
+import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X, Copy, Check, MessageCircle, Smartphone, QrCode } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
 
 interface FeeRecord {
@@ -15,13 +16,15 @@ interface FeeRecord {
     year: number;
     dueDate: { toDate: () => Date } | null;
     paidOn: { toDate: () => Date } | null;
-    status: "pending" | "paid" | "overdue";
+    status: "pending" | "paid" | "overdue" | "carried_forward";
     receiptNo: string | null;
     studentId?: string;
     admissionNumber?: string;
     rollNo?: string;
     lateFine?: number;          // ₹100 fine applied after 15th if unpaid
     totalAmount?: number;       // amount + previousDues + lateFine
+    totalAmountPaid?: number;   // what was actually collected (after discount)
+    previousDues?: number;      // earlier unpaid months folded into this bill
     // Extra fields for receipt
     studentName?: string;
     class?: string;
@@ -45,7 +48,13 @@ const STATUS_CONFIG = {
     paid: { label: "Paid", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: CheckCircle2 },
     pending: { label: "Pending", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", icon: Clock },
     overdue: { label: "Overdue", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", icon: AlertCircle },
+    // Its dues have been merged into a later month's bill — shown so the history
+    // stays complete, but it is never counted again in the amount payable.
+    carried_forward: { label: "Added to later bill", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", icon: Clock },
 };
+
+/** Digits only — wa.me rejects +, spaces and dashes. */
+const waNumber = (n: string) => (n || "").replace(/\D/g, "");
 
 export default function StudentFeesPage() {
     const { user } = useAuth();
@@ -55,6 +64,28 @@ export default function StudentFeesPage() {
     const [receiptRecord, setReceiptRecord] = useState<FeeRecord | null>(null);
     const [studentName, setStudentName] = useState("");
     const [studentRoll, setStudentRoll] = useState("");
+    const [pay, setPay] = useState<{ upiId: string; payeeName: string; whatsapp: string; note: string } | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    // School's UPI / WhatsApp details — managed from Admin → Settings → Fee Payment
+    useEffect(() => {
+        (async () => {
+            try {
+                const snap = await getDoc(doc(db, "settings", "global"));
+                const p = (snap.data() as any)?.payment;
+                if (p?.upiId) {
+                    setPay({
+                        upiId: p.upiId,
+                        payeeName: p.payeeName || "International Access School",
+                        whatsapp: p.whatsapp || "",
+                        note: p.note || "",
+                    });
+                }
+            } catch (e) {
+                console.warn("Payment settings unavailable:", e);
+            }
+        })();
+    }, []);
 
     useEffect(() => {
         if (!user) return;
@@ -131,11 +162,57 @@ export default function StudentFeesPage() {
     }, [user]);
 
 
-    const totalPaid = records.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
-    // Use totalAmount (includes arrears + lateFine) for the due sum
-    const totalDue = records
-        .filter(r => r.status !== "paid")
-        .reduce((s, r) => s + (r.totalAmount || r.amount), 0);
+    const totalPaid = records
+        .filter(r => r.status === "paid")
+        .reduce((s, r) => s + (r.totalAmountPaid ?? r.amount), 0);
+
+    // Amount actually payable right now.
+    // Each live bill's totalAmount ALREADY contains every unpaid earlier month
+    // (those are marked carried_forward). Adding them up again would show a wildly
+    // inflated figure — e.g. Apr+May+Jun+Jul+Aug when only August is really owed.
+    const liveBills = records.filter(r => r.status === "pending" || r.status === "overdue");
+    const totalDue = liveBills.reduce((s, r) => s + (r.totalAmount || r.amount), 0);
+
+    // The newest live bill — used to label the UPI payment
+    const currentBill = [...liveBills].sort((a, b) => b.year - a.year || b.month - a.month)[0] || null;
+
+    // ── Online payment links ────────────────────────────────────────────────
+    const displayName = studentName || currentBill?.studentName || "";
+    const displayAdm = studentRoll || currentBill?.rollNo || "";
+    const displayClass = currentBill?.class || records[0]?.class || "";
+    const billLabel = currentBill ? `${MONTHS[(currentBill.month || 1) - 1]} ${currentBill.year}` : "";
+
+    // upi://pay opens whichever UPI app the parent has installed. Amount is
+    // prefilled but stays editable in the app, so part payments still work.
+    const upiLink = pay
+        ? `upi://pay?pa=${encodeURIComponent(pay.upiId)}&pn=${encodeURIComponent(pay.payeeName)}` +
+          (totalDue > 0 ? `&am=${totalDue}` : "") +
+          `&cu=INR&tn=${encodeURIComponent(`Fee ${displayAdm || displayName}`.slice(0, 40))}`
+        : "";
+
+    const waLink = pay && waNumber(pay.whatsapp)
+        ? `https://wa.me/${waNumber(pay.whatsapp)}?text=${encodeURIComponent(
+            `*Fee Payment Proof*\n\n` +
+            `Student: ${displayName || "—"}\n` +
+            (displayAdm ? `Admission No: ${displayAdm}\n` : "") +
+            (displayClass ? `Class: ${displayClass}\n` : "") +
+            (billLabel ? `Fee Month: ${billLabel}\n` : "") +
+            (totalDue > 0 ? `Amount Paid: ₹${totalDue.toLocaleString("en-IN")}\n` : "") +
+            `UTR / Ref No: \n\n` +
+            `(Payment ka screenshot bhi is chat me bhej dein)`
+        )}`
+        : "";
+
+    const copyUpi = async () => {
+        if (!pay) return;
+        try {
+            await navigator.clipboard.writeText(pay.upiId);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Clipboard blocked (http / older browser) — the ID is visible on screen anyway
+        }
+    };
 
     // Build breakdown items for receipt
     const getBreakdownItems = (record: FeeRecord) => {
@@ -187,9 +264,96 @@ export default function StudentFeesPage() {
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
                     <AlertCircle className="w-5 h-5 text-amber-600 mb-2" />
                     <div className="text-2xl font-bold text-amber-700">₹{totalDue.toLocaleString()}</div>
-                    <div className="text-xs text-amber-600 mt-0.5">Due / Pending</div>
+                    <div className="text-xs text-amber-600 mt-0.5">
+                        Due / Pending{billLabel ? ` · ${billLabel} bill` : ""}
+                    </div>
+                    {currentBill && (currentBill.previousDues || 0) > 0 && (
+                        <div className="text-[11px] text-amber-500 mt-1">
+                            Purane mahino ke ₹{currentBill.previousDues!.toLocaleString()} isi me shamil hain
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {/* ── Pay Online (UPI) ───────────────────────────────────────────── */}
+            {pay && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+                        <QrCode className="w-4 h-4 text-navy" />
+                        <h2 className="font-semibold text-navy">Pay Online</h2>
+                        {totalDue > 0 && (
+                            <span className="ml-auto text-sm font-bold text-navy">₹{totalDue.toLocaleString()}</span>
+                        )}
+                    </div>
+
+                    <div className="p-5 flex flex-col sm:flex-row gap-6">
+                        {/* QR — generated from the UPI ID, so it can never drift out of sync */}
+                        <div className="flex flex-col items-center gap-2 shrink-0 mx-auto sm:mx-0">
+                            <div className="p-3 bg-white rounded-xl border-2 border-gray-100">
+                                <QRCodeCanvas value={upiLink} size={160} level="M" marginSize={1} />
+                            </div>
+                            <p className="text-[11px] text-gray-400 text-center max-w-[180px]">
+                                Kisi bhi UPI app (GPay, PhonePe, Paytm) se scan karein
+                            </p>
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-4">
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">UPI ID</p>
+                                <div className="flex items-center gap-2 rounded-xl border-2 border-gray-100 bg-gray-50/60 px-3 py-2.5 min-w-0">
+                                    <span className="font-mono text-sm font-semibold text-navy truncate flex-1">{pay.upiId}</span>
+                                    <button
+                                        type="button"
+                                        onClick={copyUpi}
+                                        className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors shrink-0 ${
+                                            copied ? "bg-emerald-100 text-emerald-700" : "bg-navy/5 text-navy hover:bg-navy/10"
+                                        }`}
+                                    >
+                                        {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1.5">{pay.payeeName}</p>
+                            </div>
+
+                            {/* Deep link — works on the phone where a UPI app is installed */}
+                            <a
+                                href={upiLink}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors"
+                            >
+                                <Smartphone className="w-4 h-4" />
+                                Pay with UPI App
+                            </a>
+
+                            {waLink ? (
+                                <a
+                                    href={waLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366] text-white text-sm font-semibold hover:brightness-95 transition-all"
+                                >
+                                    <MessageCircle className="w-4 h-4" />
+                                    Send Screenshot / UTR on WhatsApp
+                                </a>
+                            ) : (
+                                <p className="text-xs text-gray-400 text-center">
+                                    Payment ke baad school office me screenshot ya UTR number dikha dein.
+                                </p>
+                            )}
+
+                            {pay.note && (
+                                <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-100 pt-3">{pay.note}</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="px-5 py-3 bg-amber-50/60 border-t border-amber-100">
+                        <p className="text-[11px] text-amber-700">
+                            Payment turant reflect nahi hoga — accountant confirm karne ke baad status update karenge.
+                            Isliye screenshot ya UTR zaroor bhejein.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Records */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -237,7 +401,13 @@ export default function StudentFeesPage() {
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className="text-lg font-bold text-navy">₹{(record.totalAmount || record.amount)?.toLocaleString()}</p>
+                                        {/* An arrear row shows only its own fee — its earlier dues are
+                                            billed by a later month, so showing totalAmount would double up. */}
+                                        <p className="text-lg font-bold text-navy">
+                                            ₹{(record.status === "carried_forward"
+                                                ? record.amount
+                                                : (record.totalAmount || record.amount))?.toLocaleString()}
+                                        </p>
                                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                                             <StatusIcon className="w-3 h-3" />
                                             {cfg.label}
