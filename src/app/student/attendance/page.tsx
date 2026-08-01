@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, doc, getDoc, getDocs, collectionGroup, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { fetchStudentProfile } from "@/lib/utils/studentProfile";
 import { Loader2, Check, Clock, X, TrendingUp, ChevronDown, CalendarCheck } from "lucide-react";
 
 interface AttendanceRecord {
@@ -59,65 +60,36 @@ export default function StudentAttendancePage() {
 
         const fetchAttendance = async () => {
             try {
-                let cls = "";
-                let sec = "";
-                let studentDocId = user.uid; // default key used in attendance records
-
                 // ── Step 1: Get student's class and section ────────────────────
-                // Try 1: studentLookup collection
-                const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
-                if (lookupSnap.exists()) {
-                    const d = lookupSnap.data();
-                    cls = d.class || d.cls || d.className || "";
-                    sec = d.section || "";
-                }
+                // Profile document is the source of truth — it lives at
+                // users/classes/{cls}/sections/{sec}/students/profiles/{uid}, the same
+                // place the admin panel reads from. studentLookup / users can go stale
+                // after a section transfer, so we never trust them on their own:
+                // fetchStudentProfile only uses them as a hint and verifies the doc
+                // actually exists at that path, else it falls back to a uid query.
+                const { profile, className, section } = await fetchStudentProfile(user.uid);
+                let cls = className;
+                let sec = section;
 
-                // Try 2: users/{uid} document
+                // Last resort — class/section hints when no profile doc could be read
+                if (!cls || !sec) {
+                    const lookupSnap = await getDoc(doc(db, "studentLookup", user.uid));
+                    if (lookupSnap.exists()) {
+                        const d = lookupSnap.data();
+                        cls = cls || d.className || d.class || d.cls || "";
+                        sec = sec || d.section || "";
+                    }
+                }
                 if (!cls || !sec) {
                     const userSnap = await getDoc(doc(db, "users", user.uid));
                     if (userSnap.exists()) {
                         const d = userSnap.data();
-                        cls = d.className || d.currentClass || d.class || cls || "";
-                        sec = d.section || sec || "";
-                        studentDocId = d.admissionNumber || user.uid;
+                        cls = cls || d.className || d.currentClass || d.class || "";
+                        sec = sec || d.section || "";
                     }
                 }
 
-                // Try 3: collectionGroup("profiles") — search by uid or email
-                if (!cls || !sec) {
-                    try {
-                        const profileQ = query(collectionGroup(db, "profiles"), where("uid", "==", user.uid));
-                        const profileSnap = await getDocs(profileQ);
-                        if (!profileSnap.empty) {
-                            const d = profileSnap.docs[0].data();
-                            const pathParts = profileSnap.docs[0].ref.path.split("/");
-                            const clsIdx = pathParts.indexOf("classes");
-                            const secIdx = pathParts.indexOf("sections");
-                            cls = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.className || d.currentClass || cls || "");
-                            sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.section || sec || "");
-                            studentDocId = d.admissionNumber || profileSnap.docs[0].id || user.uid;
-                        }
-                    } catch { /* ignore */ }
-                }
-
-                // Try 4: collectionGroup by email
-                if ((!cls || !sec) && user.email) {
-                    try {
-                        const emailQ = query(collectionGroup(db, "profiles"), where("email", "==", user.email));
-                        const emailSnap = await getDocs(emailQ);
-                        if (!emailSnap.empty) {
-                            const d = emailSnap.docs[0].data();
-                            const pathParts = emailSnap.docs[0].ref.path.split("/");
-                            const clsIdx = pathParts.indexOf("classes");
-                            const secIdx = pathParts.indexOf("sections");
-                            cls = clsIdx >= 0 ? pathParts[clsIdx + 1] : (d.className || d.currentClass || cls || "");
-                            sec = secIdx >= 0 ? pathParts[secIdx + 1] : (d.section || sec || "");
-                            studentDocId = d.admissionNumber || emailSnap.docs[0].id || user.uid;
-                        }
-                    } catch { /* ignore */ }
-                }
-
-                if (!cls || !sec) { setLoading(false); return; }
+                if (!cls) { setLoading(false); return; }
 
                 // Normalize class name: strip "Class " prefix
                 const normCls = cls.replace(/^class\s*/i, "").trim();
@@ -140,11 +112,20 @@ export default function StudentAttendancePage() {
                     `class ${normCls}`,
                 ])).filter(Boolean);
 
-                // Keys to check in attendance records (uid, admissionNumber, doc id)
-                const keysToCheck = Array.from(new Set([user.uid, studentDocId].filter(Boolean)));
+                // Keys used by the admin/teacher panel when saving records.
+                // It writes records[profileDocId], and the profile doc id IS the uid —
+                // admissionNumber is kept as a fallback for older imported records.
+                const keysToCheck = Array.from(new Set([
+                    user.uid,
+                    profile?.admissionNumber,
+                    profile?.regNo,
+                ].filter(Boolean) as string[]));
 
                 // ── Step 3: Fetch attendance records ──────────────────────────
-                const studentRecords: AttendanceRecord[] = [];
+                // A month's subcollection holds every section's doc, so we collect all
+                // of them and decide per-doc below.
+                type RawDoc = { data: any; docId: string; monthStr: string; year: string };
+                const rawDocs: RawDoc[] = [];
 
                 for (const sessionYear of sessionYears) {
                     const monthList = generateAcademicMonthsWithYear(sessionYear);
@@ -155,50 +136,15 @@ export default function StudentAttendancePage() {
 
                         for (const { monthStr, year } of monthList) {
                             try {
-                                // CRITICAL FIX: use 'year' derived from monthStr, NOT sessionYear
+                                // Use 'year' derived from monthStr, NOT sessionYear —
+                                // Jan–Mar live under the next calendar year.
                                 const monthCol = collection(db, "attendance", year, clsVar, "months", monthStr);
                                 const docsSnap = await getDocs(monthCol);
                                 if (docsSnap.empty) continue;
 
                                 foundAnyMonth = true;
                                 docsSnap.docs.forEach(d => {
-                                    const data = d.data();
-                                    // Check section match
-                                    if (data.section && data.section !== sec) return;
-
-                                    const dateStr: string = data.date || d.id.split("_")[0] || "";
-                                    if (!dateStr) return;
-                                    const dateObj = new Date(dateStr + "T00:00:00");
-
-                                    // ── Holiday: show as holiday badge, don't count in working days ──
-                                    if (data.isHoliday) {
-                                        studentRecords.push({
-                                            date: dateStr,
-                                            status: "holiday" as "present" | "absent" | "late" | "holiday",
-                                            day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
-                                            month: monthStr,
-                                            year,
-                                            isHoliday: true,
-                                        });
-                                        return;
-                                    }
-
-                                    const statusMap = data.records || {};
-
-                                    // Try multiple keys to find this student's status
-                                    let myStatus: string | undefined;
-                                    for (const key of keysToCheck) {
-                                        if (statusMap[key]) { myStatus = statusMap[key]; break; }
-                                    }
-                                    if (!myStatus) return;
-
-                                    studentRecords.push({
-                                        date: dateStr,
-                                        status: myStatus as "present" | "absent" | "late",
-                                        day: dateObj.toLocaleDateString("en-IN", { weekday: "long" }),
-                                        month: monthStr,
-                                        year,
-                                    });
+                                    rawDocs.push({ data: d.data(), docId: d.id, monthStr, year });
                                 });
                             } catch {
                                 // Month not found — skip
@@ -211,9 +157,65 @@ export default function StudentAttendancePage() {
                     if (foundCls) break; // stop trying session years once data found
                 }
 
-                // Deduplicate by date
+                const docSection = (r: RawDoc): string => r.data.section || r.docId.split("_")[1] || "";
+                const mkRecord = (r: RawDoc, dateStr: string, status: AttendanceRecord["status"]): AttendanceRecord => ({
+                    date: dateStr,
+                    status,
+                    day: new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" }),
+                    month: r.monthStr,
+                    year: r.year,
+                    ...(status === "holiday" ? { isHoliday: true } : {}),
+                });
+
+                // Pass 1 — marked days. A doc is this student's day when their key is
+                // present in `records`; we deliberately do NOT filter by section here.
+                // The section on studentLookup/users can be stale, and a student who
+                // moves section mid-year still owns their earlier records.
+                const studentRecords: AttendanceRecord[] = [];
+                const mySections = new Set<string>();
+
+                for (const r of rawDocs) {
+                    if (r.data.isHoliday) continue;
+                    const dateStr: string = r.data.date || r.docId.split("_")[0] || "";
+                    if (!dateStr) continue;
+
+                    const statusMap = r.data.records || {};
+                    let myStatus: string | undefined;
+                    for (const key of keysToCheck) {
+                        if (statusMap[key]) { myStatus = statusMap[key]; break; }
+                    }
+                    if (!myStatus) continue;
+
+                    const s = docSection(r);
+                    if (s) mySections.add(s);
+                    studentRecords.push(mkRecord(r, dateStr, myStatus as AttendanceRecord["status"]));
+                }
+
+                // Header fallback — if no section could be resolved from the profile,
+                // use the one the student is actually being marked under.
+                if (!sec && mySections.size === 1) setStudentSection(Array.from(mySections)[0]);
+
+                // Pass 2 — holidays. These carry no `records` map, so they can only be
+                // matched by section: use the sections the student was actually marked
+                // in, falling back to the resolved profile section.
+                const holidaySections = mySections.size > 0 ? mySections : new Set([sec].filter(Boolean));
+                for (const r of rawDocs) {
+                    if (!r.data.isHoliday) continue;
+                    const dateStr: string = r.data.date || r.docId.split("_")[0] || "";
+                    if (!dateStr) continue;
+                    const s = docSection(r);
+                    if (s && holidaySections.size > 0 && !holidaySections.has(s)) continue;
+                    studentRecords.push(mkRecord(r, dateStr, "holiday"));
+                }
+
+                // Deduplicate by date — a real marked status always wins over a holiday
+                // entry for the same day (e.g. one section works, another is off).
                 const uniqueMap = new Map<string, AttendanceRecord>();
-                studentRecords.forEach(r => uniqueMap.set(r.date, r));
+                studentRecords.forEach(r => {
+                    const existing = uniqueMap.get(r.date);
+                    if (existing && !existing.isHoliday && r.isHoliday) return;
+                    uniqueMap.set(r.date, r);
+                });
                 const finalRecords = Array.from(uniqueMap.values());
                 finalRecords.sort((a, b) => b.date.localeCompare(a.date));
                 setRecords(finalRecords);
