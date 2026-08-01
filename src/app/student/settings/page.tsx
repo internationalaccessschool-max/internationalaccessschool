@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Palette, Save, Shield, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info, ImageIcon } from "lucide-react";
+import { Bell, Save, User, CheckCircle2, AlertTriangle, Loader2, BellOff, Smartphone, Info, ImageIcon } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { subscribeToNotifications, unsubscribeFromNotifications, getNotificationStatus, observePushSubscription } from "@/lib/onesignal";
 import { useAuth } from "@/context/AuthContext";
@@ -11,8 +11,6 @@ import toast from "react-hot-toast";
 const sections = [
     { id: "profile", label: "Profile", icon: User },
     { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "privacy", label: "Privacy", icon: Shield },
-    { id: "appearance", label: "Appearance", icon: Palette },
 ];
 
 export default function StudentSettingsPage() {
@@ -301,15 +299,15 @@ export default function StudentSettingsPage() {
                             <div>
                                 <h2 className="font-bold text-navy text-lg">Profile</h2>
                                 <p className="text-xs text-gray-400 mt-0.5">
-                                    Apna photo ya documents upload karo. Name aur details change karne ke liye admin se contact karo.
+                                    Upload your photo or documents. To change your name or other details, please contact the admin.
                                 </p>
                             </div>
 
                             {/* Info notice */}
-                            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
-                                <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                                <p className="text-xs text-amber-700 font-medium">
-                                    Personal details (name, class, section) sirf admin change kar sakta hai. Koi bhi update chahiye to school office se contact karo.
+                            <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-50 border border-rose-200">
+                                <Info className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                                <p className="text-xs text-rose-700 font-medium">
+                                    Personal details (name, class, section) can only be changed by the admin. For any update, please contact the school office.
                                 </p>
                             </div>
 
@@ -319,7 +317,7 @@ export default function StudentSettingsPage() {
                                     <ImageIcon className="w-4 h-4 text-navy" />
                                     <p className="text-sm font-semibold text-navy">Profile Photo</p>
                                 </div>
-                                <p className="text-xs text-gray-400">Apni photo upload karo (Max 1MB, JPG/PNG)</p>
+                                <p className="text-xs text-gray-400">Upload your photo (Max 1MB, JPG/PNG)</p>
                                 <input
                                     type="file"
                                     accept="image/png,image/jpeg,image/jpg,image/webp"
@@ -327,11 +325,11 @@ export default function StudentSettingsPage() {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
                                         if (file.size > 1 * 1024 * 1024) {
-                                            toast.error("File 1MB se badi nahi honi chahiye");
+                                            toast.error("File must not be larger than 1MB.");
                                             e.target.value = "";
                                             return;
                                         }
-                                        toast.success("Photo upload ke liye admin portal use karo ya school se contact karo.");
+                                        toast.success("To upload a photo, please use the admin portal or contact the school.");
                                         e.target.value = "";
                                     }}
                                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-navy file:text-white hover:file:bg-navy/90 cursor-pointer"
@@ -532,16 +530,6 @@ export default function StudentSettingsPage() {
                                     )}
                                 </div>
                             )}
-                        </div>
-                    )}
-
-                    {(active === "privacy" || active === "appearance") && (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
-                                {active === "privacy" ? <Shield className="w-7 h-7 text-gray-300" /> : <Palette className="w-7 h-7 text-gray-300" />}
-                            </div>
-                            <p className="text-sm font-semibold text-gray-400">Coming Soon</p>
-                            <p className="text-xs text-gray-300 mt-1">{active === "privacy" ? "Privacy" : "Appearance"} settings will be available soon.</p>
                         </div>
                     )}
 
