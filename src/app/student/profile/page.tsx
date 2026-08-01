@@ -201,6 +201,21 @@ export default function StudentProfilePage() {
                 </div>
             </div>
 
+            {/* Profile record could not be located — tell the student instead of
+                showing a page full of blank fields. */}
+            {!userData.profilePath && (
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-rose-50 border border-rose-200">
+                    <Lock className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                    <div className="text-xs text-rose-700">
+                        <p className="font-semibold">Your profile record could not be loaded.</p>
+                        <p className="mt-1">
+                            Please contact the school office and share this ID so they can restore your record:
+                            <span className="font-mono font-semibold"> {userData.id}</span>
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Main Content */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {/* Tabs */}
