@@ -100,6 +100,23 @@ const REPORT_TYPES: { key: ReportType; label: string; desc: string; color: strin
   { key: "annual",     label: "Full Annual",       desc: "All 4 exams — grade /200 per subject",           color: "emerald" },
 ];
 
+// ─── Class ordering (NUR → LKG → UKG → 1 … 12) ────────────────────────────────
+const PRE_PRIMARY_ORDER: Record<string, number> = {
+  PLAY: -5, PG: -5, PREP: -4, NUR: -3, NURSERY: -3, LKG: -2, UKG: -1,
+};
+function classRank(cls: string): number {
+  const u = cls.replace(/^class\s*/i, "").trim().toUpperCase();
+  if (u in PRE_PRIMARY_ORDER) return PRE_PRIMARY_ORDER[u];
+  const n = parseInt(u, 10);
+  return Number.isNaN(n) ? 999 : n;
+}
+function sortClasses(list: string[]): string[] {
+  return [...list].sort((a, b) => {
+    const d = classRank(a) - classRank(b);
+    return d !== 0 ? d : a.localeCompare(b);
+  });
+}
+
 const RT_COLOR: Record<string, string> = {
   blue:    "border-blue-500 bg-blue-50 text-blue-800",
   indigo:  "border-indigo-500 bg-indigo-50 text-indigo-800",
@@ -154,29 +171,33 @@ function ReportSignatureField({
   onChange: (v: { name: string; url: string }) => void;
 }) {
   return (
-    <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/5">
+    <div className="space-y-2 p-3 rounded-lg border border-border bg-muted/5 min-w-0 overflow-hidden">
       <p className="text-xs font-semibold text-foreground">
         {label} <span className="text-muted-foreground font-normal">(optional)</span>
       </p>
 
       {value.url ? (
-        <div className="flex items-center gap-3 bg-white border rounded-lg p-2">
-          <div className="h-12 w-24 flex items-center justify-center border rounded bg-white shrink-0">
-            <img src={value.url} alt={label} className="max-h-[85%] max-w-[85%] object-contain" />
+        // Preview + Remove ek row me, naam ka input neeche full width —
+        // isse narrow column me bhi Remove button card ke andar hi rehta hai
+        <div className="bg-white border rounded-lg p-2 space-y-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-12 w-20 flex items-center justify-center border rounded bg-white shrink-0">
+              <img src={value.url} alt={label} className="max-h-[85%] max-w-[85%] object-contain" />
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ name: "", url: "" })}
+              className="ml-auto text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 shrink-0"
+            >
+              Remove
+            </button>
           </div>
           <input
             value={value.name}
             onChange={e => onChange({ ...value, name: e.target.value })}
             placeholder="Name (for reference only)"
-            className="flex-1 text-xs px-2 py-1.5 border rounded-md outline-none focus:border-primary"
+            className="w-full min-w-0 text-xs px-2 py-1.5 border rounded-md outline-none focus:border-primary"
           />
-          <button
-            type="button"
-            onClick={() => onChange({ name: "", url: "" })}
-            className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 shrink-0"
-          >
-            Remove
-          </button>
         </div>
       ) : (
         <>
@@ -321,8 +342,13 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
           }
         });
 
-        let applicable = (exam.classesApplicable || []).map((c: string) => c.replace(/^class\s*/i, "").trim());
-        if (applicable.length === 0) applicable = Object.keys(csMap);
+        // Report cards har class ke liye ban sakte hain — isliye exam ke
+        // classesApplicable tak limit NAHI karte. Jitni bhi classes me active
+        // students hain wo sab + exam par configured classes, sabka union.
+        const examClasses = (exam.classesApplicable || []).map((c: string) => c.replace(/^class\s*/i, "").trim());
+        const applicable = sortClasses(
+          Array.from(new Set([...Object.keys(csMap), ...examClasses].filter(Boolean)))
+        );
 
         const secMapFinal: Record<string, string[]> = {};
         applicable.forEach((c: string) => { secMapFinal[c] = Array.from(csMap[c] ?? []).sort(); });
