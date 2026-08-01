@@ -58,6 +58,27 @@ interface FeeRecord {
 
 type MarkPaidType = "school" | "transport" | "both";
 
+/**
+ * One unpaid past month shown in the Mark-Paid dialog's arrear list.
+ * `key` is stable (`s:2026-4` / `t:2026-4`) so tick state survives re-renders,
+ * and the same key is used when deciding which past records to settle.
+ */
+interface ArrearItem {
+    key: string;
+    kind: "school" | "transport";
+    label: string;      // "Apr 2026"
+    month: number;
+    year: number;
+    amount: number;
+    status: string;     // carried_forward | pending | overdue
+    path?: string;      // school records live under varying class folders
+}
+
+const arrearKey = (kind: "school" | "transport", year: number, month: number) => `${kind[0]}:${year}-${month}`;
+
+const sumArrears = (items: ArrearItem[], excluded: Set<string>) =>
+    items.reduce((sum, a) => (excluded.has(a.key) ? sum : sum + a.amount), 0);
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: any }> = {
@@ -118,6 +139,99 @@ const finePropagationPayload = (nextData: any) => ({
     totalAmount: (nextData.totalAmount || 0) + LATE_FINE_AMOUNT,
 });
 
+/**
+ * Month-wise arrear list with a tick box per month.
+ * Unticked months are excluded from this payment and stay due on the next bill.
+ */
+function ArrearPicker({ items, excluded, onToggle, onSetAll, residual, label }: {
+    items: ArrearItem[];
+    excluded: Set<string>;
+    onToggle: (key: string) => void;
+    onSetAll: (keys: string[], exclude: boolean) => void;
+    residual: number;          // dues we could not map to a month — always charged
+    label: string;             // "school" | "transport" wording for the residual line
+}) {
+    if (items.length === 0 && residual <= 0) return null;
+
+    const pickedItems = items.filter(a => !excluded.has(a.key));
+    const skippedItems = items.filter(a => excluded.has(a.key));
+    const collecting = pickedItems.reduce((s, a) => s + a.amount, 0) + residual;
+    const staying = skippedItems.reduce((s, a) => s + a.amount, 0);
+    const allTicked = skippedItems.length === 0;
+    const keys = items.map(a => a.key);
+
+    return (
+        <div className="mt-2 ml-6 rounded-lg border border-rose-100 bg-rose-50/60 overflow-hidden">
+            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-rose-100">
+                <span className="text-[11px] font-semibold text-rose-700">
+                    Which months to collect now?
+                </span>
+                {items.length > 1 && (
+                    <button
+                        type="button"
+                        onClick={() => onSetAll(keys, allTicked)}
+                        className="text-[10px] font-semibold text-rose-600 hover:text-rose-800 underline underline-offset-2"
+                    >
+                        {allTicked ? "Untick all" : "Tick all"}
+                    </button>
+                )}
+            </div>
+
+            <div className="divide-y divide-rose-100/70">
+                {items.map(a => {
+                    const on = !excluded.has(a.key);
+                    return (
+                        <label
+                            key={a.key}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors ${on ? "hover:bg-rose-100/50" : "bg-gray-50/80"}`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={() => onToggle(a.key)}
+                                className="w-3.5 h-3.5 accent-rose-500 shrink-0"
+                            />
+                            <span className={`text-xs font-medium flex-1 ${on ? "text-rose-700" : "text-gray-400 line-through"}`}>
+                                {a.label}
+                            </span>
+                            {a.status === "overdue" && (
+                                <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-100 text-rose-600">Overdue</span>
+                            )}
+                            <span className={`text-xs font-semibold tabular-nums ${on ? "text-rose-600" : "text-gray-400 line-through"}`}>
+                                ₹{a.amount.toLocaleString()}
+                            </span>
+                        </label>
+                    );
+                })}
+
+                {residual > 0 && (
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-rose-50">
+                        <span className="w-3.5 shrink-0" />
+                        <span className="text-xs font-medium text-rose-700 flex-1">
+                            Other older {label} dues
+                            <span className="block text-[10px] text-rose-400 font-normal">Not tied to a single month — always collected</span>
+                        </span>
+                        <span className="text-xs font-semibold text-rose-600 tabular-nums">₹{residual.toLocaleString()}</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-white border-t border-rose-100">
+                <span className="text-[11px] font-semibold text-navy">Collecting now</span>
+                <span className="text-xs font-bold text-navy tabular-nums">₹{collecting.toLocaleString()}</span>
+            </div>
+            {staying > 0 && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-amber-50 border-t border-amber-100">
+                    <span className="text-[11px] font-semibold text-amber-700">
+                        Staying due ({skippedItems.length} month{skippedItems.length > 1 ? "s" : ""})
+                    </span>
+                    <span className="text-xs font-bold text-amber-700 tabular-nums">₹{staying.toLocaleString()}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function ManageFeesPage() {
     const { user, role } = useAuth();
     const isAdmin = role === "admin";
@@ -141,12 +255,28 @@ export default function ManageFeesPage() {
     const [notifEmail, setNotifEmail] = useState<string>("");
     const [isFetchingEmail, setIsFetchingEmail] = useState(false);
 
-    // Arrear Details Fetch for Mark Paid
+    // Arrear Details Fetch for Mark Paid — one entry per unpaid past month so the
+    // accountant can see exactly which months are due and tick/untick each one.
     const [arrearMonthsLoading, setArrearMonthsLoading] = useState(false);
-    const [schoolArrearMonths, setSchoolArrearMonths] = useState<string[]>([]);
-    const [transportArrearMonths, setTransportArrearMonths] = useState<string[]>([]);
-    // Live transport dues fetched from Firestore (overrides stale Firestore field)
-    const [liveTransportDues, setLiveTransportDues] = useState<number>(0);
+    const [schoolArrears, setSchoolArrears] = useState<ArrearItem[]>([]);
+    const [transportArrears, setTransportArrears] = useState<ArrearItem[]>([]);
+    // Keys the accountant has UNticked — stored as exclusions so newly loaded
+    // arrears are included by default.
+    const [excludedArrears, setExcludedArrears] = useState<Set<string>>(new Set());
+
+    const toggleArrear = (key: string) =>
+        setExcludedArrears(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return next;
+        });
+
+    const setAllArrears = (keys: string[], exclude: boolean) =>
+        setExcludedArrears(prev => {
+            const next = new Set(prev);
+            keys.forEach(k => (exclude ? next.add(k) : next.delete(k)));
+            return next;
+        });
 
     // Undo (reverse paid) — admin only
     const [undoRecord, setUndoRecord] = useState<{ record: FeeRecord; type: "school" | "transport" | "both" } | null>(null);
@@ -301,46 +431,53 @@ export default function ManageFeesPage() {
 
     useEffect(() => {
         if (!markPaidRecord) {
-            setSchoolArrearMonths([]);
-            setTransportArrearMonths([]);
-            setLiveTransportDues(0);
+            setSchoolArrears([]);
+            setTransportArrears([]);
+            setExcludedArrears(new Set());
             return;
         }
 
         const fetchArrearMonths = async () => {
             setArrearMonthsLoading(true);
+            setExcludedArrears(new Set()); // fresh dialog → everything ticked
             try {
-                const sMonths: string[] = [];
-                const tMonths: string[] = [];
+                const sItems: ArrearItem[] = [];
+                const tItems: ArrearItem[] = [];
                 const studentId = markPaidRecord.studentId || markPaidRecord.id;
                 const feeMonth = markPaidRecord.month;
                 const feeYear = markPaidRecord.year;
 
-                // 1. Fetch School Arrears
-                if ((markPaidRecord.previousDues || 0) > 0 && markPaidRecord.path) {
-                    // Path format: feeRecords/{year}/months/{month}/classes/{classId}/records/{studentId}
-                    // → index 5 is the classId (index 6 is the literal "records" segment).
-                    const classId = classIdFromPath(markPaidRecord.path);
-                    if (classId) {
-                        for (let offset = 1; offset <= 12; offset++) {
-                            let prevMonth = feeMonth - offset;
-                            let prevYear = feeYear;
-                            if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
-
-                            const prevSnap = await getDoc(
-                                doc(db, "feeRecords", prevYear.toString(), "months", prevMonth.toString(), "classes", classId, "records", studentId)
-                            );
-                            if (prevSnap.exists() && prevSnap.data().status === "carried_forward") {
-                                sMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
-                            }
-                        }
+                // 1. School arrears — one collectionGroup query instead of a class-path
+                //    scan, so records that moved to another class folder (promotion)
+                //    are listed here exactly as the settle step will find them.
+                try {
+                    const cgSnap = await getDocs(
+                        query(collectionGroup(db, "records"), where("studentId", "==", studentId))
+                    );
+                    for (const d of cgSnap.docs) {
+                        const data = d.data() as any;
+                        if (data.status !== "carried_forward") continue;
+                        const isOlder = data.year < feeYear || (data.year === feeYear && data.month < feeMonth);
+                        if (!isOlder) continue;
+                        sItems.push({
+                            key: arrearKey("school", data.year, data.month),
+                            kind: "school",
+                            label: `${MONTHS[(data.month || 1) - 1]} ${data.year}`,
+                            month: data.month,
+                            year: data.year,
+                            amount: data.amount || 0,
+                            status: data.status,
+                            path: d.ref.path,
+                        });
                     }
+                    sItems.sort((a, b) => (a.year - b.year) || (a.month - b.month));
+                } catch (err) {
+                    console.error("School arrear scan failed:", err);
                 }
 
                 // 2. Fetch Transport Arrears — ALWAYS scan (don't gate on transportPreviousDues
                 //    because that Firestore field can be stale/missing even when arrears exist)
                 if ((markPaidRecord.transportFeeAmount || 0) > 0) {
-                    let computedTransportDues = 0;
                     for (let offset = 1; offset <= 12; offset++) {
                         let prevMonth = feeMonth - offset;
                         let prevYear = feeYear;
@@ -359,16 +496,22 @@ export default function ManageFeesPage() {
                             prevData.status === "pending" ||
                             prevData.status === "overdue") {
                             // Any unpaid previous month = arrear
-                            tMonths.unshift(`${MONTHS[prevMonth - 1]} ${prevYear}`);
-                            computedTransportDues += prevData.totalAmount || prevData.amount || 0;
+                            const amt = prevData.totalAmount || prevData.amount || 0;
+                            tItems.unshift({
+                                key: arrearKey("transport", prevYear, prevMonth),
+                                kind: "transport",
+                                label: `${MONTHS[prevMonth - 1]} ${prevYear}`,
+                                month: prevMonth,
+                                year: prevYear,
+                                amount: amt,
+                                status: prevData.status,
+                            });
                         }
                     }
-                    // Store the live-computed dues in dedicated state for the dialog to render
-                    setLiveTransportDues(computedTransportDues);
                 }
 
-                setSchoolArrearMonths(sMonths);
-                setTransportArrearMonths(tMonths);
+                setSchoolArrears(sItems);
+                setTransportArrears(tItems);
             } catch (err) {
                 console.error("Error fetching arrear months:", err);
             }
@@ -422,6 +565,62 @@ export default function ManageFeesPage() {
         }
     };
 
+    // ── Payable totals for the Mark-Paid dialog ──────────────────────────────
+    // Single source of truth for the bill summary, the "which fee" options, the
+    // discount base and the settle step — these must never disagree, so every
+    // one of them reads from here instead of recomputing.
+    const payTotals = (() => {
+        const r = markPaidRecord;
+        if (!r) return null;
+
+        const schoolPaid = r.status === "paid";
+        const schoolCF   = r.status === "carried_forward";
+        const schoolBase = r.amount;
+        // Anything the generated bill charges beyond base + arrears — today that
+        // is the ₹100 late fine. Always billed; it is not an arrear month.
+        const schoolExtras = Math.max(0, (r.totalAmount || 0) - schoolBase - (r.previousDues || 0));
+        // previousDues may exceed the months we could list (dues from before the
+        // scan window). Bill the difference as one always-included line so the
+        // total still matches the generated bill.
+        const schoolListed   = schoolArrears.reduce((s, a) => s + a.amount, 0);
+        const schoolResidual = Math.max(0, (r.previousDues || 0) - schoolListed);
+        const schoolPicked   = sumArrears(schoolArrears, excludedArrears);
+        const schoolArrearsDue = schoolCF ? 0 : schoolPicked + schoolResidual;
+        const schoolTotal = (schoolPaid || schoolCF)
+            ? schoolBase
+            : schoolBase + schoolExtras + schoolArrearsDue;
+
+        const transportPaid = r.transportStatus === "paid";
+        const transportCF   = r.transportStatus === "carried_forward";
+        const transportBase = r.transportFeeAmount || 0;
+        // The live scan is authoritative; fall back to the stored field only when
+        // the scan found no months at all.
+        const transportResidual = transportArrears.length === 0 ? (r.transportPreviousDues || 0) : 0;
+        const transportPicked   = sumArrears(transportArrears, excludedArrears);
+        const transportArrearsDue = transportCF ? 0 : transportPicked + transportResidual;
+        const transportTotal = (transportPaid || transportCF)
+            ? transportBase
+            : transportBase + transportArrearsDue;
+
+        const payable =
+            markPaidType === "school"    ? (schoolPaid ? 0 : schoolTotal) :
+            markPaidType === "transport" ? (transportPaid ? 0 : transportTotal) :
+            (schoolPaid ? 0 : schoolTotal) + (transportPaid ? 0 : transportTotal);
+
+        return {
+            schoolPaid, schoolCF, schoolBase, schoolExtras, schoolResidual,
+            schoolArrearsDue, schoolTotal,
+            transportPaid, transportCF, transportBase, transportResidual,
+            transportArrearsDue, transportTotal,
+            payable,
+            // Months that will actually be settled by this payment
+            schoolPicks:    schoolArrears.filter(a => !excludedArrears.has(a.key)),
+            schoolSkips:    schoolArrears.filter(a => excludedArrears.has(a.key)),
+            transportPicks: transportArrears.filter(a => !excludedArrears.has(a.key)),
+            transportSkips: transportArrears.filter(a => excludedArrears.has(a.key)),
+        };
+    })();
+
     // Compute discount amount from current markPaidRecord
     const computeDiscount = (baseTotal: number) => {
         if (discountType === "fixed") return Math.min(discountValue, baseTotal);
@@ -445,7 +644,12 @@ export default function ManageFeesPage() {
                 // CF records: only charge base fee — their previousDues have already
                 // been absorbed (and separately billed) in the next live month's bill.
                 const isRecordCF = record.status === "carried_forward";
-                const schoolBaseTotal = isRecordCF ? record.amount : (record.totalAmount || record.amount);
+                // Charge exactly what the dialog showed: base + fine + the arrear
+                // months the accountant left ticked.
+                const schoolBaseTotal = payTotals?.schoolTotal ?? (isRecordCF ? record.amount : (record.totalAmount || record.amount));
+                const pickedSchool = payTotals?.schoolPicks ?? [];
+                const skippedSchool = payTotals?.schoolSkips ?? [];
+                const pickedSchoolKeys = new Set(pickedSchool.map(a => a.key));
                 const schoolDiscount = computeDiscount(schoolBaseTotal);
                 const schoolTotalPaid = schoolBaseTotal - schoolDiscount;
                 const discountFields = discountType !== "none" && schoolDiscount > 0 ? {
@@ -453,6 +657,16 @@ export default function ManageFeesPage() {
                     discountAmount: schoolDiscount,
                     discountPercent: discountType === "percent" ? discountValue : parseFloat(((schoolDiscount / schoolBaseTotal) * 100).toFixed(2)),
                 } : {};
+                // When arrear months were unticked, this bill only carried the ticked
+                // ones — rewrite previousDues/totalAmount so the settled record shows
+                // what was actually charged. The skipped months stay carried_forward
+                // and the forward cascade below leaves them in the next live bill.
+                const billedArrears = isRecordCF ? (record.previousDues || 0) : (payTotals?.schoolArrearsDue ?? (record.previousDues || 0));
+                const arrearRewrite = (!isRecordCF && skippedSchool.length > 0) ? {
+                    previousDues: billedArrears,
+                    totalAmount: schoolBaseTotal,
+                } : {};
+
                 await updateDoc(doc(db, record.path), {
                     status: "paid",
                     paidOn: paymentDateObj,
@@ -460,10 +674,13 @@ export default function ManageFeesPage() {
                     paymentMode,
                     markedBy: user?.uid || "",
                     totalAmountPaid: schoolTotalPaid,
+                    ...arrearRewrite,
+                    ...(pickedSchool.length > 0 ? { arrearsPaidMonths: pickedSchool.map(a => a.label) } : {}),
+                    ...(skippedSchool.length > 0 ? { arrearsSkippedMonths: skippedSchool.map(a => a.label) } : {}),
                     ...discountFields,
                 });
                 setRecords(prev => prev.map(r =>
-                    r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() } } : r
+                    r.id === record.id ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => new Date() }, ...arrearRewrite } : r
                 ));
                 toast.success(`School fee marked paid! Receipt: ${receiptNo}`);
 
@@ -481,12 +698,14 @@ export default function ManageFeesPage() {
                     console.error("collectionGroup fetch failed, falling back to class-path scan:", e);
                 }
 
-                // ── BACKWARD CASCADE (Auto-Mark Arrears as Paid) ──────────────
-                // Marks every older `carried_forward` record of this student as paid,
-                // even if they belong to a different class path (promotion case).
+                // ── BACKWARD CASCADE (Mark Ticked Arrears as Paid) ────────────
+                // Settles the older `carried_forward` records the accountant kept
+                // ticked, even if they belong to a different class path (promotion
+                // case). Unticked months are left untouched so they stay due.
                 try {
                     const olderCF = allStudentRecords.filter(r => {
                         if (r.data.status !== "carried_forward") return false;
+                        if (!pickedSchoolKeys.has(arrearKey("school", r.data.year, r.data.month))) return false;
                         if (r.data.year < record.year) return true;
                         if (r.data.year === record.year && r.data.month < record.month) return true;
                         return false;
@@ -515,7 +734,9 @@ export default function ManageFeesPage() {
                 //      amount from its previousDues so the active bill is correct.
                 // Example: April paid → May(CF, fix dues→0) → June(pending, deduct) ✅
                 try {
-                    const paidAmount = record.totalAmount || record.amount;
+                    // Deduct only what this payment actually cleared — unticked arrear
+                    // months must remain in the next live bill.
+                    const paidAmount = schoolBaseTotal;
                     const newerSorted = allStudentRecords
                         .filter(r => {
                             if (r.data.year > record.year) return true;
@@ -588,14 +809,22 @@ export default function ManageFeesPage() {
                 ].filter(item => item.amount > 0);
                 if (schoolBreakdownItems.length === 0) schoolBreakdownItems.push({ label: "School Fee (Current Month)", amount: record.amount });
 
-                // Add Previous Dues line if carried forward
-                if ((record.previousDues || 0) > 0) {
-                    schoolBreakdownItems.push({ label: "Previous Dues (Arrears)", amount: record.previousDues! });
+                // Late fine / other charges billed on top of base + arrears
+                if ((payTotals?.schoolExtras || 0) > 0) {
+                    schoolBreakdownItems.push({ label: "Late Fine / Other Charges", amount: payTotals!.schoolExtras });
+                }
+
+                // Add Previous Dues line — only the arrear months actually collected
+                if (billedArrears > 0) {
+                    const months = pickedSchool.map(a => a.label).join(", ");
+                    schoolBreakdownItems.push({
+                        label: months ? `Previous Dues (${months})` : "Previous Dues (Arrears)",
+                        amount: billedArrears,
+                    });
                 }
 
                 // Add discount line item (negative)
-                const schoolBaseTotal2 = record.totalAmount || record.amount;
-                const schoolDiscountAmt = computeDiscount(schoolBaseTotal2);
+                const schoolDiscountAmt = computeDiscount(schoolBaseTotal);
                 if (schoolDiscountAmt > 0) {
                     const pct = discountType === "percent" ? ` (${discountValue}%)` : ``;
                     schoolBreakdownItems.push({ label: `Discount Applied${pct}`, amount: -schoolDiscountAmt });
@@ -626,9 +855,14 @@ export default function ManageFeesPage() {
             if (markPaidType === "transport" || markPaidType === "both") {
                 const transportReceiptNo = await getNextReceiptNo();
                 const isTranspCF = record.transportStatus === "carried_forward";
-                const transpBaseTotal = isTranspCF 
-                    ? record.transportFeeAmount || 0 
-                    : record.transportTotalAmount || record.transportFeeAmount || 0;
+                // Same rule as school: charge base + the ticked arrear months only.
+                const transpBaseTotal = payTotals?.transportTotal ?? (isTranspCF
+                    ? record.transportFeeAmount || 0
+                    : record.transportTotalAmount || record.transportFeeAmount || 0);
+                const pickedTransport = payTotals?.transportPicks ?? [];
+                const skippedTransport = payTotals?.transportSkips ?? [];
+                const pickedTransportKeys = new Set(pickedTransport.map(a => a.key));
+                const billedTransportArrears = isTranspCF ? 0 : (payTotals?.transportArrearsDue ?? (record.transportPreviousDues || 0));
                 const transpDiscount = computeDiscount(transpBaseTotal);
                 const transpTotalPaid = transpBaseTotal - transpDiscount;
                 const transpDiscountFields = discountType !== "none" && transpDiscount > 0 ? {
@@ -645,9 +879,11 @@ export default function ManageFeesPage() {
                     busNumber: "—",
                     routeDetails: "",
                     amount: record.transportFeeAmount || 0,
-                    previousDues: record.transportPreviousDues || 0,
+                    previousDues: billedTransportArrears,
                     totalAmount: transpBaseTotal,
                     totalAmountPaid: transpTotalPaid,
+                    ...(pickedTransport.length > 0 ? { arrearsPaidMonths: pickedTransport.map(a => a.label) } : {}),
+                    ...(skippedTransport.length > 0 ? { arrearsSkippedMonths: skippedTransport.map(a => a.label) } : {}),
                     month: record.month,
                     year: record.year,
                     dueDate: record.dueDate,
@@ -665,32 +901,29 @@ export default function ManageFeesPage() {
                 toast.success(`Transport fee marked paid! Receipt: ${transportReceiptNo}`);
 
                 // ── BACKWARD TRANSPORT CASCADE ────────────────────────────────
+                // Settles exactly the past months that were billed here (ticked in
+                // the dialog). Unticked months keep their unpaid status so they
+                // remain due on the next bill.
                 try {
-                    for (let offset = 1; offset <= 12; offset++) {
-                        let prevTMonth = (record.month || 1) - offset;
-                        let prevTYear = record.year;
-                        while (prevTMonth <= 0) { prevTMonth += 12; prevTYear -= 1; }
-                        
+                    for (const past of pickedTransport) {
                         const prevTransRef = doc(
                             db, "transportFeeRecords",
-                            prevTYear.toString(), "months", prevTMonth.toString(), "students", studentUid
+                            past.year.toString(), "months", past.month.toString(), "students", studentUid
                         );
                         const prevTransSnap = await getDoc(prevTransRef);
-                        
-                        if (prevTransSnap.exists()) {
-                            const prevNtd = prevTransSnap.data() as any;
-                            if (prevNtd.status === "carried_forward") {
-                                await updateDoc(prevTransRef, {
-                                    status: "paid",
-                                    paidOn: paymentDateObj,
-                                    receiptNo: transportReceiptNo,
-                                    paymentMode,
-                                    markedBy: user?.uid || "",
-                                    totalAmountPaid: prevNtd.amount || 0,
-                                    note: `Auto-paid via consolidated bill ${transportReceiptNo}`
-                                });
-                            }
-                        }
+                        if (!prevTransSnap.exists()) continue;
+                        const prevNtd = prevTransSnap.data() as any;
+                        if (prevNtd.status === "paid") continue;
+
+                        await updateDoc(prevTransRef, {
+                            status: "paid",
+                            paidOn: paymentDateObj,
+                            receiptNo: transportReceiptNo,
+                            paymentMode,
+                            markedBy: user?.uid || "",
+                            totalAmountPaid: prevNtd.totalAmount || prevNtd.amount || 0,
+                            note: `Auto-paid via consolidated bill ${transportReceiptNo}`
+                        });
                     }
                 } catch (e) {
                     console.error("Transport backward cascade failed", e);
@@ -775,8 +1008,12 @@ export default function ManageFeesPage() {
                 const transportLineItems: { label: string; amount: number }[] = [
                     { label: "Transport / Bus Fee (Current Month)", amount: record.transportFeeAmount || 0 },
                 ];
-                if ((record.transportPreviousDues || 0) > 0) {
-                    transportLineItems.push({ label: "Previous Transport Dues (Arrears)", amount: record.transportPreviousDues! });
+                if (billedTransportArrears > 0) {
+                    const tMonths = pickedTransport.map(a => a.label).join(", ");
+                    transportLineItems.push({
+                        label: tMonths ? `Previous Transport Dues (${tMonths})` : "Previous Transport Dues (Arrears)",
+                        amount: billedTransportArrears,
+                    });
                 }
                 // Discount line for transport
                 const transpDiscountAmt2 = computeDiscount(transpBaseTotal);
@@ -1578,21 +1815,17 @@ export default function ManageFeesPage() {
                             <div className="space-y-1.5">
                                 {(() => {
                                     const bd = markPaidRecord.breakdown || {};
-                                    const transportFee = markPaidRecord.transportFeeAmount || 0;
-                                    const schoolFeeBase = markPaidRecord.amount;
-                                    const schoolPrevDues = markPaidRecord.previousDues || 0;
-                                    const isCF = markPaidRecord.status === "carried_forward";
-                                    const schoolAlreadyPaid = markPaidRecord.status === "paid";
-                                    const schoolTotal = (schoolAlreadyPaid || isCF) ? schoolFeeBase : (markPaidRecord.totalAmount || (schoolFeeBase + schoolPrevDues));
-                                    // Use live-scanned dues (overrides stale Firestore field)
-                                    const transportPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord.transportPreviousDues || 0);
-                                    const isTranspCF = markPaidRecord.transportStatus === "carried_forward";
-                                    const transportTotal = isTranspCF ? transportFee : (transportFee + transportPrevDues);
-                                    const transportAlreadyPaid = markPaidRecord.transportStatus === "paid";
-                                    // Amount payable changes based on what accountant selected
-                                    const totalPayable = markPaidType === "school" ? (schoolAlreadyPaid ? 0 : schoolTotal)
-                                        : markPaidType === "transport" ? (transportAlreadyPaid ? 0 : transportTotal)
-                                        : (schoolAlreadyPaid ? 0 : schoolTotal) + (transportAlreadyPaid ? 0 : transportTotal);
+                                    const t = payTotals!;
+                                    const transportFee = t.transportBase;
+                                    const schoolFeeBase = t.schoolBase;
+                                    const schoolPrevDues = t.schoolArrearsDue;
+                                    const isCF = t.schoolCF;
+                                    const schoolAlreadyPaid = t.schoolPaid;
+                                    const isTranspCF = t.transportCF;
+                                    const transportPrevDues = t.transportArrearsDue;
+                                    const transportTotal = t.transportTotal;
+                                    const transportAlreadyPaid = t.transportPaid;
+                                    const totalPayable = t.payable;
                                     // Build breakdown lines (only show non-zero items)
                                     const breakdownLines: { label: string; amount: number }[] = [
                                         { label: "Tuition Fee",      amount: bd.tuitionFee      || 0 },
@@ -1631,8 +1864,15 @@ export default function ManageFeesPage() {
                                                     {!hasBreakdown && (
                                                         <div className="ml-6 text-xs text-gray-400">No breakdown available</div>
                                                     )}
+                                                    {/* Late fine / other charges billed on top of base + arrears */}
+                                                    {!isCF && !schoolAlreadyPaid && t.schoolExtras > 0 && (
+                                                        <div className="flex justify-between text-xs text-amber-600 ml-6 pt-1">
+                                                            <span>Late Fine / Other Charges</span>
+                                                            <span className="font-semibold">₹{t.schoolExtras.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
                                                     {/* Previous dues: hidden for CF records (dues already in next live bill) */}
-                                                    {!isCF && schoolPrevDues > 0 && (
+                                                    {!isCF && !schoolAlreadyPaid && (schoolArrears.length > 0 || t.schoolResidual > 0 || arrearMonthsLoading) && (
                                                         <div className="flex flex-col text-sm border-t border-dashed border-gray-200 mt-2 pt-2">
                                                             <div className="flex justify-between">
                                                                 <span className="flex items-center gap-1.5 text-rose-500"><AlertCircle className="w-4 h-4" /> Previous School Dues (Arrears)</span>
@@ -1642,11 +1882,16 @@ export default function ManageFeesPage() {
                                                                 <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
                                                                     <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
                                                                 </span>
-                                                            ) : schoolArrearMonths.length > 0 ? (
-                                                                <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
-                                                                    Clear pending bills for: <strong>{schoolArrearMonths.join(", ")}</strong>
-                                                                </span>
-                                                            ) : null}
+                                                            ) : (
+                                                                <ArrearPicker
+                                                                    items={schoolArrears}
+                                                                    excluded={excludedArrears}
+                                                                    onToggle={toggleArrear}
+                                                                    onSetAll={setAllArrears}
+                                                                    residual={t.schoolResidual}
+                                                                    label="school"
+                                                                />
+                                                            )}
                                                         </div>
                                                     )}
                                                     {/* CF notice: inform accountant this is an arrear-only payment */}
@@ -1672,7 +1917,7 @@ export default function ManageFeesPage() {
                                                         )}
                                                     </div>
                                                     {/* Part 2 — Transport Arrears (if any) */}
-                                                    {!isTranspCF && transportPrevDues > 0 && !transportAlreadyPaid && (
+                                                    {!isTranspCF && !transportAlreadyPaid && (transportArrears.length > 0 || t.transportResidual > 0 || arrearMonthsLoading) && (
                                                         <div className="border-t border-dashed border-gray-200 mt-2 pt-2 space-y-1">
                                                             {/* Base transport fee line */}
                                                             <div className="flex justify-between text-xs text-gray-500 ml-6">
@@ -1689,11 +1934,16 @@ export default function ManageFeesPage() {
                                                                     <span className="text-xs text-rose-400 mt-1 ml-6 flex items-center gap-1">
                                                                         <Loader2 className="w-3 h-3 animate-spin" /> Verifying past bills...
                                                                     </span>
-                                                                ) : transportArrearMonths.length > 0 ? (
-                                                                    <span className="text-[11px] text-rose-500/80 mt-1 ml-6 bg-rose-50 px-2 py-1 rounded inline-block w-fit">
-                                                                        Clears pending: <strong>{transportArrearMonths.join(", ")}</strong>
-                                                                    </span>
-                                                                ) : null}
+                                                                ) : (
+                                                                    <ArrearPicker
+                                                                        items={transportArrears}
+                                                                        excluded={excludedArrears}
+                                                                        onToggle={toggleArrear}
+                                                                        onSetAll={setAllArrears}
+                                                                        residual={t.transportResidual}
+                                                                        label="transport"
+                                                                    />
+                                                                )}
                                                             </div>
                                                             {/* Total transport payable */}
                                                             <div className="flex justify-between text-sm font-semibold text-navy border-t border-gray-100 pt-1.5 mt-0.5">
@@ -1725,18 +1975,19 @@ export default function ManageFeesPage() {
                             <p className="text-sm font-semibold text-gray-700 mb-3">Which fee has been paid?</p>
 
                             {(() => {
-                                const _sBase = markPaidRecord.amount;
-                                const _sPrevDues = markPaidRecord.previousDues || 0;
-                                const _isSCF = markPaidRecord.status === "carried_forward";
+                                // All numbers come from payTotals so the options always
+                                // reflect the arrear months currently ticked.
+                                const _sBase = payTotals!.schoolBase;
+                                const _sPrevDues = payTotals!.schoolArrearsDue;
+                                const _isSCF = payTotals!.schoolCF;
                                 const _sAlreadyPaid = isSchoolPaid(markPaidRecord);
-                                const _schoolTotal = (_sAlreadyPaid || _isSCF) ? _sBase : (markPaidRecord.totalAmount || (_sBase + _sPrevDues));
+                                const _schoolTotal = payTotals!.schoolTotal;
 
-                                const _tBase = markPaidRecord.transportFeeAmount || 0;
-                                // liveTransportDues is Firestore-scanned — overrides stale stored field
-                                const _tPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord.transportPreviousDues || 0);
-                                const _isTranspCF = markPaidRecord.transportStatus === "carried_forward";
+                                const _tBase = payTotals!.transportBase;
+                                const _tPrevDues = payTotals!.transportArrearsDue;
+                                const _isTranspCF = payTotals!.transportCF;
                                 const _tAlreadyPaid = isTransportPaid(markPaidRecord);
-                                const _transportTotal = (_tAlreadyPaid || _isTranspCF) ? _tBase : (_tBase + _tPrevDues);
+                                const _transportTotal = payTotals!.transportTotal;
 
                                 const _schoolDesc = _sAlreadyPaid
                                     ? `Already Paid`
@@ -1813,24 +2064,9 @@ export default function ManageFeesPage() {
 
                             {/* ── Discount Section ── */}
                             {(() => {
-                                const baseTotal = (() => {
-                                    const sBase = markPaidRecord!.amount;
-                                    const sPrevDues = markPaidRecord!.previousDues || 0;
-                                    const isSCF = markPaidRecord!.status === "carried_forward";
-                                    const sAlreadyPaid = markPaidRecord!.status === "paid";
-                                    const s = (sAlreadyPaid || isSCF) ? sBase : (markPaidRecord!.totalAmount || (sBase + sPrevDues));
-
-                                    const tBase = markPaidRecord!.transportFeeAmount || 0;
-                                    // Use liveTransportDues (Firestore-scanned) — same as left column & right options
-                                    const tPrevDues = liveTransportDues > 0 ? liveTransportDues : (markPaidRecord!.transportPreviousDues || 0);
-                                    const isTranspCF = markPaidRecord!.transportStatus === "carried_forward";
-                                    const tAlreadyPaid = markPaidRecord!.transportStatus === "paid";
-                                    const t = (tAlreadyPaid || isTranspCF) ? tBase : (tBase + tPrevDues);
-
-                                    if (markPaidType === "school") return s;
-                                    if (markPaidType === "transport") return t;
-                                    return s + t;
-                                })();
+                                // Same source as the bill summary — includes only the
+                                // arrear months left ticked.
+                                const baseTotal = payTotals!.payable;
                                 const discAmt = discountType === "fixed"
                                     ? Math.min(discountValue, baseTotal)
                                     : discountType === "percent"
