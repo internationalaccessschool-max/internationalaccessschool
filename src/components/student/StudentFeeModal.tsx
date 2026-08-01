@@ -297,9 +297,10 @@ export function StudentFeeModal({ student, onClose }: Props) {
                 });
 
                 // Extract classId from the actual doc path (correct even for promoted students)
-                // Path: feeRecords/{year}/months/{month}/classes/{classId}/records/{docId}
+                // Path:  feeRecords / {year} / months / {month} / classes / {classId} / records / {docId}
+                // Index:     0          1        2         3         4         5           6         7
                 const pathParts = rec.schoolDocPath.split("/");
-                const recordClassId = pathParts[6] || classId;
+                const recordClassId = pathParts[5] || classId;
 
                 // Backward cascade: mark previous carried_forward school records as paid
                 try {

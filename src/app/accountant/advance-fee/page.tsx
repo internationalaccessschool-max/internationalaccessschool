@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import {
-    collection, collectionGroup, getDocs, doc, getDoc, setDoc, query, orderBy
+    collection, collectionGroup, getDocs, doc, getDoc, setDoc, query, where, orderBy
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -75,11 +75,65 @@ interface MonthFeeRow {
     // Status from Firestore (pre-existing)
     schoolAlreadyPaid: boolean;
     transportAlreadyPaid: boolean;
+    // Exact path of the school fee doc that already exists for this month, if any.
+    // Payment writes here so a promoted student never gets a duplicate record in
+    // their new class folder while the old one stays unpaid.
+    schoolDocPath?: string;
 }
 
 type FeeType = "school" | "transport" | "both";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Finds this student's existing school fee record for a month, in WHICHEVER class
+ * folder it lives.
+ *
+ * Records are stored under the class the student was in when the record was
+ * generated (`feeRecords/{year}/months/{month}/classes/{classId}/records/{docId}`).
+ * After a promotion or transfer the student's current class no longer matches that
+ * folder, so looking only under the current class would (a) miss an already-paid
+ * month and (b) create a duplicate record on payment. Hence the fallback query.
+ *
+ * Returns null when no record exists yet — the caller then creates one under the
+ * student's current class, which is the correct place for a brand-new record.
+ */
+async function findExistingFeeRecord(studentId: string, month: number, year: number, classId: string) {
+    // Both doc-id formats in use: the monthly generator's, and the admission flow's.
+    const docIds = [
+        `${studentId}_${year}_${String(month).padStart(2, "0")}`,
+        `${studentId}_${month}_${year}_tuition`,
+    ];
+
+    if (classId) {
+        for (const docId of docIds) {
+            try {
+                const ref = doc(db, `feeRecords/${year}/months/${month}/classes/${classId}/records`, docId);
+                const snap = await getDoc(ref);
+                if (snap.exists()) return { ref, data: snap.data() as any };
+            } catch { /* try the next id */ }
+        }
+    }
+
+    // Not in the current class folder — search by field across all classes.
+    try {
+        const qs = await getDocs(query(
+            collectionGroup(db, "records"),
+            where("studentId", "==", studentId),
+            where("year", "==", year),
+            where("month", "==", month),
+        ));
+        if (!qs.empty) {
+            // Prefer a paid record so an already-collected month is never re-charged.
+            const best = qs.docs.find(d => (d.data() as any).status === "paid") || qs.docs[0];
+            return { ref: best.ref, data: best.data() as any };
+        }
+    } catch (err) {
+        console.warn("findExistingFeeRecord query failed", studentId, month, year, err);
+    }
+
+    return null;
+}
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_FULL  = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -272,22 +326,19 @@ export default function AdvanceFeePage() {
         try {
             const rows: MonthFeeRow[] = await Promise.all(
                 selectedMonths.map(async ({ month, year }) => {
-                    // Check if already paid (school)
+                    // Check if already paid (school) — searches every class folder,
+                    // so a promoted student's older records are still found.
                     let schoolAlreadyPaid = false;
                     let transportAlreadyPaid = false;
+                    let schoolDocPath: string | undefined;
 
                     try {
-                        const recordId = `${selectedStudent.id}_${year}_${String(month).padStart(2, "0")}`;
-                        const schoolRef = doc(db, `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`, recordId);
-                        const schoolSnap = await getDoc(schoolRef);
-                        if (schoolSnap.exists() && schoolSnap.data()?.status === "paid") schoolAlreadyPaid = true;
-                        // Also check admission-format docId (used when fee collected at admission time)
-                        // Check even if standard format exists but is unpaid — admission may have been paid
-                        if (!schoolAlreadyPaid) {
-                            const admDocId = `${selectedStudent.id}_${month}_${year}_tuition`;
-                            const admRef = doc(db, `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`, admDocId);
-                            const admSnap = await getDoc(admRef);
-                            if (admSnap.exists() && admSnap.data()?.status === "paid") schoolAlreadyPaid = true;
+                        const existing = await findExistingFeeRecord(
+                            selectedStudent.id, month, year, selectedStudent.class
+                        );
+                        if (existing) {
+                            schoolDocPath = existing.ref.path;
+                            if (existing.data?.status === "paid") schoolAlreadyPaid = true;
                         }
                     } catch { /* ignore */ }
 
@@ -340,6 +391,7 @@ export default function AdvanceFeePage() {
                         grandTotal:      0,
                         schoolAlreadyPaid,
                         transportAlreadyPaid,
+                        schoolDocPath,
                     };
 
                     row.schoolTotal = row.tuitionFee;
@@ -402,12 +454,16 @@ export default function AdvanceFeePage() {
                 // ── School fee ──────────────────────────────────────────
                 if (feeType !== "transport" && !row.schoolAlreadyPaid && row.schoolTotal > 0) {
                     schoolReceiptNo = await getNextReceiptNo();
+                    // Update the record that already exists (possibly in an older class
+                    // folder after a promotion); only create a new one when there is none.
                     const recordId = `${selectedStudent.id}_${year}_${String(month).padStart(2, "0")}`;
-                    const recordRef = doc(
-                        db,
-                        `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`,
-                        recordId
-                    );
+                    const recordRef = row.schoolDocPath
+                        ? doc(db, row.schoolDocPath)
+                        : doc(
+                            db,
+                            `feeRecords/${year}/months/${month}/classes/${selectedStudent.class}/records`,
+                            recordId
+                        );
                     const dueDate = new Date(year, month - 1, feeStructure?.dueDay || 10);
 
                     await setDoc(recordRef, {

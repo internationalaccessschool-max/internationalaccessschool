@@ -3,12 +3,12 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, Timestamp, collectionGroup, deleteField } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, limit, Timestamp, collectionGroup, deleteField, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
     Banknote, Search, CheckCircle2, AlertCircle, Clock,
-    Mail, Loader2, RefreshCw, Bus, School, X, RotateCcw
+    Mail, Loader2, RefreshCw, Bus, School, X, RotateCcw, AlertTriangle
 } from "lucide-react";
 
 import toast from "react-hot-toast";
@@ -67,6 +67,57 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
     carried_forward: { label: "Arrear", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", icon: AlertCircle },
 };
 
+const LATE_FINE_AMOUNT = 100;
+
+const nextMonthOf = (month: number, year: number) =>
+    month >= 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
+
+/**
+ * Fee record path: feeRecords/{year}/months/{month}/classes/{classId}/records/{studentId}
+ * → split gives [feeRecords, year, months, month, classes, classId, records, studentId]
+ */
+const classIdFromPath = (path: string) => path.split("/")[5] || "";
+
+/**
+ * Finds the SAME student's record for the month right after `record`.
+ * Tries the direct path first; falls back to a group query because a student
+ * may sit under a different class folder after a promotion/transfer.
+ */
+async function findNextMonthRecord(record: FeeRecord) {
+    const { month, year } = nextMonthOf(record.month, record.year);
+    const studentId = record.studentId || record.id;
+
+    const classId = classIdFromPath(record.path);
+    if (classId) {
+        try {
+            const ref = doc(db, "feeRecords", String(year), "months", String(month), "classes", classId, "records", studentId);
+            const snap = await getDoc(ref);
+            if (snap.exists()) return { ref, data: snap.data() as any };
+        } catch { /* fall through to the query */ }
+    }
+
+    try {
+        const qs = await getDocs(query(
+            collectionGroup(db, "records"),
+            where("studentId", "==", studentId),
+            where("year", "==", year),
+            where("month", "==", month),
+            limit(1),
+        ));
+        if (!qs.empty) return { ref: qs.docs[0].ref, data: qs.docs[0].data() as any };
+    } catch (err) {
+        console.warn("findNextMonthRecord query failed for", studentId, err);
+    }
+
+    return null;
+}
+
+/** The late fine must also show up on the next month's bill, exactly like the nightly cron does. */
+const finePropagationPayload = (nextData: any) => ({
+    previousDues: (nextData.previousDues || 0) + LATE_FINE_AMOUNT,
+    totalAmount: (nextData.totalAmount || 0) + LATE_FINE_AMOUNT,
+});
+
 export default function ManageFeesPage() {
     const { user, role } = useAuth();
     const isAdmin = role === "admin";
@@ -100,6 +151,13 @@ export default function ManageFeesPage() {
     // Undo (reverse paid) — admin only
     const [undoRecord, setUndoRecord] = useState<{ record: FeeRecord; type: "school" | "transport" | "both" } | null>(null);
     const [undoLoading, setUndoLoading] = useState(false);
+
+    // Bulk "Mark All Overdue" — two-step confirmation before touching many records
+    const [bulkOpen, setBulkOpen] = useState(false);
+    const [bulkStep, setBulkStep] = useState<1 | 2>(1);
+    const [bulkConfirmText, setBulkConfirmText] = useState("");
+    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
 
     // Filters
     const currentMonth = new Date().getMonth() + 1;
@@ -260,9 +318,9 @@ export default function ManageFeesPage() {
 
                 // 1. Fetch School Arrears
                 if ((markPaidRecord.previousDues || 0) > 0 && markPaidRecord.path) {
-                    const parts = markPaidRecord.path.split("/");
                     // Path format: feeRecords/{year}/months/{month}/classes/{classId}/records/{studentId}
-                    const classId = parts[6];
+                    // → index 5 is the classId (index 6 is the literal "records" segment).
+                    const classId = classIdFromPath(markPaidRecord.path);
                     if (classId) {
                         for (let offset = 1; offset <= 12; offset++) {
                             let prevMonth = feeMonth - offset;
@@ -781,9 +839,8 @@ export default function ManageFeesPage() {
             const updatePayload: Record<string, any> = { status: "overdue" };
 
             if (!alreadyFined) {
-                const LATE_FINE = 100;
-                updatePayload.lateFine = LATE_FINE;
-                updatePayload.totalAmount = (record.totalAmount || record.amount || 0) + LATE_FINE;
+                updatePayload.lateFine = LATE_FINE_AMOUNT;
+                updatePayload.totalAmount = (record.totalAmount || record.amount || 0) + LATE_FINE_AMOUNT;
                 updatePayload.lateFineAppliedOn = new Date();
             }
 
@@ -791,11 +848,162 @@ export default function ManageFeesPage() {
             setRecords(prev => prev.map(r =>
                 r.id === record.id ? { ...r, status: "overdue", ...updatePayload } : r
             ));
-            toast.success(alreadyFined ? "Marked as overdue" : "Marked as overdue + ₹100 late fine applied");
+
+            // Carry the new fine into next month's bill (same as the nightly cron).
+            let propagated = false;
+            if (!alreadyFined) {
+                try {
+                    const next = await findNextMonthRecord(record);
+                    if (next && next.data.status !== "paid") {
+                        await updateDoc(next.ref, finePropagationPayload(next.data));
+                        propagated = true;
+                    }
+                } catch (err) {
+                    console.warn("Fine propagation failed for", record.id, err);
+                }
+            }
+
+            toast.success(
+                alreadyFined
+                    ? "Marked as overdue"
+                    : `Marked as overdue + ₹100 late fine applied${propagated ? " (added to next month's bill too)" : ""}`
+            );
         } catch {
             toast.error("Failed to update status");
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    // ── Bulk: mark every currently filtered unpaid record as overdue ──────────
+    // Same rules as the single-record button: paid / arrear records are never
+    // touched, and the ₹100 fine is only added where none was charged before.
+    const closeBulkDialog = () => {
+        if (bulkLoading) return;
+        setBulkOpen(false);
+        setBulkStep(1);
+        setBulkConfirmText("");
+        setBulkProgress({ done: 0, total: 0 });
+    };
+
+    /**
+     * Loads every fee record of the given month in one sweep (a dozen collection
+     * reads) so the fine can be propagated without firing one query per student.
+     * Returns studentId → { path, data }.
+     */
+    const loadMonthRecordMap = async (year: number, month: number) => {
+        const map = new Map<string, { path: string; data: any }>();
+        try {
+            const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+            const classIds = classesSnap.docs.map(d => d.id);
+            const snaps = await Promise.all(classIds.map(cid =>
+                getDocs(collection(db, `feeRecords/${year}/months/${month}/classes/${cid}/records`))
+                    .catch(() => null)
+            ));
+            snaps.forEach(snap => snap?.docs.forEach(d => {
+                const data = d.data() as any;
+                const sid = data.studentId || d.id;
+                // Prefer an unpaid record if the student appears in two class folders.
+                const existing = map.get(sid);
+                if (!existing || (existing.data.status === "paid" && data.status !== "paid")) {
+                    map.set(sid, { path: d.ref.path, data });
+                }
+            }));
+        } catch (err) {
+            console.error("loadMonthRecordMap failed:", err);
+        }
+        return map;
+    };
+
+    const handleBulkMarkOverdue = async () => {
+        const targets = bulkTargets;
+        if (targets.length === 0) return;
+
+        setBulkLoading(true);
+        setBulkProgress({ done: 0, total: targets.length });
+
+        const appliedOn = new Date();
+        const applied = new Map<string, Record<string, any>>();
+        let failedCount = 0;
+        let propagatedCount = 0;
+
+        try {
+            // Next month's records — needed so each new fine also lands on the
+            // following month's bill, exactly like the nightly cron does.
+            const { month: nextMonth, year: nextYear } = nextMonthOf(filterMonth, filterYear);
+            const nextMonthMap = await loadMonthRecordMap(nextYear, nextMonth);
+
+            // Build a flat list of writes first, then commit in batches. Each target
+            // can produce two writes (its own update + next month's propagation).
+            type PendingWrite = { path: string; payload: Record<string, any>; recordId?: string };
+            const writes: PendingWrite[] = [];
+
+            for (const r of targets) {
+                const isNewFine = !(r.lateFine && r.lateFine > 0);
+                const payload: Record<string, any> = { status: "overdue" };
+
+                if (isNewFine) {
+                    payload.lateFine = LATE_FINE_AMOUNT;
+                    payload.totalAmount = (r.totalAmount || r.amount || 0) + LATE_FINE_AMOUNT;
+                    payload.lateFineAppliedOn = appliedOn;
+                }
+                writes.push({ path: r.path, payload, recordId: r.id });
+
+                if (isNewFine) {
+                    const next = nextMonthMap.get(r.studentId || r.id);
+                    if (next && next.data.status !== "paid") {
+                        writes.push({ path: next.path, payload: finePropagationPayload(next.data) });
+                        propagatedCount++;
+                    }
+                }
+            }
+
+            // Firestore allows 500 writes per batch — stay comfortably under it.
+            const CHUNK = 400;
+            for (let i = 0; i < writes.length; i += CHUNK) {
+                const slice = writes.slice(i, i + CHUNK);
+                const batch = writeBatch(db);
+                slice.forEach(w => batch.update(doc(db, w.path), w.payload));
+
+                try {
+                    await batch.commit();
+                    slice.forEach(w => { if (w.recordId) applied.set(w.recordId, w.payload); });
+                } catch (err) {
+                    console.error("Bulk overdue batch failed:", err);
+                    failedCount += slice.filter(w => w.recordId).length;
+                }
+
+                setBulkProgress({
+                    done: Math.min(Math.round(((i + CHUNK) / writes.length) * targets.length), targets.length),
+                    total: targets.length,
+                });
+            }
+
+            setRecords(prev => prev.map(r =>
+                applied.has(r.id) ? { ...r, ...applied.get(r.id) } as FeeRecord : r
+            ));
+
+            const okCount = applied.size;
+            const finesApplied = targets.filter(r => !(r.lateFine && r.lateFine > 0) && applied.has(r.id)).length;
+            if (okCount > 0) {
+                toast.success(
+                    `${okCount} record${okCount === 1 ? "" : "s"} marked overdue` +
+                    (finesApplied > 0 ? ` — ₹${(finesApplied * LATE_FINE_AMOUNT).toLocaleString()} in late fines applied` : "") +
+                    (propagatedCount > 0 ? `, carried into ${propagatedCount} next-month bill${propagatedCount === 1 ? "" : "s"}` : "")
+                );
+            }
+            if (failedCount > 0) {
+                toast.error(`${failedCount} record${failedCount === 1 ? "" : "s"} could not be updated. Please retry.`);
+            }
+
+            setBulkOpen(false);
+            setBulkStep(1);
+            setBulkConfirmText("");
+        } catch (err) {
+            console.error("Bulk overdue failed:", err);
+            toast.error("Bulk update failed. Please try again.");
+        } finally {
+            setBulkLoading(false);
         }
     };
 
@@ -929,6 +1137,13 @@ export default function ManageFeesPage() {
         return true;
     });
 
+    // Bulk-overdue targets: only what is currently on screen, and only real unpaid
+    // school-fee rows (paid / arrear / transport-only rows are never touched).
+    const bulkTargets = filtered.filter(r =>
+        !!r.path && !r.isTransportOnly && (r.status === "pending" || r.status === "overdue")
+    );
+    const bulkFineCount = bulkTargets.filter(r => !(r.lateFine && r.lateFine > 0)).length;
+
     const stats = {
         total: records.length,
         paid: records.filter(r => r.status === "paid").length,
@@ -1010,6 +1225,25 @@ export default function ManageFeesPage() {
                         <RefreshCw className="w-4 h-4" />Refresh
                     </button>
                 </div>
+
+                {/* Bulk overdue — acts on the filtered list shown below */}
+                {bulkTargets.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
+                        <button
+                            onClick={() => { setBulkStep(1); setBulkConfirmText(""); setBulkOpen(true); }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                        >
+                            <AlertTriangle className="w-4 h-4" />
+                            Mark All Overdue ({bulkTargets.length})
+                        </button>
+                        <p className="text-xs text-gray-400">
+                            Applies to the {bulkTargets.length} unpaid record{bulkTargets.length === 1 ? "" : "s"} currently shown
+                            ({MONTHS[filterMonth - 1]} {filterYear}
+                            {filterClass !== "all" ? `, Class ${filterClass}` : ""}).
+                            {bulkFineCount > 0 && ` ₹100 late fine will be added to ${bulkFineCount} of them.`}
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* Records Table */}
@@ -1706,6 +1940,124 @@ export default function ManageFeesPage() {
                             </button>
                         </div>{/* end actions */}
 
+                    </div>
+                </div>
+            )}
+
+            {/* ── Bulk Mark Overdue — two-step confirmation ── */}
+            {bulkOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0">
+                                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-navy">Mark All Overdue</h3>
+                                <p className="text-xs text-gray-400">Step {bulkStep} of 2</p>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                            {bulkStep === 1 ? (
+                                <>
+                                    <p className="text-sm text-gray-600">
+                                        This will update the records currently shown in the list:
+                                    </p>
+                                    <div className="rounded-xl border border-gray-100 bg-gray-50 divide-y divide-gray-100 text-sm">
+                                        <div className="flex justify-between px-4 py-2.5">
+                                            <span className="text-gray-500">Month</span>
+                                            <span className="font-semibold text-navy">{MONTHS[filterMonth - 1]} {filterYear}</span>
+                                        </div>
+                                        <div className="flex justify-between px-4 py-2.5">
+                                            <span className="text-gray-500">Class</span>
+                                            <span className="font-semibold text-navy">{filterClass === "all" ? "All classes" : `Class ${filterClass}`}</span>
+                                        </div>
+                                        <div className="flex justify-between px-4 py-2.5">
+                                            <span className="text-gray-500">Records to mark overdue</span>
+                                            <span className="font-semibold text-rose-700">{bulkTargets.length}</span>
+                                        </div>
+                                        <div className="flex justify-between px-4 py-2.5">
+                                            <span className="text-gray-500">₹100 late fine will be added to</span>
+                                            <span className="font-semibold text-rose-700">{bulkFineCount} records</span>
+                                        </div>
+                                        <div className="flex justify-between px-4 py-2.5">
+                                            <span className="text-gray-500">Total fine amount</span>
+                                            <span className="font-semibold text-rose-700">₹{(bulkFineCount * 100).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                                        <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                                        <p className="text-xs text-blue-700">
+                                            Each new fine is also added to the student&apos;s{" "}
+                                            <strong>{MONTHS[nextMonthOf(filterMonth, filterYear).month - 1]} {nextMonthOf(filterMonth, filterYear).year}</strong>{" "}
+                                            bill as previous dues, so it is never missed at collection time.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                        <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                        <p className="text-xs text-amber-700">
+                                            Paid and arrear (carried forward) records are never touched. Records that already
+                                            have a late fine will be marked overdue without charging a second fine.
+                                            <strong className="block mt-1">There is no bulk undo — each record must be fixed one by one.</strong>
+                                        </p>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-sm text-gray-600">
+                                        You are about to charge <strong className="text-rose-700">₹{(bulkFineCount * 100).toLocaleString()}</strong> in
+                                        late fines across <strong className="text-rose-700">{bulkTargets.length}</strong> records
+                                        for <strong>{MONTHS[filterMonth - 1]} {filterYear}</strong>.
+                                    </p>
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                            Type <span className="font-mono text-rose-700">OVERDUE</span> to confirm
+                                        </label>
+                                        <input
+                                            autoFocus
+                                            value={bulkConfirmText}
+                                            onChange={e => setBulkConfirmText(e.target.value)}
+                                            placeholder="OVERDUE"
+                                            disabled={bulkLoading}
+                                            className="mt-1.5 w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-mono tracking-widest outline-none focus:border-rose-400 disabled:bg-gray-50"
+                                        />
+                                    </div>
+                                    {bulkLoading && bulkProgress.total > 0 && (
+                                        <p className="text-xs text-gray-500">
+                                            Updating {bulkProgress.done} of {bulkProgress.total} records…
+                                        </p>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                            <button
+                                onClick={bulkStep === 2 && !bulkLoading ? () => setBulkStep(1) : closeBulkDialog}
+                                disabled={bulkLoading}
+                                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-60"
+                            >
+                                {bulkStep === 2 ? "Back" : "Cancel"}
+                            </button>
+                            {bulkStep === 1 ? (
+                                <button
+                                    onClick={() => setBulkStep(2)}
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors"
+                                >
+                                    Continue
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleBulkMarkOverdue}
+                                    disabled={bulkLoading || bulkConfirmText.trim().toUpperCase() !== "OVERDUE"}
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                                    Mark {bulkTargets.length} Overdue
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
