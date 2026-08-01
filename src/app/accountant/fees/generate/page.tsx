@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { collection, getDocs, doc, setDoc, getDoc, collectionGroup, updateDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PlusCircle, Loader2, CheckCircle2, AlertCircle, Users } from "lucide-react";
+import { PlusCircle, Loader2, CheckCircle2, AlertCircle, AlertTriangle, Users, Bus, ArrowRight } from "lucide-react";
 import toast from "react-hot-toast";
 
 const MONTHS = [
@@ -29,11 +31,72 @@ export default function GenerateFeesPage() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [generating, setGenerating] = useState(false);
+    const [progress, setProgress] = useState({ done: 0, total: 0 });
     const [result, setResult] = useState<{ created: number; skipped: number; total: number; withArrears: number; generatedStudents: {id: string; name: string; class: string; amount: number}[] } | null>(null);
+
+    // Already-generated status for the selected month
+    const [existing, setExisting] = useState<{ students: number; records: number; paid: number } | null>(null);
+    const [checking, setChecking] = useState(true);
+
+    // Admin and accountant share this page — keep the transport link on the
+    // portal the user is actually browsing.
+    const pathname = usePathname();
+    const transportHref = pathname?.startsWith("/admin") ? "/admin/transport" : "/accountant/transport";
+
+    /**
+     * Counts fee records that already exist for the selected month.
+     * Reads per class folder (same as the Manage Fees list) rather than a
+     * collectionGroup query, which would need a year+month composite index.
+     */
+    const checkExisting = useCallback(async (monthIdx: number, year: number) => {
+        setChecking(true);
+        try {
+            const targetMonth = monthIdx + 1;
+            const classesSnap = await getDocs(collection(db, "fees", "structure", "classes"));
+            const snaps = await Promise.all(
+                classesSnap.docs.map(c =>
+                    getDocs(collection(db, `feeRecords/${year}/months/${targetMonth}/classes/${c.id}/records`))
+                        .catch(() => null)
+                )
+            );
+
+            // A student can hold records in two class folders after a promotion —
+            // count unique students so the number matches the real headcount.
+            const seen = new Set<string>();
+            let records = 0, paid = 0;
+            for (const snap of snaps) {
+                if (!snap) continue;
+                for (const d of snap.docs) {
+                    const data = d.data() as any;
+                    records++;
+                    seen.add(data.studentId || d.id);
+                    if (data.status === "paid") paid++;
+                }
+            }
+            setExisting({ students: seen.size, records, paid });
+        } catch (err) {
+            console.error("Existing-record check failed:", err);
+            setExisting(null);
+        } finally {
+            setChecking(false);
+        }
+    }, []);
+
+    useEffect(() => { checkExisting(selectedMonth, selectedYear); }, [selectedMonth, selectedYear, checkExisting]);
+
+    // Guard against closing/reloading the tab mid-run — a half-finished run
+    // leaves some students without a bill.
+    useEffect(() => {
+        if (!generating) return;
+        const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [generating]);
 
     const handleGenerate = async () => {
         setGenerating(true);
         setResult(null);
+        setProgress({ done: 0, total: 0 });
 
         try {
             // 1. Pre-fetch ALL fee structures upfront (one batch read instead of per-student)
@@ -62,6 +125,7 @@ export default function GenerateFeesPage() {
 
             // 3. Process in batches of 10 for concurrent writes
             const BATCH_SIZE = 10;
+            setProgress({ done: 0, total: activeStudents.length });
             for (let i = 0; i < activeStudents.length; i += BATCH_SIZE) {
                 const batch = activeStudents.slice(i, i + BATCH_SIZE);
                 const results = await Promise.allSettled(batch.map(async (student) => {
@@ -210,9 +274,11 @@ export default function GenerateFeesPage() {
                 }));
                 // Count actual failures (optional — results already tracked above)
                 results.forEach(r => { if (r.status === "rejected") skipped++; });
+                setProgress({ done: Math.min(i + BATCH_SIZE, activeStudents.length), total: activeStudents.length });
             }
 
             setResult({ created, skipped, total: activeStudents.length, withArrears, generatedStudents: generatedList });
+            checkExisting(selectedMonth, selectedYear); // refresh the "already generated" banner
             if (created > 0) {
                 toast.success(`Generated ${created} fee records! (${withArrears} with previous dues)`);
             } else {
@@ -284,6 +350,46 @@ export default function GenerateFeesPage() {
                     </div>
                 </div>
 
+                {/* ── Already-generated status for the selected month ── */}
+                {checking ? (
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 mb-4 flex items-center gap-3">
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin shrink-0" />
+                        <p className="text-sm text-gray-500">
+                            Checking whether {MONTHS[selectedMonth]} {selectedYear} is already generated…
+                        </p>
+                    </div>
+                ) : existing && existing.students > 0 ? (
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 mb-4 flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-emerald-800">
+                                Already generated — {MONTHS[selectedMonth]} {selectedYear}
+                            </p>
+                            <p className="text-xs text-emerald-700 mt-0.5">
+                                <strong>{existing.students}</strong> student{existing.students > 1 ? "s" : ""} ka bill ban chuka hai
+                                {existing.paid > 0 && <> · <strong>{existing.paid}</strong> already paid</>}
+                                {existing.records !== existing.students && <> · {existing.records} records</>}
+                            </p>
+                            <p className="text-[11px] text-emerald-600/80 mt-1.5">
+                                Generate dobara chalane par existing records ko haath nahi lagega — sirf jin students ka
+                                bill missing hai (naya admission, pehle skip hua) unka banega.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 mb-4 flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700">
+                                Not generated yet — {MONTHS[selectedMonth]} {selectedYear}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Is month ka koi fee record abhi tak nahi bana hai.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 mb-4 flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                     <div>
@@ -305,6 +411,37 @@ export default function GenerateFeesPage() {
                         </p>
                     </div>
                 </div>
+
+                {/* ── Do-not-leave warning — only while a run is in flight ── */}
+                {generating && (
+                    <div className="p-4 rounded-xl bg-rose-50 border-2 border-rose-300 mb-6 flex items-start gap-3 animate-pulse">
+                        <AlertTriangle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                            <p className="text-sm font-bold text-rose-800">
+                                ⚠️ Do NOT leave this screen
+                            </p>
+                            <p className="text-xs text-rose-700 mt-1">
+                                Fee generation chal raha hai. Page band, refresh ya dusre menu par jaana mat —
+                                beech me rukne par kuch students ke bill adhoore reh jayenge aur unhe dobara
+                                generate karna padega.
+                            </p>
+                            {progress.total > 0 && (
+                                <div className="mt-2.5">
+                                    <div className="flex justify-between text-[11px] font-semibold text-rose-700 mb-1">
+                                        <span>Processing students…</span>
+                                        <span>{progress.done} / {progress.total}</span>
+                                    </div>
+                                    <div className="w-full h-2 rounded-full bg-rose-100 overflow-hidden">
+                                        <div
+                                            className="h-full bg-rose-500 transition-all duration-300"
+                                            style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 <button
                     onClick={handleGenerate}
@@ -330,6 +467,28 @@ export default function GenerateFeesPage() {
                     )}
                 </button>
             </div>
+
+            {/* ── Transport fees live in their own module — jump straight there ── */}
+            <Link
+                href={transportHref}
+                className={`block bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:border-violet-300 hover:shadow-md transition-all group ${generating ? "pointer-events-none opacity-50" : ""}`}
+            >
+                <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center shrink-0">
+                        <Bus className="w-5 h-5 text-violet-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-navy">Transport Fees generate karni hai?</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            Bus students ke monthly transport bill alag se banate hain — yahan se seedha jao.
+                        </p>
+                    </div>
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 shrink-0 group-hover:gap-2.5 transition-all">
+                        Generate Transport Fees
+                        <ArrowRight className="w-4 h-4" />
+                    </span>
+                </div>
+            </Link>
 
             {/* Result */}
             {result && (
