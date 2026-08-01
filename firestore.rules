@@ -187,6 +187,21 @@ service cloud.firestore {
       allow write: if isTeacherOrAdmin() || isAdminOrSupervisor();
     }
 
+    // Collection-group read on "students" (only results/… uses that collection
+    // name). Lets a student pull every result that belongs to them in ONE query,
+    // no matter which class/section spelling the teacher saved it under.
+    // The query MUST filter on studentId == uid, otherwise this rule denies it.
+    match /{path=**}/students/{studentId} {
+      // uid()/studentId checks come first so a student never depends on the
+      // getUserRole() lookup inside isStaff().
+      allow read: if isAuth() && (
+        uid() == studentId ||
+        resource.data.studentId == uid() ||
+        resource.data.uid == uid() ||
+        isStaff()
+      );
+    }
+
     // ─── Exams ────────────────────────────────────────────────────────────────
     match /exams/{document=**} {
       allow read: if isAuth();

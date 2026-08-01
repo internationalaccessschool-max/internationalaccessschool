@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Award, FileText, ChevronRight, School, LayoutTemplate, Download } from "lucide-react";
-import { getStudentClassInfo } from "@/lib/utils/studentProfile";
+import { fetchStudentResults, normClassName } from "@/lib/utils/studentResults";
 
 // Grading scale matching the report card
 function getGrade(pct: number): string {
@@ -37,71 +37,38 @@ export default function StudentResultsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedResult, setSelectedResult] = useState<ExamWithResult | null>(null);
     const [studentInfo, setStudentInfo] = useState<{ className: string; section: string; name: string }>({ className: "", section: "", name: "" });
+    const [diagnostics, setDiagnostics] = useState<string[]>([]);
 
     useEffect(() => {
         if (!user) return;
 
         const fetchData = async () => {
             try {
-                let { className, section, name } = await getStudentClassInfo(user.uid);
-
-                // Normalize class name — teacher saves marks using normalized form (e.g. "5" not "Class 5")
-                const normClass = (cls: string) => cls.replace(/^class\s*/i, "").trim();
-
-                const seenExamIds = new Set<string>();
-                const loaded: ExamWithResult[] = [];
-
                 const examsSnap = await getDocs(collection(db, "exams"));
                 const exams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Exam);
                 setAllExams(exams);
 
-                for (const exam of exams) {
-                    if (seenExamIds.has(exam.id!)) continue;
-                    let resultData: Result | null = null;
+                // Class/section spellings differ between the teacher's entry screen and
+                // the student profile, so the lookup is delegated to a helper that tries
+                // every path (see lib/utils/studentResults.ts).
+                const { hits, className, section, name, diagnostics: diags } =
+                    await fetchStudentResults(user.uid, exams);
 
-                    // Try multiple className variants — teacher may save as "5" even if profile has "Class 5"
-                    const classVariants = className
-                        ? [className, normClass(className), `Class ${normClass(className)}`]
-                        : [];
+                setDiagnostics(diags);
 
-                    for (const clsVariant of classVariants) {
-                        if (!clsVariant || !section) break;
-                        try {
-                            const ref = doc(db, "results", exam.id!, "classes", clsVariant, "sections", section, "students", user.uid);
-                            const snap = await getDoc(ref);
-                            if (snap.exists()) {
-                                resultData = { id: snap.id, ...snap.data() } as Result;
-                                break;
-                            }
-                        } catch { /* try next variant */ }
-                    }
+                const examById = new Map(exams.map(e => [e.id!, e]));
+                const loaded: ExamWithResult[] = [];
 
-                    // Fallback: old composite ID path
-                    if (!resultData) {
-                        try {
-                            const oldRef = doc(db, "results", `${exam.id}_${user.uid}`);
-                            const oldSnap = await getDoc(oldRef);
-                            if (oldSnap.exists()) {
-                                resultData = { id: oldSnap.id, ...oldSnap.data() } as Result;
-                            }
-                        } catch { /* ignore */ }
-                    }
-
-                    if (resultData) {
-                        if (!resultData.examName) resultData.examName = exam.name;
-                        if (!resultData.examStartDate) resultData.examStartDate = exam.startDate;
-                        if (!resultData.examEndDate) resultData.examEndDate = exam.endDate;
-                        loaded.push({ exam, result: resultData });
-                        seenExamIds.add(exam.id!);
-                    }
-                }
-
-                // FALLBACK: if getStudentClassInfo returned empty, extract class/section from the result docs
-                if ((!className || !section) && loaded.length > 0) {
-                    const firstResult = loaded[0].result;
-                    className = firstResult.classId || className;
-                    section = firstResult.sectionId || section;
-                    name = name || (firstResult as any).studentName || "";
+                for (const hit of hits) {
+                    const exam = examById.get(hit.examId);
+                    if (!exam) continue;
+                    const resultData = hit.result;
+                    if (!resultData.examName) resultData.examName = exam.name;
+                    if (!resultData.examStartDate) resultData.examStartDate = exam.startDate;
+                    if (!resultData.examEndDate) resultData.examEndDate = exam.endDate;
+                    if (!resultData.classId) resultData.classId = hit.classId;
+                    if (!resultData.sectionId) resultData.sectionId = hit.sectionId;
+                    loaded.push({ exam, result: resultData });
                 }
 
                 setStudentInfo({ className, section, name });
@@ -116,23 +83,45 @@ export default function StudentResultsPage() {
 
                 // Load subjects — try multiple class name variants
                 const classToTry = className || "";
-                const normCls = normClass(classToTry);
+                const normCls = normClassName(classToTry);
+                let subjectList: Subject[] = [];
                 for (const key of [normCls, classToTry, `Class ${normCls}`]) {
                     if (!key) continue;
                     try {
                         const classSubDoc = await getDoc(doc(db, "classSubjects", key));
                         if (classSubDoc.exists()) {
-                            const subjectList: Subject[] = (classSubDoc.data().subjects || []).map((s: any) =>
+                            subjectList = (classSubDoc.data().subjects || []).map((s: any) =>
                                 typeof s === "object" ? s : { id: s, name: s, maxMarks: 100 }
                             );
-                            setSubjects(subjectList);
-                            const subsMap: Record<string, Subject> = {};
-                            subjectList.forEach(s => { subsMap[(s.id || s.name) as string] = s; });
-                            setSubjectsMap(subsMap);
                             break;
                         }
                     } catch { /* try next */ }
                 }
+
+                // Fallback: class has no classSubjects doc under any spelling — build the
+                // subject list from the global collection so report cards aren't blank.
+                if (subjectList.length === 0 && loaded.length > 0) {
+                    const globalNames: Record<string, string> = {};
+                    try {
+                        const subsSnap = await getDocs(collection(db, "subjects"));
+                        subsSnap.docs.forEach(d => { globalNames[d.id] = (d.data() as { name?: string }).name || d.id; });
+                    } catch { /* names fall back to the stored subject id */ }
+
+                    const seen = new Set<string>();
+                    loaded.forEach(({ result }) => {
+                        Object.values(result.marks || {}).forEach(m => {
+                            const sid = m.subjectId;
+                            if (!sid || seen.has(sid)) return;
+                            seen.add(sid);
+                            subjectList.push({ id: sid, name: globalNames[sid] || sid, maxMarks: m.total || 100 } as Subject);
+                        });
+                    });
+                }
+
+                setSubjects(subjectList);
+                const subsMap: Record<string, Subject> = {};
+                subjectList.forEach(s => { subsMap[(s.id || s.name) as string] = s; });
+                setSubjectsMap(subsMap);
             } catch (err) {
                 console.error("Error fetching student results:", err);
             } finally {
@@ -454,6 +443,12 @@ th:not(:first-child){text-align:right;}
                         <p className="text-muted-foreground mt-2 max-w-sm">
                             There are currently no published examination results available for your profile. Please check back later or contact your class teacher.
                         </p>
+                        {diagnostics.length > 0 && (
+                            <div className="mt-6 max-w-lg text-left text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                                <p className="font-semibold">Details for the school office:</p>
+                                {diagnostics.map((d, i) => <p key={i}>• {d}</p>)}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
