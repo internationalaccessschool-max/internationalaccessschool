@@ -3,7 +3,7 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, limit, Timestamp, collectionGroup, deleteField, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, setDoc, getDoc, query, where, orderBy, limit, Timestamp, collectionGroup, deleteField, writeBatch, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -75,6 +75,79 @@ interface ArrearItem {
 }
 
 const arrearKey = (kind: "school" | "transport", year: number, month: number) => `${kind[0]}:${year}-${month}`;
+
+/**
+ * Written onto a bill the moment it is collected, so the payment can later be
+ * undone completely instead of leaving half-reversed records behind.
+ * Older payments have no log — those still reverse the single record only.
+ */
+interface ReverseLog {
+    receiptNo?: string;
+    /** Arrear months this receipt auto-settled — paths, class-change safe. */
+    settled?: string[];
+    /** Later bills whose previousDues this payment reduced, and by how much. */
+    adjusted?: { path: string; delta: number }[];
+    /** The bill's own values before it was marked paid. */
+    prevStatus?: string;
+    prevPreviousDues?: number;
+    prevTotalAmount?: number;
+}
+
+/**
+ * Puts back everything a payment changed elsewhere:
+ *   • arrear months auto-settled by the same receipt → back to arrear
+ *   • later bills whose previousDues were reduced → topped back up
+ * A record touched by some other receipt in the meantime is left alone, and a
+ * later bill that has since been collected is never re-billed.
+ */
+async function reversePaymentCascade(log: ReverseLog, mainDocId: string) {
+    let restoredArrears = 0;
+    let readjusted = 0;
+
+    for (const path of log.settled || []) {
+        try {
+            const ref = doc(db, path);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) continue;
+            const d = snap.data() as any;
+            if (log.receiptNo && d.receiptNo !== log.receiptNo) continue; // settled by a different receipt since
+            await updateDoc(ref, {
+                status: "carried_forward",
+                paidOn: deleteField(),
+                receiptNo: deleteField(),
+                paymentMode: deleteField(),
+                totalAmountPaid: deleteField(),
+                markedBy: deleteField(),
+                note: deleteField(),
+            });
+            restoredArrears++;
+        } catch (e) {
+            console.error("Reverse: could not restore arrear month", path, e);
+        }
+    }
+
+    for (const adj of log.adjusted || []) {
+        if (!adj?.path || !adj.delta) continue;
+        try {
+            const ref = doc(db, adj.path);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) continue;
+            const d = snap.data() as any;
+            if (d.status === "paid") continue; // already collected — never re-bill it
+            const newPrev = (d.previousDues || 0) + adj.delta;
+            await updateDoc(ref, {
+                previousDues: newPrev,
+                totalAmount: (d.amount || 0) + newPrev,
+                ...(Array.isArray(d.arrearsDetails) ? { arrearsDetails: arrayUnion(mainDocId) } : {}),
+            });
+            readjusted++;
+        } catch (e) {
+            console.error("Reverse: could not restore later bill", adj.path, e);
+        }
+    }
+
+    return { restoredArrears, readjusted };
+}
 
 const sumArrears = (items: ArrearItem[], excluded: Set<string>) =>
     items.reduce((sum, a) => (excluded.has(a.key) ? sum : sum + a.amount), 0);
@@ -281,6 +354,10 @@ export default function ManageFeesPage() {
     // Undo (reverse paid) — admin only
     const [undoRecord, setUndoRecord] = useState<{ record: FeeRecord; type: "school" | "transport" | "both" } | null>(null);
     const [undoLoading, setUndoLoading] = useState(false);
+    // What the reverse will actually touch — read from the logs written at collection time
+    const [undoPreview, setUndoPreview] = useState<{ loading: boolean; school: ReverseLog | null; transport: ReverseLog | null }>({
+        loading: false, school: null, transport: null,
+    });
 
     // Bulk "Mark All Overdue" — two-step confirmation before touching many records
     const [bulkOpen, setBulkOpen] = useState(false);
@@ -523,6 +600,36 @@ export default function ManageFeesPage() {
 
     useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
+    // Load the reverse logs when the Undo dialog opens, so the accountant sees
+    // exactly what will change before confirming.
+    useEffect(() => {
+        if (!undoRecord) {
+            setUndoPreview({ loading: false, school: null, transport: null });
+            return;
+        }
+        const { record } = undoRecord;
+        const studentUid = record.studentId || record.id;
+        setUndoPreview({ loading: true, school: null, transport: null });
+
+        (async () => {
+            let school: ReverseLog | null = null;
+            let transport: ReverseLog | null = null;
+            try {
+                if (record.status === "paid" && record.path) {
+                    const snap = await getDoc(doc(db, record.path));
+                    school = (snap.data() as any)?.reverseLog || null;
+                }
+                if (record.transportStatus === "paid") {
+                    const snap = await getDoc(doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid));
+                    transport = (snap.data() as any)?.reverseLog || null;
+                }
+            } catch (e) {
+                console.error("Could not read reverse log:", e);
+            }
+            setUndoPreview({ loading: false, school, transport });
+        })();
+    }, [undoRecord]);
+
     // ---------- Mark Paid Logic ----------
     const openMarkPaidDialog = async (record: FeeRecord) => {
         // hasTransport: only if a real transport record exists (transportFeeAmount set from transportFeeRecords)
@@ -650,6 +757,14 @@ export default function ManageFeesPage() {
                 const pickedSchool = payTotals?.schoolPicks ?? [];
                 const skippedSchool = payTotals?.schoolSkips ?? [];
                 const pickedSchoolKeys = new Set(pickedSchool.map(a => a.key));
+                // Unticked months stay unpaid. Once THIS month is marked paid, the fee
+                // generator would otherwise stop scanning here and never see them again
+                // — so the record itself carries a note of what is still owed behind it.
+                // Doc ids don't contain the class, so this survives promotions.
+                const unclearedSchoolArrears = skippedSchool.reduce((s, a) => s + a.amount, 0);
+                const unclearedSchoolIds = skippedSchool.map(a =>
+                    a.path?.split("/").pop() || `${studentUid}_${a.year}_${String(a.month).padStart(2, "0")}`
+                );
                 const schoolDiscount = computeDiscount(schoolBaseTotal);
                 const schoolTotalPaid = schoolBaseTotal - schoolDiscount;
                 const discountFields = discountType !== "none" && schoolDiscount > 0 ? {
@@ -667,6 +782,18 @@ export default function ManageFeesPage() {
                     totalAmount: schoolBaseTotal,
                 } : {};
 
+                // Snapshot of this bill before the payment touches it, plus a running
+                // list of everything the cascades change — together they let Undo put
+                // the whole chain back exactly as it was.
+                const schoolLog: ReverseLog = {
+                    receiptNo,
+                    settled: [],
+                    adjusted: [],
+                    prevStatus: record.status,
+                    prevPreviousDues: record.previousDues || 0,
+                    prevTotalAmount: record.totalAmount || record.amount,
+                };
+
                 await updateDoc(doc(db, record.path), {
                     status: "paid",
                     paidOn: paymentDateObj,
@@ -677,6 +804,10 @@ export default function ManageFeesPage() {
                     ...arrearRewrite,
                     ...(pickedSchool.length > 0 ? { arrearsPaidMonths: pickedSchool.map(a => a.label) } : {}),
                     ...(skippedSchool.length > 0 ? { arrearsSkippedMonths: skippedSchool.map(a => a.label) } : {}),
+                    // Always written (0 when nothing was skipped) so a stale note from an
+                    // earlier partial payment can never linger on this record.
+                    unclearedArrears: unclearedSchoolArrears,
+                    unclearedRecordIds: unclearedSchoolIds,
                     ...discountFields,
                 });
                 setRecords(prev => prev.map(r =>
@@ -721,6 +852,7 @@ export default function ManageFeesPage() {
                             totalAmountPaid: past.data.amount || 0,
                             note: `Auto-paid via consolidated bill ${receiptNo}`
                         });
+                        schoolLog.settled!.push(past.ref.path);
                     }
                 } catch (e) {
                     console.error("School backward cascade failed", e);
@@ -763,6 +895,7 @@ export default function ManageFeesPage() {
                                         totalAmount: newTotal,
                                         arrearsDetails: newCfArrears,
                                     });
+                                    schoolLog.adjusted!.push({ path: next.ref.path, delta: oldPrev - newPrev });
                                     setRecords(prev => prev.map(r =>
                                         r.id === next.id
                                             ? { ...r, previousDues: newPrev, totalAmount: newTotal }
@@ -785,6 +918,7 @@ export default function ManageFeesPage() {
                                 totalAmount: newTotal,
                                 arrearsDetails: newArrearsDetails,
                             });
+                            schoolLog.adjusted!.push({ path: next.ref.path, delta: (nextData.previousDues || 0) - newPrevDues });
                             setRecords(prev => prev.map(r =>
                                 r.id === next.id
                                     ? { ...r, previousDues: newPrevDues, totalAmount: newTotal }
@@ -795,6 +929,13 @@ export default function ManageFeesPage() {
                     }
                 } catch { /* best-effort */ }
                 // ── END CASCADE DEDUCTION ────────────────────────────────────────
+
+                // Store the reverse log now that both cascades know what they touched.
+                try {
+                    await updateDoc(doc(db, record.path), { reverseLog: schoolLog });
+                } catch (e) {
+                    console.error("Could not save reverse log — Undo will reset this record only", e);
+                }
 
 
 
@@ -862,6 +1003,17 @@ export default function ManageFeesPage() {
                 const pickedTransport = payTotals?.transportPicks ?? [];
                 const skippedTransport = payTotals?.transportSkips ?? [];
                 const pickedTransportKeys = new Set(pickedTransport.map(a => a.key));
+                // Same note as the school side — what stays owed behind this bill.
+                const unclearedTransportArrears = skippedTransport.reduce((s, a) => s + a.amount, 0);
+                const transportPath = `transportFeeRecords/${record.year}/months/${record.month}/students/${studentUid}`;
+                const transportLog: ReverseLog = {
+                    receiptNo: transportReceiptNo,
+                    settled: [],
+                    adjusted: [],
+                    prevStatus: record.transportStatus || "pending",
+                    prevPreviousDues: record.transportPreviousDues || 0,
+                    prevTotalAmount: record.transportTotalAmount || record.transportFeeAmount || 0,
+                };
                 const billedTransportArrears = isTranspCF ? 0 : (payTotals?.transportArrearsDue ?? (record.transportPreviousDues || 0));
                 const transpDiscount = computeDiscount(transpBaseTotal);
                 const transpTotalPaid = transpBaseTotal - transpDiscount;
@@ -884,6 +1036,7 @@ export default function ManageFeesPage() {
                     totalAmountPaid: transpTotalPaid,
                     ...(pickedTransport.length > 0 ? { arrearsPaidMonths: pickedTransport.map(a => a.label) } : {}),
                     ...(skippedTransport.length > 0 ? { arrearsSkippedMonths: skippedTransport.map(a => a.label) } : {}),
+                    unclearedArrears: unclearedTransportArrears,
                     month: record.month,
                     year: record.year,
                     dueDate: record.dueDate,
@@ -924,6 +1077,7 @@ export default function ManageFeesPage() {
                             totalAmountPaid: prevNtd.totalAmount || prevNtd.amount || 0,
                             note: `Auto-paid via consolidated bill ${transportReceiptNo}`
                         });
+                        transportLog.settled!.push(prevTransRef.path);
                     }
                 } catch (e) {
                     console.error("Transport backward cascade failed", e);
@@ -972,6 +1126,7 @@ export default function ManageFeesPage() {
                                         previousDues: newPrev,
                                         totalAmount: newTotal,
                                     });
+                                    transportLog.adjusted!.push({ path: nextTransRef.path, delta: oldPrev - newPrev });
                                     // Also refresh local state for merge display
                                     setRecords(prev => prev.map(r =>
                                         (r.studentId || r.id) === studentUid && r.month === nextTMonth && r.year === nextTYear
@@ -991,6 +1146,7 @@ export default function ManageFeesPage() {
                                 previousDues: newPrevDues,
                                 totalAmount: newTotal,
                             });
+                            transportLog.adjusted!.push({ path: nextTransRef.path, delta: (ntd.previousDues || 0) - newPrevDues });
                             setRecords(prev => prev.map(r =>
                                 (r.studentId || r.id) === studentUid && r.month === nextTMonth && r.year === nextTYear
                                     ? { ...r, transportPreviousDues: newPrevDues, transportTotalAmount: newTotal }
@@ -1001,6 +1157,12 @@ export default function ManageFeesPage() {
                     }
                 } catch { /* best-effort */ }
                 // ── END TRANSPORT CASCADE ─────────────────────────────────────────
+
+                try {
+                    await updateDoc(doc(db, transportPath), { reverseLog: transportLog });
+                } catch (e) {
+                    console.error("Could not save transport reverse log", e);
+                }
 
 
 
@@ -1320,35 +1482,88 @@ export default function ManageFeesPage() {
         try {
             const studentUid = record.studentId || record.id;
 
+            // Fields a payment writes — all of them must go, otherwise the record
+            // still looks half-collected after the reverse.
+            const paymentFields = {
+                paidOn: deleteField(),
+                receiptNo: deleteField(),
+                paymentMode: deleteField(),
+                totalAmountPaid: deleteField(),
+                markedBy: deleteField(),
+                discountType: deleteField(),
+                discountAmount: deleteField(),
+                discountPercent: deleteField(),
+                arrearsPaidMonths: deleteField(),
+                arrearsSkippedMonths: deleteField(),
+                unclearedArrears: deleteField(),
+                unclearedRecordIds: deleteField(),
+                reverseLog: deleteField(),
+            };
+
             if ((type === "school" || type === "both") && record.status === "paid" && record.path) {
-                await updateDoc(doc(db, record.path), {
-                    status: "pending",
-                    paidOn: deleteField(),
-                    receiptNo: deleteField(),
-                    paymentMode: deleteField(),
-                    totalAmountPaid: deleteField(),
-                    markedBy: deleteField(),
+                const ref = doc(db, record.path);
+                const snap = await getDoc(ref);
+                const log: ReverseLog = (snap.data() as any)?.reverseLog || {};
+
+                // Undo the chain first, then the bill itself.
+                const { restoredArrears, readjusted } = await reversePaymentCascade(log, record.id);
+
+                const restoredDues = log.prevPreviousDues;
+                const restoredTotal = log.prevTotalAmount;
+                await updateDoc(ref, {
+                    status: log.prevStatus || "pending",
+                    ...(restoredDues !== undefined ? { previousDues: restoredDues } : {}),
+                    ...(restoredTotal !== undefined ? { totalAmount: restoredTotal } : {}),
+                    ...paymentFields,
                 });
                 setRecords(prev => prev.map(r =>
-                    r.id === record.id ? { ...r, status: "pending", receiptNo: null, paidOn: null } : r
+                    r.id === record.id
+                        ? {
+                            ...r,
+                            status: (log.prevStatus as FeeRecord["status"]) || "pending",
+                            receiptNo: null,
+                            paidOn: null,
+                            ...(restoredDues !== undefined ? { previousDues: restoredDues } : {}),
+                            ...(restoredTotal !== undefined ? { totalAmount: restoredTotal } : {}),
+                        }
+                        : r
                 ));
-                toast.success(`School fee wapas pending — ${record.studentName}`);
+                toast.success(
+                    restoredArrears || readjusted
+                        ? `School fee reversed — ${restoredArrears} arrear month(s) restored, ${readjusted} later bill(s) updated`
+                        : `School fee wapas pending — ${record.studentName}`
+                );
             }
 
             if ((type === "transport" || type === "both") && record.transportStatus === "paid") {
                 const trRef = doc(db, "transportFeeRecords", record.year.toString(), "months", record.month.toString(), "students", studentUid);
+                const trSnap = await getDoc(trRef);
+                const trLog: ReverseLog = (trSnap.data() as any)?.reverseLog || {};
+
+                const { restoredArrears, readjusted } = await reversePaymentCascade(trLog, studentUid);
+
                 await updateDoc(trRef, {
-                    status: "pending",
-                    paidOn: deleteField(),
-                    receiptNo: deleteField(),
-                    paymentMode: deleteField(),
-                    totalAmountPaid: deleteField(),
-                    markedBy: deleteField(),
+                    status: trLog.prevStatus || "pending",
+                    ...(trLog.prevPreviousDues !== undefined ? { previousDues: trLog.prevPreviousDues } : {}),
+                    ...(trLog.prevTotalAmount !== undefined ? { totalAmount: trLog.prevTotalAmount } : {}),
+                    ...paymentFields,
                 });
                 setRecords(prev => prev.map(r =>
-                    r.id === record.id ? { ...r, transportStatus: "pending", transportReceiptNo: null } : r
+                    r.id === record.id
+                        ? {
+                            ...r,
+                            transportStatus: (trLog.prevStatus as FeeRecord["transportStatus"]) || "pending",
+                            transportReceiptNo: null,
+                            ...(trLog.prevPreviousDues !== undefined ? { transportPreviousDues: trLog.prevPreviousDues } : {}),
+                            ...(trLog.prevTotalAmount !== undefined ? { transportTotalAmount: trLog.prevTotalAmount } : {}),
+                        }
+                        : r
                 ));
-                toast.success(`Transport fee wapas pending — ${record.studentName}`);
+                toast.success(
+                    restoredArrears || readjusted
+                        ? `Transport fee reversed — ${restoredArrears} arrear month(s) restored, ${readjusted} later bill(s) updated`
+                        : `Transport fee wapas pending — ${record.studentName}`
+                );
             }
 
             setUndoRecord(null);
@@ -1753,6 +1968,71 @@ export default function ManageFeesPage() {
                             <p className="text-sm text-gray-600">
                                 Yeh action fee ko wapas <strong>Pending</strong> kar dega aur receipt delete ho jaayegi. Confirm karo?
                             </p>
+
+                            {/* What else this reverse will touch */}
+                            {(() => {
+                                if (undoPreview.loading) {
+                                    return (
+                                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking what this payment changed…
+                                        </div>
+                                    );
+                                }
+
+                                const logs = [
+                                    ...(undoRecord.type !== "transport" && undoPreview.school ? [undoPreview.school] : []),
+                                    ...(undoRecord.type !== "school" && undoPreview.transport ? [undoPreview.transport] : []),
+                                ];
+                                const settled = logs.reduce((n, l) => n + (l.settled?.length || 0), 0);
+                                const adjusted = logs.reduce((n, l) => n + (l.adjusted?.length || 0), 0);
+                                const addedBack = logs.reduce((n, l) => n + (l.adjusted || []).reduce((s, a) => s + (a.delta || 0), 0), 0);
+
+                                // No log at all → payment was collected before full reverse existed
+                                const hasAnyLog =
+                                    (undoRecord.type !== "transport" && undoRecord.record.status === "paid" && undoPreview.school) ||
+                                    (undoRecord.type !== "school" && undoRecord.record.transportStatus === "paid" && undoPreview.transport);
+
+                                if (!hasAnyLog) {
+                                    return (
+                                        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                                            <p className="text-xs font-semibold text-amber-800">Purana payment</p>
+                                            <p className="text-xs text-amber-700 mt-1">
+                                                Ye payment full-reverse feature se pehle liya gaya tha, isliye sirf yahi record
+                                                pending hoga. Purane arrear months aur aage ke bill manually check kar lena.
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                if (settled === 0 && adjusted === 0) {
+                                    return (
+                                        <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
+                                            <p className="text-xs text-gray-600">
+                                                Is payment ne sirf yahi bill badla tha — koi arrear month ya aage ka bill affect nahi hua.
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 space-y-1.5">
+                                        <p className="text-xs font-semibold text-blue-800">Yeh sab wapas hoga:</p>
+                                        {settled > 0 && (
+                                            <p className="text-xs text-blue-700">
+                                                • <strong>{settled}</strong> purane arrear month wapas <strong>Arrear</strong> ho jayenge
+                                            </p>
+                                        )}
+                                        {adjusted > 0 && (
+                                            <p className="text-xs text-blue-700">
+                                                • <strong>{adjusted}</strong> aage ke bill me <strong>₹{addedBack.toLocaleString()}</strong> wapas jud jayega
+                                            </p>
+                                        )}
+                                        <p className="text-[11px] text-blue-500 pt-0.5">
+                                            Jo bill beech me collect ho chuka hai use haath nahi lagaya jayega.
+                                        </p>
+                                    </div>
+                                );
+                            })()}
                             {/* Toggle — only if both school and transport are paid */}
                             {undoRecord.record.status === "paid" && undoRecord.record.transportStatus === "paid" && (
                                 <div className="flex gap-2">

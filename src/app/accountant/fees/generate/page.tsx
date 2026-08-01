@@ -212,15 +212,35 @@ export default function GenerateFeesPage() {
 
                         const prevData = entry.data;
 
+                        // A month can be settled and STILL have dues sitting behind it:
+                        // the accountant may have collected it with some arrear months
+                        // unticked. Such a record carries `unclearedArrears` — pick it up
+                        // and immediately zero it, otherwise every later month would
+                        // charge the same amount again.
+                        const leftOver = prevData.unclearedArrears || 0;
+                        // Fields to clear the note — merged into whatever update this
+                        // month already needs, so one write per record.
+                        const clearNote = leftOver > 0
+                            ? { unclearedArrears: 0, unclearedAbsorbedBy: recordId } // audit: which bill took them over
+                            : {};
+                        if (leftOver > 0) {
+                            previousDues += leftOver;
+                            carriedOverIds.push(...(prevData.unclearedRecordIds || []));
+                        }
+
                         if (prevData.status === "paid" || prevData.status === "carried_forward") {
-                            break; // paid or already merged — stop
+                            if (leftOver > 0) {
+                                carryForwardBatch.update(entry.ref, clearNote);
+                                hasBatchOps = true;
+                            }
+                            break; // everything older is settled or already merged — stop
                         }
 
                         if (prevData.status === "pending" || prevData.status === "overdue") {
                             const prevTotal = prevData.totalAmount || prevData.amount || 0;
                             previousDues += prevTotal;
                             carriedOverIds.push(prevRecordId);
-                            carryForwardBatch.update(entry.ref, { status: "carried_forward" });
+                            carryForwardBatch.update(entry.ref, { status: "carried_forward", ...clearNote });
                             hasBatchOps = true;
                         }
                     }

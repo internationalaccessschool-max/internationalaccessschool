@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import {
     collection, query, getDocs, doc, setDoc, deleteDoc,
-    serverTimestamp, orderBy, collectionGroup, updateDoc, getDoc
+    serverTimestamp, orderBy, collectionGroup, updateDoc, getDoc, writeBatch
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
@@ -74,11 +74,13 @@ interface TransportFeeRecord {
     busId: string;
     busNumber: string;
     routeDetails: string;
-    amount: number;
+    amount: number;               // this month's own bus fee
+    previousDues?: number;        // unpaid earlier months folded into this bill
+    totalAmount?: number;         // amount + previousDues — what the parent owes
     month: number;
     year: number;
     dueDate: any;
-    status: "pending" | "paid" | "overdue";
+    status: "pending" | "paid" | "overdue" | "carried_forward";
     paidOn: any;
     receiptNo: string | null;
     parentEmail?: string;
@@ -126,6 +128,7 @@ export default function TransportAdminPage() {
     const [feeRecords, setFeeRecords] = useState<TransportFeeRecord[]>([]);
     const [loadingFees, setLoadingFees] = useState(false);
     const [generatingFees, setGeneratingFees] = useState(false);
+    const [feeProgress, setFeeProgress] = useState({ done: 0, total: 0 });
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Mark-paid confirm dialog — lets the date be back-dated (e.g. payment
     // received on a Saturday but only marked paid on Monday when school reopens).
@@ -203,6 +206,19 @@ export default function TransportAdminPage() {
         if (activeTab === "fees") fetchFeeRecords();
     }, [activeTab, fetchFeeRecords]);
 
+    // Guard against closing/reloading the tab mid-run — a half-finished run leaves
+    // some bus students without a bill.
+    useEffect(() => {
+        if (!generatingFees) return;
+        const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [generatingFees]);
+
+    // Academic session label — April starts a new session, Jan–Mar belong to the previous one.
+    const getSessionYear = (month: number, year: number): string =>
+        month >= 4 ? String(year) : String(year - 1);
+
     const handleGenerateTransportFees = async () => {
         const busStudents = students.filter(s => {
             const t = (s.transport || "").trim().toUpperCase();
@@ -220,18 +236,27 @@ export default function TransportAdminPage() {
         const confirm = window.confirm(
             `Generate transport fee records for ${MONTHS[feeMonth - 1]} ${feeYear}?\n\n` +
             `• ${busStudents.length} bus students will get records\n` +
-            `• Existing records for the same month will be skipped`
+            `• Existing records for the same month will be skipped\n` +
+            `• Unpaid previous dues will be carried forward automatically`
         );
         if (!confirm) return;
 
         setGeneratingFees(true);
-        let created = 0, skipped = 0;
+        setFeeProgress({ done: 0, total: busStudents.length });
+        let created = 0, skipped = 0, withArrears = 0;
+        const session = getSessionYear(feeMonth, feeYear);
         try {
-            for (const student of busStudents) {
+            // Each student needs its own arrear scan (up to 12 sequential reads), so
+            // process 10 at a time instead of one by one — otherwise a few hundred
+            // bus students turn into thousands of back-to-back round trips.
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < busStudents.length; i += BATCH_SIZE) {
+                const slice = busStudents.slice(i, i + BATCH_SIZE);
+                const results = await Promise.allSettled(slice.map(async (student) => {
                 const studentId = student.id;
                 const docRef = doc(db, "transportFeeRecords", feeYear.toString(), "months", feeMonth.toString(), "students", studentId);
                 const existing = await getDoc(docRef);
-                if (existing.exists()) { skipped++; continue; }
+                if (existing.exists()) { skipped++; return; }
 
                 // Handle Bus+Route format ("busId::routeId") or legacy ("busId")
                 const transportStr = (student.transport || "").trim();
@@ -264,6 +289,59 @@ export default function TransportAdminPage() {
                     }
                 }
 
+                // ── ARREARS LOGIC for Transport ───────────────────────────────
+                // Walk back month by month: every unpaid month is folded into this
+                // bill as previousDues and marked carried_forward so it is never
+                // billed twice. Records are keyed by studentId only, so this is
+                // unaffected by a class or section change.
+                let previousDues = 0;
+                const carryForwardBatch = writeBatch(db);
+                let hasBatchOps = false;
+
+                for (let offset = 1; offset <= 12; offset++) {
+                    let prevMonth = feeMonth - offset;
+                    let prevYear = feeYear;
+                    if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+
+                    const prevRef = doc(
+                        db, "transportFeeRecords",
+                        prevYear.toString(), "months", prevMonth.toString(), "students", studentId
+                    );
+                    const prevSnap = await getDoc(prevRef);
+                    if (!prevSnap.exists()) continue;
+
+                    const prevData = prevSnap.data() as any;
+
+                    // A settled month can still have dues behind it when the accountant
+                    // collected it with some arrear months unticked. Take over that
+                    // leftover and zero it right away, else every later month would
+                    // charge the same amount again.
+                    const leftOver = prevData.unclearedArrears || 0;
+                    const clearNote = leftOver > 0 ? { unclearedArrears: 0 } : {};
+                    if (leftOver > 0) previousDues += leftOver;
+
+                    if (prevData.status === "paid" || prevData.status === "carried_forward") {
+                        if (leftOver > 0) {
+                            carryForwardBatch.update(prevRef, clearNote);
+                            hasBatchOps = true;
+                        }
+                        break;
+                    }
+
+                    if (prevData.status === "pending" || prevData.status === "overdue") {
+                        const prevTotal = prevData.totalAmount || prevData.amount || 0;
+                        previousDues += prevTotal;
+                        carryForwardBatch.update(prevRef, { status: "carried_forward", ...clearNote });
+                        hasBatchOps = true;
+                    }
+                }
+
+                if (hasBatchOps) {
+                    await carryForwardBatch.commit();
+                    withArrears++;
+                }
+                // ── END ARREARS LOGIC ─────────────────────────────────────────
+
                 const name = getDisplayName(student);
                 const cls = student.currentClass || student.className || "";
                 const dueDate = new Date(feeYear, feeMonth - 1, 10);
@@ -277,6 +355,9 @@ export default function TransportAdminPage() {
                     busNumber: bscBusNumber,
                     routeDetails: routeName,
                     amount: feeAmount,
+                    previousDues,
+                    totalAmount: feeAmount + previousDues,
+                    session,
                     month: feeMonth,
                     year: feeYear,
                     dueDate,
@@ -287,14 +368,18 @@ export default function TransportAdminPage() {
                     createdAt: serverTimestamp(),
                 });
                 created++;
+                }));
+                results.forEach(r => { if (r.status === "rejected") { skipped++; console.error(r.reason); } });
+                setFeeProgress({ done: Math.min(i + BATCH_SIZE, busStudents.length), total: busStudents.length });
             }
-            showToast(`Generated ${created} records. ${skipped} existing skipped.`);
+            showToast(`Generated ${created} records. ${skipped} existing skipped. ${withArrears} with previous dues.`);
             fetchFeeRecords();
         } catch (err) {
             console.error(err);
             showToast("Error generating fees.", "error");
         } finally {
             setGeneratingFees(false);
+            setFeeProgress({ done: 0, total: 0 });
         }
     };
 
@@ -304,11 +389,47 @@ export default function TransportAdminPage() {
             const receiptNo = await getNextReceiptNo();
             const paidOnDate = paidDateStr ? new Date(`${paidDateStr}T12:00:00`) : new Date();
             const path = record.path || `transportFeeRecords/${record.year}/months/${record.month}/students/${record.id}`;
+            // An arrear month only carries its own fee — its previousDues were already
+            // absorbed into (and billed by) the next live month.
+            const isCF = record.status === "carried_forward";
+            const paidTotal = isCF ? record.amount : (record.totalAmount ?? record.amount);
+
             await updateDoc(doc(db, path), {
                 status: "paid",
                 paidOn: paidOnDate,
                 receiptNo,
+                totalAmountPaid: paidTotal,
             });
+
+            // This bill included the earlier unpaid months, so settle them too —
+            // otherwise they sit as arrears forever and the next generation, which
+            // stops at the first settled month, would never see them again.
+            if (!isCF && (record.previousDues || 0) > 0) {
+                try {
+                    for (let offset = 1; offset <= 12; offset++) {
+                        let prevMonth = record.month - offset;
+                        let prevYear = record.year;
+                        if (prevMonth <= 0) { prevMonth += 12; prevYear -= 1; }
+                        const prevRef = doc(
+                            db, "transportFeeRecords",
+                            prevYear.toString(), "months", prevMonth.toString(), "students", record.studentId || record.id
+                        );
+                        const prevSnap = await getDoc(prevRef);
+                        if (!prevSnap.exists()) continue;
+                        const prevData = prevSnap.data() as any;
+                        if (prevData.status !== "carried_forward") break;
+                        await updateDoc(prevRef, {
+                            status: "paid",
+                            paidOn: paidOnDate,
+                            receiptNo,
+                            totalAmountPaid: prevData.amount || 0,
+                            note: `Auto-paid via consolidated bill ${receiptNo}`,
+                        });
+                    }
+                } catch (e) {
+                    console.error("Transport backward cascade failed", e);
+                }
+            }
             setFeeRecords(prev => prev.map(r => r.id === record.id
                 ? { ...r, status: "paid", receiptNo, paidOn: { toDate: () => paidOnDate } }
                 : r
@@ -503,14 +624,18 @@ export default function TransportAdminPage() {
         return r.studentName?.toLowerCase().includes(q) || r.busNumber?.toLowerCase().includes(q) || r.className?.includes(q);
     });
 
-    const totalCollected = feeRecords.filter(r => r.status === "paid").reduce((s, r) => s + r.amount, 0);
-    const totalPending = feeRecords.filter(r => r.status !== "paid").reduce((s, r) => s + r.amount, 0);
+    // Arrear rows only owe their own fee — their previous dues are billed by a later month.
+    const payableOf = (r: TransportFeeRecord) =>
+        r.status === "carried_forward" ? r.amount : (r.totalAmount ?? r.amount);
+    const totalCollected = feeRecords.filter(r => r.status === "paid").reduce((s, r) => s + payableOf(r), 0);
+    const totalPending = feeRecords.filter(r => r.status !== "paid").reduce((s, r) => s + payableOf(r), 0);
     const overdueCount = feeRecords.filter(r => r.status === "overdue").length;
 
     const STATUS_CFG = {
         paid: { label: "Paid", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
         pending: { label: "Pending", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
         overdue: { label: "Overdue", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+        carried_forward: { label: "Arrear", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
     };
 
     // ─── Render ───────────────────────────────────────────────────────────────
@@ -874,6 +999,35 @@ export default function TransportAdminPage() {
                                         <RefreshCw className="w-4 h-4" />
                                     </Button>
                                 </div>
+
+                                {/* Do-not-leave warning — only while a run is in flight */}
+                                {generatingFees && (
+                                    <div className="mt-4 p-4 rounded-xl bg-rose-50 border-2 border-rose-300 flex items-start gap-3 animate-pulse">
+                                        <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-rose-800">⚠️ Do NOT leave this screen</p>
+                                            <p className="text-xs text-rose-700 mt-1">
+                                                Transport fee generation chal raha hai. Page band, refresh ya dusre menu par
+                                                jaana mat — beech me rukne par kuch students ke bill adhoore reh jayenge aur
+                                                unke purane dues carry nahi honge.
+                                            </p>
+                                            {feeProgress.total > 0 && (
+                                                <div className="mt-2.5">
+                                                    <div className="flex justify-between text-[11px] font-semibold text-rose-700 mb-1">
+                                                        <span>Processing bus students…</span>
+                                                        <span>{feeProgress.done} / {feeProgress.total}</span>
+                                                    </div>
+                                                    <div className="w-full h-2 rounded-full bg-rose-100 overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-rose-500 transition-all duration-300"
+                                                            style={{ width: `${Math.round((feeProgress.done / feeProgress.total) * 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Fee Stats */}
@@ -940,7 +1094,14 @@ export default function TransportAdminPage() {
                                                                     <Bus className="w-3 h-3" /> {record.busNumber || "—"}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-3 font-bold text-navy">₹{record.amount?.toLocaleString() || "0"}</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="font-bold text-navy">₹{payableOf(record)?.toLocaleString() || "0"}</span>
+                                                                {record.status !== "carried_forward" && (record.previousDues || 0) > 0 && (
+                                                                    <div className="text-[11px] text-rose-500 font-medium mt-0.5">
+                                                                        incl. ₹{record.previousDues!.toLocaleString()} prev. dues
+                                                                    </div>
+                                                                )}
+                                                            </td>
                                                             <td className="px-4 py-3">
                                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                                                                     {cfg.label}
@@ -998,7 +1159,12 @@ export default function TransportAdminPage() {
                         <div className="flex justify-between items-center p-5 border-b border-gray-100">
                             <div>
                                 <h3 className="text-base font-bold text-navy">Mark Transport Fee Paid</h3>
-                                <p className="text-xs text-gray-400 mt-0.5">{markPaidTarget.studentName} · ₹{markPaidTarget.amount?.toLocaleString()}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    {markPaidTarget.studentName} · ₹{payableOf(markPaidTarget)?.toLocaleString()}
+                                    {markPaidTarget.status !== "carried_forward" && (markPaidTarget.previousDues || 0) > 0 && (
+                                        <span className="text-rose-500 font-medium"> (incl. ₹{markPaidTarget.previousDues!.toLocaleString()} arrears)</span>
+                                    )}
+                                </p>
                             </div>
                             <button onClick={() => setMarkPaidTarget(null)} className="p-2 text-gray-400 hover:text-rose-500 rounded-xl">
                                 <X className="w-5 h-5" />

@@ -127,6 +127,7 @@ export default function TransportAccountantPage() {
     const [feeRecords, setFeeRecords] = useState<TransportFeeRecord[]>([]);
     const [loadingFees, setLoadingFees] = useState(false);
     const [generatingFees, setGeneratingFees] = useState(false);
+    const [feeProgress, setFeeProgress] = useState({ done: 0, total: 0 });
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [busView, setBusView] = useState<"all" | string>("all");
     const [sortKey, setSortKey] = useState<string | null>(null);
@@ -197,6 +198,15 @@ export default function TransportAccountantPage() {
         if (activeTab === "fees") fetchFeeRecords();
     }, [activeTab, fetchFeeRecords]);
 
+    // Guard against closing/reloading the tab mid-run — a half-finished run leaves
+    // some bus students without a bill.
+    useEffect(() => {
+        if (!generatingFees) return;
+        const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [generatingFees]);
+
     // Helper: get session year (April start of year → current year; Jan-March → previous year)
     const getSessionYear = (month: number, year: number): string => {
         return month >= 4 ? String(year) : String(year - 1);
@@ -225,6 +235,7 @@ export default function TransportAccountantPage() {
         if (!confirm) return;
 
         setGeneratingFees(true);
+        setFeeProgress({ done: 0, total: busStudents.length });
         let created = 0, skipped = 0, withArrears = 0;
         const session = getSessionYear(feeMonth, feeYear);
 
@@ -286,12 +297,27 @@ export default function TransportAccountantPage() {
                         if (!prevSnap.exists()) continue;
 
                         const prevData = prevSnap.data() as any;
-                        if (prevData.status === "paid" || prevData.status === "carried_forward") break;
+
+                        // A settled month can still have dues behind it when the
+                        // accountant collected it with some arrear months unticked.
+                        // Take over that leftover and zero it right away, else every
+                        // later month would charge the same amount again.
+                        const leftOver = prevData.unclearedArrears || 0;
+                        const clearNote = leftOver > 0 ? { unclearedArrears: 0 } : {};
+                        if (leftOver > 0) previousDues += leftOver;
+
+                        if (prevData.status === "paid" || prevData.status === "carried_forward") {
+                            if (leftOver > 0) {
+                                carryForwardBatch.update(prevRef, clearNote);
+                                hasBatchOps = true;
+                            }
+                            break;
+                        }
 
                         if (prevData.status === "pending" || prevData.status === "overdue") {
                             const prevTotal = prevData.totalAmount || prevData.amount || 0;
                             previousDues += prevTotal;
-                            carryForwardBatch.update(prevRef, { status: "carried_forward" });
+                            carryForwardBatch.update(prevRef, { status: "carried_forward", ...clearNote });
                             hasBatchOps = true;
                         }
                     }
@@ -330,6 +356,7 @@ export default function TransportAccountantPage() {
                     created++;
                 }));
                 results.forEach(r => { if (r.status === "rejected") { skipped++; console.error(r.reason); } });
+                setFeeProgress({ done: Math.min(i + BATCH_SIZE, busStudents.length), total: busStudents.length });
             }
             showToast(`Generated ${created} records. ${skipped} skipped. ${withArrears} with previous dues.`);
             fetchFeeRecords();
@@ -338,6 +365,7 @@ export default function TransportAccountantPage() {
             showToast("Error generating fees.", "error");
         } finally {
             setGeneratingFees(false);
+            setFeeProgress({ done: 0, total: 0 });
         }
     };
 
@@ -854,6 +882,35 @@ export default function TransportAccountantPage() {
                                         <RefreshCw className="w-4 h-4" />
                                     </Button>
                                 </div>
+
+                                {/* Do-not-leave warning — only while a run is in flight */}
+                                {generatingFees && (
+                                    <div className="mt-4 p-4 rounded-xl bg-rose-50 border-2 border-rose-300 flex items-start gap-3 animate-pulse">
+                                        <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-rose-800">⚠️ Do NOT leave this screen</p>
+                                            <p className="text-xs text-rose-700 mt-1">
+                                                Transport fee generation chal raha hai. Page band, refresh ya dusre menu par
+                                                jaana mat — beech me rukne par kuch students ke bill adhoore reh jayenge aur
+                                                unke purane dues carry nahi honge.
+                                            </p>
+                                            {feeProgress.total > 0 && (
+                                                <div className="mt-2.5">
+                                                    <div className="flex justify-between text-[11px] font-semibold text-rose-700 mb-1">
+                                                        <span>Processing bus students…</span>
+                                                        <span>{feeProgress.done} / {feeProgress.total}</span>
+                                                    </div>
+                                                    <div className="w-full h-2 rounded-full bg-rose-100 overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-rose-500 transition-all duration-300"
+                                                            style={{ width: `${Math.round((feeProgress.done / feeProgress.total) * 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Fee Stats */}
