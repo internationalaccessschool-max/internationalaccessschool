@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { LogOut, ChevronRight } from "lucide-react";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { useNavScrollMemory } from "@/components/dashboard/use-nav-scroll-memory";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -40,6 +41,7 @@ function NavLink({ link, isActive }: { link: NavItem; isActive: boolean }) {
     return (
         <Link
             href={link.href}
+            data-active={isActive}
             className={cn(
                 "relative flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 group",
                 isActive
@@ -70,6 +72,7 @@ export function Sidebar({ title, links }: SidebarProps) {
     const router = useRouter();
     const { user } = useAuth();
     const [showNotificationBell, setShowNotificationBell] = useState(false);
+    const { ref: navRef, onScroll: onNavScroll } = useNavScrollMemory(`sidebar-scroll:${title}`);
 
     useEffect(() => {
         const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -111,7 +114,11 @@ export function Sidebar({ title, links }: SidebarProps) {
             </div>
 
             {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-4 px-3">
+            <div
+                ref={navRef}
+                onScroll={onNavScroll}
+                className="flex-1 overflow-y-auto py-4 px-3"
+            >
                 {grouped ? (
                     (links as NavSection[]).map((section) => (
                         <div key={section.section} className="mb-4">
