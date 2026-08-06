@@ -9,6 +9,7 @@ import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { LogOut, ChevronRight, Menu, X } from "lucide-react";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { useNavScrollMemory } from "@/components/dashboard/use-nav-scroll-memory";
 import { useRouter } from "next/navigation";
 
 interface NavItem {
@@ -40,6 +41,7 @@ function NavLink({ link, isActive, onClick }: { link: NavItem; isActive: boolean
         <Link
             href={link.href}
             onClick={onClick}
+            data-active={isActive}
             className={cn(
                 "relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 group",
                 isActive
@@ -71,6 +73,7 @@ export function MobileSidebar({ title, links }: MobileSidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
+    const { ref: navRef, onScroll: onNavScroll } = useNavScrollMemory(`sidebar-scroll:${title}`);
 
     // Close menu when route changes
     useEffect(() => {
@@ -162,7 +165,11 @@ export function MobileSidebar({ title, links }: MobileSidebarProps) {
                 </div>
 
                 {/* Navigation Links */}
-                <div className="flex-1 overflow-y-auto py-4 px-3">
+                <div
+                    ref={navRef}
+                    onScroll={onNavScroll}
+                    className="flex-1 overflow-y-auto py-4 px-3"
+                >
                     {grouped ? (
                         (links as NavSection[]).map((section) => (
                             <div key={section.section} className="mb-6">
