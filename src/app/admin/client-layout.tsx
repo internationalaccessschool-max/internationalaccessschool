@@ -71,6 +71,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ],
         },
         {
+            section: "Finance",
+            items: [
+                { href: "/admin/fees", label: "Fee Overview", icon: BarChart3 },
+                { href: "/admin/finance", label: "Fee Dashboard", icon: Banknote },
+                { href: "/admin/finance/fees", label: "Manage Fees", icon: ClipboardList },
+                { href: "/admin/finance/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
+                { href: "/admin/finance/fees/annual", label: "Annual Fees (Session)", icon: CalendarDays },
+                { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
+                { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
+                { href: "/admin/transport", label: "Transport", icon: Bus },
+                { href: "/admin/teacher-salary", label: "Staff Salary", icon: Banknote },
+            ],
+        },
+        {
             section: "Content",
             items: [
                 { href: "/admin/hero", label: "Hero Slider", icon: Sliders },
@@ -86,20 +100,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: "/admin/exams", label: "Exams", icon: Award },
                 { href: "/admin/class-subjects", label: "Class Subjects", icon: Layers },
                 { href: "/admin/results/entry", label: "Marks Entry", icon: ClipboardList },
-            ],
-        },
-        {
-            section: "Finance",
-            items: [
-                { href: "/admin/fees", label: "Fee Overview", icon: BarChart3 },
-                { href: "/admin/finance", label: "Fee Dashboard", icon: Banknote },
-                { href: "/admin/finance/fees", label: "Manage Fees", icon: ClipboardList },
-                { href: "/admin/finance/advance-fee", label: "Advance Fee Payment", icon: CreditCard },
-                { href: "/admin/finance/fees/annual", label: "Annual Fees (Session)", icon: CalendarDays },
-                { href: "/admin/finance/fees/structure", label: "Fee Structure", icon: Settings },
-                { href: "/admin/finance/fees/generate", label: "Generate Monthly", icon: UserCheck2 },
-                { href: "/admin/transport", label: "Transport", icon: Bus },
-                { href: "/admin/teacher-salary", label: "Staff Salary", icon: Banknote },
             ],
         },
         {
