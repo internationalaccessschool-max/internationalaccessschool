@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { collectionGroup, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X, Copy, Check, MessageCircle, Smartphone, QrCode } from "lucide-react";
+import { Banknote, CheckCircle2, Clock, AlertCircle, Loader2, Printer, X, Copy, Check, MessageCircle, Smartphone, QrCode, Landmark } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { printReceiptHTML, buildReceiptHTML } from "@/lib/print-receipt";
+import { mergePaymentSettings, type PaymentSettings } from "@/lib/payment-settings";
 
 interface FeeRecord {
     id: string;
@@ -64,23 +65,18 @@ export default function StudentFeesPage() {
     const [receiptRecord, setReceiptRecord] = useState<FeeRecord | null>(null);
     const [studentName, setStudentName] = useState("");
     const [studentRoll, setStudentRoll] = useState("");
-    const [pay, setPay] = useState<{ upiId: string; payeeName: string; whatsapp: string; note: string } | null>(null);
-    const [copied, setCopied] = useState(false);
+    const [pay, setPay] = useState<PaymentSettings | null>(null);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
 
-    // School's UPI / WhatsApp details — managed from Admin → Settings → Fee Payment
+    // School's UPI / bank / WhatsApp details — managed from Admin → Settings → Fee Payment
     useEffect(() => {
         (async () => {
             try {
                 const snap = await getDoc(doc(db, "settings", "global"));
-                const p = (snap.data() as any)?.payment;
-                if (p?.upiId) {
-                    setPay({
-                        upiId: p.upiId,
-                        payeeName: p.payeeName || "International Access School",
-                        whatsapp: p.whatsapp || "",
-                        note: p.note || "",
-                    });
-                }
+                const data = snap.data() as { payment?: Partial<PaymentSettings> } | undefined;
+                const p = mergePaymentSettings(data?.payment);
+                // Nothing to pay to — don't show an empty payment card
+                if (p.upiId || p.accountNumber) setPay(p);
             } catch (e) {
                 console.warn("Payment settings unavailable:", e);
             }
@@ -184,7 +180,7 @@ export default function StudentFeesPage() {
 
     // upi://pay opens whichever UPI app the parent has installed. Amount is
     // prefilled but stays editable in the app, so part payments still work.
-    const upiLink = pay
+    const upiLink = pay?.upiId
         ? `upi://pay?pa=${encodeURIComponent(pay.upiId)}&pn=${encodeURIComponent(pay.payeeName)}` +
           (totalDue > 0 ? `&am=${totalDue}` : "") +
           `&cu=INR&tn=${encodeURIComponent(`Fee ${displayAdm || displayName}`.slice(0, 40))}`
@@ -203,14 +199,13 @@ export default function StudentFeesPage() {
         )}`
         : "";
 
-    const copyUpi = async () => {
-        if (!pay) return;
+    const copyField = async (field: string, value: string) => {
         try {
-            await navigator.clipboard.writeText(pay.upiId);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(value);
+            setCopiedField(field);
+            setTimeout(() => setCopiedField(null), 2000);
         } catch {
-            // Clipboard blocked (http / older browser) — the ID is visible on screen anyway
+            // Clipboard blocked (http / older browser) — the value is visible on screen anyway
         }
     };
 
@@ -288,41 +283,102 @@ export default function StudentFeesPage() {
 
                     <div className="p-5 flex flex-col sm:flex-row gap-6">
                         {/* QR — generated from the UPI ID, so it can never drift out of sync */}
-                        <div className="flex flex-col items-center gap-2 shrink-0 mx-auto sm:mx-0">
-                            <div className="p-3 bg-white rounded-xl border-2 border-gray-100">
-                                <QRCodeCanvas value={upiLink} size={160} level="M" marginSize={1} />
+                        {pay.upiId && (
+                            <div className="flex flex-col items-center gap-2 shrink-0 mx-auto sm:mx-0">
+                                <div className="p-3 bg-white rounded-xl border-2 border-gray-100">
+                                    <QRCodeCanvas value={upiLink} size={160} level="M" marginSize={1} />
+                                </div>
+                                <p className="text-[11px] text-gray-400 text-center max-w-[180px]">
+                                    Kisi bhi UPI app (GPay, PhonePe, Paytm) se scan karein
+                                </p>
                             </div>
-                            <p className="text-[11px] text-gray-400 text-center max-w-[180px]">
-                                Kisi bhi UPI app (GPay, PhonePe, Paytm) se scan karein
-                            </p>
-                        </div>
+                        )}
 
                         <div className="flex-1 min-w-0 space-y-4">
-                            <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">UPI ID</p>
-                                <div className="flex items-center gap-2 rounded-xl border-2 border-gray-100 bg-gray-50/60 px-3 py-2.5 min-w-0">
-                                    <span className="font-mono text-sm font-semibold text-navy truncate flex-1">{pay.upiId}</span>
-                                    <button
-                                        type="button"
-                                        onClick={copyUpi}
-                                        className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors shrink-0 ${
-                                            copied ? "bg-emerald-100 text-emerald-700" : "bg-navy/5 text-navy hover:bg-navy/10"
-                                        }`}
-                                    >
-                                        {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-                                    </button>
-                                </div>
-                                <p className="text-[11px] text-gray-400 mt-1.5">{pay.payeeName}</p>
-                            </div>
+                            {pay.upiId && (
+                                <>
+                                    <div>
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">UPI ID</p>
+                                        <div className="flex items-center gap-2 rounded-xl border-2 border-gray-100 bg-gray-50/60 px-3 py-2.5 min-w-0">
+                                            <span className="font-mono text-sm font-semibold text-navy truncate flex-1">{pay.upiId}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyField("upi", pay.upiId)}
+                                                className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors shrink-0 ${
+                                                    copiedField === "upi" ? "bg-emerald-100 text-emerald-700" : "bg-navy/5 text-navy hover:bg-navy/10"
+                                                }`}
+                                            >
+                                                {copiedField === "upi" ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                                            </button>
+                                        </div>
+                                        <p className="text-[11px] text-gray-400 mt-1.5">{pay.payeeName}</p>
+                                    </div>
 
-                            {/* Deep link — works on the phone where a UPI app is installed */}
-                            <a
-                                href={upiLink}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors"
-                            >
-                                <Smartphone className="w-4 h-4" />
-                                Pay with UPI App
-                            </a>
+                                    {/* Deep link — works on the phone where a UPI app is installed */}
+                                    <a
+                                        href={upiLink}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors"
+                                    >
+                                        <Smartphone className="w-4 h-4" />
+                                        Pay with UPI App
+                                    </a>
+                                </>
+                            )}
+
+                            {/* Bank transfer — for parents who don't use UPI */}
+                            {pay.accountNumber && (
+                                <div className="rounded-xl border-2 border-gray-100 bg-gray-50/60 p-3.5">
+                                    <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+                                        <Landmark className="w-3.5 h-3.5" /> Bank Transfer (NEFT / IMPS)
+                                    </p>
+                                    <dl className="space-y-2 text-sm">
+                                        {(pay.bankName || pay.branch) && (
+                                            <div className="flex items-baseline gap-3">
+                                                <dt className="text-xs text-gray-400 w-20 shrink-0">Bank</dt>
+                                                <dd className="font-medium text-navy min-w-0">
+                                                    {[pay.bankName, pay.branch].filter(Boolean).join(", ")}
+                                                </dd>
+                                            </div>
+                                        )}
+                                        {pay.accountName && (
+                                            <div className="flex items-baseline gap-3">
+                                                <dt className="text-xs text-gray-400 w-20 shrink-0">A/c Name</dt>
+                                                <dd className="font-medium text-navy min-w-0">{pay.accountName}</dd>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-3">
+                                            <dt className="text-xs text-gray-400 w-20 shrink-0">A/c No.</dt>
+                                            <dd className="font-mono font-semibold text-navy truncate min-w-0 flex-1">{pay.accountNumber}</dd>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyField("account", pay.accountNumber)}
+                                                aria-label="Copy account number"
+                                                className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-colors shrink-0 ${
+                                                    copiedField === "account" ? "bg-emerald-100 text-emerald-700" : "bg-navy/5 text-navy hover:bg-navy/10"
+                                                }`}
+                                            >
+                                                {copiedField === "account" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                            </button>
+                                        </div>
+                                        {pay.ifsc && (
+                                            <div className="flex items-center gap-3">
+                                                <dt className="text-xs text-gray-400 w-20 shrink-0">IFSC</dt>
+                                                <dd className="font-mono font-semibold text-navy truncate min-w-0 flex-1">{pay.ifsc}</dd>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyField("ifsc", pay.ifsc)}
+                                                    aria-label="Copy IFSC code"
+                                                    className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-colors shrink-0 ${
+                                                        copiedField === "ifsc" ? "bg-emerald-100 text-emerald-700" : "bg-navy/5 text-navy hover:bg-navy/10"
+                                                    }`}
+                                                >
+                                                    {copiedField === "ifsc" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </dl>
+                                </div>
+                            )}
 
                             {waLink ? (
                                 <a
