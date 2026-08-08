@@ -4,7 +4,8 @@ import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Save, Loader2, Globe, Share2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube, Banknote, MessageCircle, QrCode } from "lucide-react";
+import { Save, Loader2, Globe, Share2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube, Banknote, MessageCircle, QrCode, Landmark } from "lucide-react";
+import { DEFAULT_PAYMENT, mergePaymentSettings, type PaymentSettings } from "@/lib/payment-settings";
 
 interface GlobalSettings {
     contact: {
@@ -20,12 +21,7 @@ interface GlobalSettings {
         youtube: string;
     };
     /** Online fee payment — shown to parents on the student "My Fees" page. */
-    payment: {
-        upiId: string;
-        payeeName: string;
-        whatsapp: string;   // digits with country code, e.g. 919347776670
-        note: string;
-    };
+    payment: PaymentSettings;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
@@ -41,12 +37,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
         instagram: "https://instagram.com",
         youtube: "https://youtube.com"
     },
-    payment: {
-        upiId: "INTERNATIONALACCESS974@icici",
-        payeeName: "International Access School",
-        whatsapp: "",
-        note: "Payment ke baad screenshot ya UTR number WhatsApp par bhejein taki status jaldi update ho sake."
-    }
+    payment: DEFAULT_PAYMENT
 };
 
 type TabNode = "contact" | "social" | "payment";
@@ -69,7 +60,7 @@ export default function AdminSettingsPage() {
                     setSettings({
                         contact: { ...DEFAULT_SETTINGS.contact, ...(saved.contact || {}) },
                         social: { ...DEFAULT_SETTINGS.social, ...(saved.social || {}) },
-                        payment: { ...DEFAULT_SETTINGS.payment, ...(saved.payment || {}) },
+                        payment: mergePaymentSettings(saved.payment),
                     });
                 } else {
                     // Create default if it doesn't exist
@@ -264,7 +255,7 @@ export default function AdminSettingsPage() {
                                 <h2 className="text-lg font-bold text-navy">Online Fee Payment</h2>
                                 <p className="text-xs text-gray-500 mt-1">
                                     Ye details parents ko student portal ke <strong>My Fees</strong> page par dikhengi —
-                                    UPI ID, uska QR code, aur payment proof bhejne ka WhatsApp number.
+                                    UPI ID, uska QR code, bank transfer details, aur payment proof bhejne ka WhatsApp number.
                                 </p>
                             </div>
 
@@ -303,6 +294,59 @@ export default function AdminSettingsPage() {
                                         placeholder="International Access School"
                                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all"
                                     />
+                                </div>
+
+                                <div className="pt-4 border-t border-gray-100">
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1.5">
+                                        <Landmark className="w-4 h-4 text-gray-400" /> Bank Transfer (NEFT / IMPS)
+                                    </label>
+                                    <p className="text-xs text-gray-500 mb-3">
+                                        Jo parents UPI use nahi karte, wo seedha bank transfer kar sakein. Account number
+                                        khali chhodne par ye section parents ko dikhega hi nahi.
+                                    </p>
+                                    <div className="grid sm:grid-cols-2 gap-3">
+                                        <input
+                                            type="text"
+                                            value={settings.payment.bankName}
+                                            onChange={(e) => handleChange("payment", "bankName", e.target.value)}
+                                            placeholder="Bank Name — ICICI Bank"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={settings.payment.branch}
+                                            onChange={(e) => handleChange("payment", "branch", e.target.value)}
+                                            placeholder="Branch — Siwan Branch"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={settings.payment.accountName}
+                                            onChange={(e) => handleChange("payment", "accountName", e.target.value)}
+                                            placeholder="Account Holder Name"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all sm:col-span-2"
+                                        />
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={settings.payment.accountNumber}
+                                            onChange={(e) => handleChange("payment", "accountNumber", e.target.value.replace(/\s/g, ""))}
+                                            placeholder="Account Number"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all font-mono"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={settings.payment.ifsc}
+                                            onChange={(e) => handleChange("payment", "ifsc", e.target.value.replace(/\s/g, "").toUpperCase())}
+                                            placeholder="IFSC Code"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-navy/10 focus:border-navy transition-all font-mono"
+                                        />
+                                    </div>
+                                    {settings.payment.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(settings.payment.ifsc) && (
+                                        <p className="text-xs text-amber-600 mt-1.5">
+                                            ⚠️ IFSC format thik nahi lag raha — 4 letters, phir 0, phir 6 characters (jaise <code>ICIC0001338</code>).
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="pt-4 border-t border-gray-100">
