@@ -267,12 +267,17 @@ export default function AdminTeacherAttendancePage() {
         return { present, late, absent, leave, halfDay, total, pct };
     };
 
-    const dayPresent = teachers.filter(t => t.status === "present").length;
     const dayLate = teachers.filter(t => t.status === "late").length;
     const dayAbsent = teachers.filter(t => t.status === "absent").length;
     const dayLeave = teachers.filter(t => t.status === "leave").length;
     const dayHalfDay = teachers.filter(t => t.status === "half_day").length;
     const dayTotal = teachers.length;
+    // "Present" = everyone who showed up (Total minus Absent and CL) — Late/Half-Day
+    // teachers still count here since they did attend, while Late keeps its own
+    // card too (a teacher can be both Present and Late, so 3 lates still cut pay).
+    const dayPresent = dayTotal - dayAbsent - dayLeave;
+    const absentNames = teachers.filter(t => t.status === "absent").map(t => t.name);
+    const leaveNames = teachers.filter(t => t.status === "leave").map(t => t.name);
 
     const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
         weekday: "long", day: "numeric", month: "long", year: "numeric"
@@ -362,8 +367,8 @@ export default function AdminTeacherAttendancePage() {
                             <>
                                 <StatCard value={dayPresent} label="Present" color="text-emerald-600" />
                                 <StatCard value={dayLate} label="Late" color="text-amber-600" />
-                                <StatCard value={dayAbsent} label="Absent" color="text-red-600" />
-                                <StatCard value={dayLeave} label="CL" color="text-blue-600" />
+                                <StatCard value={dayAbsent} label="Absent" color="text-red-600" names={absentNames} />
+                                <StatCard value={dayLeave} label="CL" color="text-blue-600" names={leaveNames} />
                                 <StatCard value={dayHalfDay} label="Half Day" color="text-purple-600" />
                             </>
                         )}
@@ -529,11 +534,16 @@ export default function AdminTeacherAttendancePage() {
     );
 }
 
-function StatCard({ value, label, color }: { value: number; label: string; color: string }) {
+function StatCard({ value, label, color, names }: { value: number; label: string; color: string; names?: string[] }) {
     return (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
             <div className={`text-2xl font-bold ${color}`}>{value}</div>
             <div className="text-xs text-gray-400">{label}</div>
+            {names && names.length > 0 && (
+                <div className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2" title={names.join(", ")}>
+                    {names.join(", ")}
+                </div>
+            )}
         </div>
     );
 }

@@ -5,7 +5,8 @@ import { useState, useEffect } from "react";
 import {
     Plus, Search, X, Loader2, User, Mail,
     Phone, GraduationCap, Pencil, Save, Trash2,
-    CheckCircle2, Eye, EyeOff, BookOpen, PowerOff, RotateCcw
+    CheckCircle2, Eye, EyeOff, BookOpen, PowerOff, RotateCcw,
+    Check, Clock, CalendarX, Sun, Banknote, ChevronDown
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,7 +15,8 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
     doc, setDoc, serverTimestamp, collection, addDoc,
-    onSnapshot, query, orderBy, deleteDoc, updateDoc, getDocs
+    onSnapshot, query, orderBy, deleteDoc, updateDoc, getDocs,
+    collectionGroup, where, writeBatch
 } from "firebase/firestore";
 import { db, firebaseConfig } from "@/lib/firebase";
 import Link from "next/link";
@@ -99,10 +101,86 @@ export default function AdminTeachersPage() {
         newEmail: "", newPassword: "",
     };
     const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
-    const [editTab, setEditTab] = useState<"basic" | "salary" | "bank" | "documents" | "pf" | "credentials">("basic");
+    const [editTab, setEditTab] = useState<"basic" | "attendance" | "salary" | "bank" | "documents" | "pf" | "credentials">("basic");
     const [editData, setEditData] = useState(EMPTY_EDIT);
     const [savingEdit, setSavingEdit] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
+
+    // ── Attendance history (Edit Teacher modal) ────────────────────────────────
+    const currentYearMonth = (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    })();
+    const [attMonth, setAttMonth] = useState(currentYearMonth);
+    const [attLoading, setAttLoading] = useState(false);
+    const [attDays, setAttDays] = useState<{ date: string; status: string | null; isHoliday: boolean }[]>([]);
+    const attMonthOptions = (() => {
+        const options: { label: string; value: string }[] = [];
+        const now = new Date();
+        const end = new Date(now.getFullYear(), now.getMonth(), 1);
+        const start = new Date(2024, 0, 1);
+        let cur = new Date(start);
+        while (cur <= end) {
+            const y = cur.getFullYear();
+            const m = String(cur.getMonth() + 1).padStart(2, "0");
+            options.unshift({ label: cur.toLocaleDateString("en-IN", { month: "long", year: "numeric" }), value: `${y}-${m}` });
+            cur = new Date(y, cur.getMonth() + 1, 1);
+        }
+        return options;
+    })();
+
+    useEffect(() => {
+        if (!editingTeacher || editTab !== "attendance") return;
+        const fetchAtt = async () => {
+            setAttLoading(true);
+            try {
+                const year = attMonth.slice(0, 4);
+                const snap = await getDocs(collection(db, "teacherAttendance", year, "months", attMonth, "days"));
+                const list = snap.docs.map(d => {
+                    const data = d.data() as any;
+                    return {
+                        date: data.date || d.id,
+                        status: (data.records?.[editingTeacher.id] as string) || null,
+                        isHoliday: !!data.isHoliday,
+                    };
+                });
+                list.sort((a, b) => a.date.localeCompare(b.date));
+                setAttDays(list);
+            } catch (err) {
+                console.error("Error fetching teacher attendance history:", err);
+                setAttDays([]);
+            } finally {
+                setAttLoading(false);
+            }
+        };
+        fetchAtt();
+    }, [editingTeacher, editTab, attMonth]);
+
+    // ── Salary history (Edit Teacher modal) ────────────────────────────────────
+    const [salaryLoading, setSalaryLoading] = useState(false);
+    const [salaryHistory, setSalaryHistory] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (!editingTeacher || editTab !== "salary") return;
+        const fetchSalary = async () => {
+            setSalaryLoading(true);
+            try {
+                const q = query(collectionGroup(db, "records"), where("teacherId", "==", editingTeacher.id));
+                const snap = await getDocs(q);
+                const list = snap.docs
+                    .map(d => ({ id: d.id, ...(d.data() as any) }))
+                    .filter(r => r.gross !== undefined && r.netSalary !== undefined);
+                list.sort((a, b) => b.year - a.year || b.month - a.month);
+                setSalaryHistory(list);
+            } catch (err) {
+                console.error("Error fetching salary history:", err);
+                setSalaryHistory([]);
+            } finally {
+                setSalaryLoading(false);
+            }
+        };
+        fetchSalary();
+    }, [editingTeacher, editTab]);
 
     // ── Disable / Re-enable Teacher ────────────────────────────────────────────
     const [disableTarget, setDisableTarget] = useState<Teacher | null>(null);
@@ -137,17 +215,80 @@ export default function AdminTeachersPage() {
         }
     };
 
+    // Backfill "absent" for every real working day the teacher was excluded from
+    // the attendance roster while disabled. A "working day" here = a day someone
+    // actually marked attendance for (has a doc, isHoliday !== true) — the same
+    // definition the salary generator already uses for workingDaysInMonth.
+    const backfillAbsentDays = async (teacherId: string, disabledAtIso: string): Promise<number> => {
+        const startDate = disabledAtIso.slice(0, 10);
+        const today = new Date().toISOString().slice(0, 10);
+        const y = new Date(today + "T00:00:00");
+        y.setDate(y.getDate() - 1);
+        const endDate = y.toISOString().slice(0, 10);
+        if (!startDate || startDate > endDate) return 0;
+
+        // Collect the distinct YYYY-MM months spanning [startDate, endDate]
+        const months: string[] = [];
+        let cur = new Date(startDate.slice(0, 7) + "-01T00:00:00");
+        const last = new Date(endDate.slice(0, 7) + "-01T00:00:00");
+        while (cur <= last) {
+            months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
+            cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+        }
+
+        const toBackfill: { year: string; month: string; date: string }[] = [];
+        for (const month of months) {
+            const year = month.slice(0, 4);
+            const snap = await getDocs(collection(db, "teacherAttendance", year, "months", month, "days"));
+            snap.docs.forEach(d => {
+                const data = d.data() as any;
+                const date = data.date || d.id;
+                if (date < startDate || date > endDate) return;
+                if (data.isHoliday) return;
+                if (data.records && Object.prototype.hasOwnProperty.call(data.records, teacherId)) return;
+                toBackfill.push({ year, month, date });
+            });
+        }
+
+        if (toBackfill.length === 0) return 0;
+
+        for (let i = 0; i < toBackfill.length; i += 400) {
+            const chunk = toBackfill.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(({ year, month, date }) => {
+                batch.update(doc(db, "teacherAttendance", year, "months", month, "days", date), {
+                    [`records.${teacherId}`]: "absent",
+                });
+            });
+            await batch.commit();
+        }
+        return toBackfill.length;
+    };
+
     const handleReEnableTeacher = async () => {
         if (!reEnableTarget) return;
         setIsReEnabling(true);
         try {
+            let backfilledCount = 0;
+            if (reEnableTarget.disabledAt) {
+                try {
+                    backfilledCount = await backfillAbsentDays(reEnableTarget.id, reEnableTarget.disabledAt);
+                } catch (backfillErr) {
+                    console.error("Error backfilling attendance:", backfillErr);
+                }
+            }
+
             const payload = { status: "ACTIVE", disabledAt: null, disableReason: "" };
             await updateDoc(doc(db, "teachers", reEnableTarget.id), payload);
             await updateDoc(doc(db, "users", reEnableTarget.id), payload).catch(() => {});
             setTeachers(prev => prev.map(t =>
                 t.id === reEnableTarget.id ? { ...t, status: "ACTIVE", disabledAt: undefined, disableReason: undefined } : t
             ));
-            toast.success(`${reEnableTarget.firstName} ${reEnableTarget.lastName} has been re-enabled.`);
+            toast.success(
+                backfilledCount > 0
+                    ? `${reEnableTarget.firstName} ${reEnableTarget.lastName} re-enabled. Marked absent for ${backfilledCount} day${backfilledCount !== 1 ? "s" : ""} they were disabled.`
+                    : `${reEnableTarget.firstName} ${reEnableTarget.lastName} has been re-enabled.`
+            );
             setReEnableTarget(null);
         } catch (err: any) {
             toast.error(err.message || "Failed to re-enable teacher.");
@@ -600,6 +741,10 @@ export default function AdminTeachersPage() {
                                     {teacher.disabledAt && <div className="flex items-center gap-2"><span>📅</span><span>Disabled: {new Date(teacher.disabledAt).toLocaleDateString("en-IN")}</span></div>}
                                 </div>
                                 <div className="flex gap-2 pt-3 border-t border-gray-50">
+                                    <button onClick={() => openEdit(teacher)}
+                                        className="py-2 px-3 rounded-xl text-gray-400 hover:text-navy hover:bg-navy/5 border border-gray-100 hover:border-navy/10 transition-colors" title="View / Edit Profile">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
                                     <button onClick={() => setReEnableTarget(teacher)}
                                         className="flex-1 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1.5 transition-colors">
                                         <RotateCcw className="w-3.5 h-3.5" /> Re-enable
@@ -910,20 +1055,25 @@ export default function AdminTeachersPage() {
                             {/* Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
                                 <div>
-                                    <h2 className="font-bold text-navy text-lg">Edit Teacher</h2>
+                                    <h2 className="font-bold text-navy text-lg flex items-center gap-2">
+                                        Edit Teacher
+                                        {editingTeacher.status === "DISABLED" && (
+                                            <span className="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-medium border border-red-100">Disabled</span>
+                                        )}
+                                    </h2>
                                     <p className="text-xs text-gray-400">{editingTeacher.email}</p>
                                 </div>
                                 <button onClick={() => setEditingTeacher(null)} className="p-2 rounded-xl hover:bg-gray-50 text-gray-400"><X className="w-5 h-5" /></button>
                             </div>
                             {/* Tab Nav */}
                             <div className="flex border-b border-gray-100 shrink-0 px-2 overflow-x-auto">
-                                {(["basic", "salary", "bank", "documents", "pf", "credentials"] as const).map(tab => (
+                                {(["basic", "attendance", "salary", "bank", "documents", "pf", "credentials"] as const).map(tab => (
                                     <button key={tab} onClick={() => setEditTab(tab)}
                                         className={`px-3 py-3 text-xs font-semibold capitalize border-b-2 transition-colors -mb-px whitespace-nowrap ${editTab === tab
                                             ? tab === "credentials" ? "border-amber-500 text-amber-600" : tab === "pf" ? "border-indigo-500 text-indigo-600" : "border-navy text-navy"
                                             : "border-transparent text-gray-400 hover:text-gray-600"
                                             }`}>
-                                        {tab === "credentials" ? "🔑 Login" : tab === "pf" ? "📋 PF & ESIC" : tab === "salary" ? "💰 Salary" : tab === "basic" ? "👤 Basic & Personal" : tab === "bank" ? "🏦 Bank" : "📄 Documents"}
+                                        {tab === "credentials" ? "🔑 Login" : tab === "pf" ? "📋 PF & ESIC" : tab === "salary" ? "💰 Salary" : tab === "attendance" ? "📅 Attendance" : tab === "basic" ? "👤 Basic & Personal" : tab === "bank" ? "🏦 Bank" : "📄 Documents"}
                                     </button>
                                 ))}
                             </div>
@@ -975,6 +1125,56 @@ export default function AdminTeachersPage() {
                                     </div>
                                 </>)}
 
+                                {/* ── Tab: Attendance ── */}
+                                {editTab === "attendance" && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Attendance History</p>
+                                            <div className="relative">
+                                                <select value={attMonth} onChange={e => setAttMonth(e.target.value)}
+                                                    className="pl-3 pr-7 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-navy appearance-none bg-white">
+                                                    {attMonthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                                </select>
+                                                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+
+                                        {attLoading ? (
+                                            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-navy" /></div>
+                                        ) : (() => {
+                                            const workingDays = attDays.filter(d => !d.isHoliday);
+                                            const present = workingDays.filter(d => d.status === "present").length;
+                                            const late = workingDays.filter(d => d.status === "late").length;
+                                            const absent = workingDays.filter(d => d.status === "absent").length;
+                                            const leave = workingDays.filter(d => d.status === "leave").length;
+                                            const halfDay = workingDays.filter(d => d.status === "half_day").length;
+                                            return (
+                                                <>
+                                                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                                        <AttStat value={present} label="Present" color="text-emerald-600" />
+                                                        <AttStat value={late} label="Late" color="text-amber-600" />
+                                                        <AttStat value={absent} label="Absent" color="text-red-600" />
+                                                        <AttStat value={leave} label="CL" color="text-blue-600" />
+                                                        <AttStat value={halfDay} label="Half Day" color="text-purple-600" />
+                                                    </div>
+                                                    <div className="border border-gray-100 rounded-xl divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                                                        {attDays.length === 0 ? (
+                                                            <div className="text-center py-8 text-gray-400 text-xs">No attendance records for this month.</div>
+                                                        ) : attDays.map(d => (
+                                                            <div key={d.date} className="flex items-center justify-between px-4 py-2.5">
+                                                                <span className="text-xs font-medium text-navy">
+                                                                    {new Date(d.date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                                                                </span>
+                                                                <AttStatusBadge status={d.isHoliday ? "holiday" : d.status} />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+
                                 {/* ── Tab: Salary ── */}
                                 {editTab === "salary" && (
                                     <div className="space-y-4">
@@ -1002,6 +1202,39 @@ export default function AdminTeachersPage() {
                                                 <p className="text-[10px] text-emerald-500 mt-1">Basic + HRA + DA + Other Allowances</p>
                                             </div>
                                         )}
+
+                                        {/* Salary History */}
+                                        <div className="pt-2">
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1 mb-3">Salary History (Month-wise)</p>
+                                            {salaryLoading ? (
+                                                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-navy" /></div>
+                                            ) : salaryHistory.length === 0 ? (
+                                                <div className="text-center py-6 text-gray-400 text-xs bg-gray-50 rounded-xl">No salary records generated yet.</div>
+                                            ) : (
+                                                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                                                    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_80px] gap-2 px-4 py-2 bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase">
+                                                        <span>Period</span><span>Gross</span><span>Deductions</span><span>Net</span><span>Status</span>
+                                                    </div>
+                                                    <div className="divide-y divide-gray-50 max-h-60 overflow-y-auto">
+                                                        {salaryHistory.map(r => (
+                                                            <div key={r.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_80px] gap-2 px-4 py-2.5 items-center text-xs">
+                                                                <span className="font-semibold text-navy flex items-center gap-1"><Banknote className="w-3 h-3 text-navy/40" />{MONTH_NAMES[r.month - 1]} {r.year}</span>
+                                                                <span className="text-gray-600">₹{Number(r.gross || 0).toLocaleString("en-IN")}</span>
+                                                                <span className="text-red-500">₹{Number(r.totalDeductions || 0).toLocaleString("en-IN")}</span>
+                                                                <span className="font-bold text-emerald-700">₹{Number(r.netSalary || 0).toLocaleString("en-IN")}</span>
+                                                                <span>
+                                                                    {r.status === "paid" ? (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">Paid</span>
+                                                                    ) : (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -1215,6 +1448,36 @@ export default function AdminTeachersPage() {
 }
 
 const inputCls = "w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 bg-white";
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function AttStat({ value, label, color }: { value: number; label: string; color: string }) {
+    return (
+        <div className="bg-gray-50 rounded-xl p-2.5 text-center">
+            <div className={`text-lg font-bold ${color}`}>{value}</div>
+            <div className="text-[10px] text-gray-400">{label}</div>
+        </div>
+    );
+}
+
+function AttStatusBadge({ status }: { status: string | null }) {
+    if (!status) return <span className="text-xs text-gray-400">—</span>;
+    const map: Record<string, { cls: string; icon: React.ReactNode; label: string }> = {
+        present: { cls: "bg-emerald-100 text-emerald-700", icon: <Check className="w-3 h-3" />, label: "Present" },
+        late: { cls: "bg-amber-100 text-amber-700", icon: <Clock className="w-3 h-3" />, label: "Late" },
+        absent: { cls: "bg-red-100 text-red-700", icon: <X className="w-3 h-3" />, label: "Absent" },
+        leave: { cls: "bg-blue-100 text-blue-700", icon: <CalendarX className="w-3 h-3" />, label: "CL" },
+        half_day: { cls: "bg-purple-100 text-purple-700", icon: <Sun className="w-3 h-3" />, label: "Half Day" },
+        holiday: { cls: "bg-purple-100 text-purple-700", icon: <CalendarX className="w-3 h-3" />, label: "Holiday" },
+    };
+    const s = map[status];
+    if (!s) return <span className="text-xs text-gray-400">—</span>;
+    return (
+        <span className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold w-fit ${s.cls}`}>
+            {s.icon}{s.label}
+        </span>
+    );
+}
+
 function FormField({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
     return (
         <div>
