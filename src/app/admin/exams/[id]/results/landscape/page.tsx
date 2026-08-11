@@ -558,12 +558,14 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
         };
       });
 
-      // 7. Rank
+      // 7. Rank (standard competition ranking — ties share a rank, next rank skips accordingly)
       const ranked = [...results]
         .map(s => ({ id: s.id, gt: calcGrandTotal(s, subjects, reportType, unit1Id, hyId, unit2Id, annualId) }))
         .sort((a, b) => b.gt - a.gt);
       const rankMap: Record<string, number> = {};
-      ranked.forEach((r, i) => { rankMap[r.id] = i + 1; });
+      ranked.forEach((r, i) => {
+        rankMap[r.id] = i > 0 && r.gt === ranked[i - 1].gt ? rankMap[ranked[i - 1].id] : i + 1;
+      });
 
       setStudents(results.map(s => ({ ...s, rank: rankMap[s.id] })));
       setReportReady(true);
