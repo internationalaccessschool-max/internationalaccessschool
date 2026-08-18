@@ -348,28 +348,42 @@ export default function AdminStudentsPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="rounded-2xl gradient-navy p-6 md:p-8 relative overflow-hidden">
+            <div className="rounded-2xl md:rounded-3xl gradient-navy p-5 md:p-8 relative overflow-hidden shadow-sm">
                 <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `radial-gradient(circle at 80% 50%, rgba(200,169,81,0.2) 0%, transparent 50%)` }} />
-                <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
+                <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <p className="text-white/50 text-sm font-medium">Admin Console</p>
-                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Student Directory</h1>
-                        <p className="text-white/40 text-sm mt-1">
-                            <span className="text-green-300 font-semibold">{activeStudents.length} active</span>
-                            <span className="mx-2 text-white/30">·</span>
-                            <span className="text-red-300 font-semibold">{leftStudents.length} left</span>
+                        <p className="text-white/50 text-xs md:text-sm font-medium">Admin Console</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-0.5">Student Directory</h1>
+                        <p className="text-white/40 text-xs md:text-sm mt-1.5 flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-xs border border-emerald-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                {activeStudents.length} Active
+                            </span>
+                            <span className="text-white/30">·</span>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-semibold text-xs border border-rose-500/30">
+                                {leftStudents.length} Left
+                            </span>
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                         <button
                             onClick={() => exportToExcel(filtered)}
                             disabled={filtered.length === 0}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors disabled:opacity-40"
-                        ><FileDown className="w-4 h-4" /> Export Excel ({filtered.length})</button>
-                        <Link href="/admin/students/import" className="px-4 py-2.5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:bg-white/10 transition-colors">
+                            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-white/20 text-white text-xs sm:text-sm font-semibold hover:bg-white/10 transition-colors disabled:opacity-40"
+                        >
+                            <FileDown className="w-4 h-4 shrink-0" />
+                            <span className="truncate">Export ({filtered.length})</span>
+                        </button>
+                        <Link
+                            href="/admin/students/import"
+                            className="flex items-center justify-center px-3.5 py-2.5 rounded-xl border border-white/20 text-white text-xs sm:text-sm font-semibold hover:bg-white/10 transition-colors text-center"
+                        >
                             Bulk Import
                         </Link>
-                        <Link href="/admissions" className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy text-sm font-bold hover:bg-gold/90 transition-colors">
+                        <Link
+                            href="/admissions"
+                            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gold text-navy text-xs sm:text-sm font-bold hover:bg-gold/90 transition-colors shadow-sm"
+                        >
                             <Plus className="w-4 h-4" /> Add Student
                         </Link>
                     </div>
@@ -377,7 +391,7 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1.5 p-1 rounded-2xl w-fit bg-slate-100/80 border border-slate-200/60 shadow-sm">
+            <div className="grid grid-cols-2 sm:flex gap-1.5 p-1 rounded-2xl w-full sm:w-fit bg-slate-100/80 border border-slate-200/60 shadow-sm">
                 {[
                     { key: "active", label: `Active Students (${activeStudents.length})` },
                     { key: "left", label: `Left Students (${leftStudents.length})` },
@@ -385,7 +399,7 @@ export default function AdminStudentsPage() {
                     <button
                         key={tab.key}
                         onClick={() => { setActiveTab(tab.key as any); setSelectedClass("All"); setSelectedSection("All"); setSearchTerm(""); }}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 outline-none ${activeTab === tab.key ? "bg-white shadow-[0_2px_10px_rgb(0,0,0,0.06)] text-navy ring-1 ring-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"}`}
+                        className={`px-3 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 outline-none text-center ${activeTab === tab.key ? "bg-white shadow-[0_2px_10px_rgb(0,0,0,0.06)] text-navy ring-1 ring-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"}`}
                     >
                         {tab.label}
                     </button>
@@ -393,26 +407,217 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 items-center bg-white p-4 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
+            <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                 <div className="relative flex-1 w-full">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400" />
-                    <Input type="search" placeholder="Search by name or admission number..." className="pl-11 py-5 border-slate-200/60 focus:border-black focus:ring-4 focus:ring-black/5 rounded-2xl bg-slate-50/50 hover:bg-white text-[15px] placeholder:text-slate-400 transition-all font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <Search className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400" />
+                    <Input
+                        type="search"
+                        placeholder="Search by name or admission number..."
+                        className="pl-10 sm:pl-11 pr-4 py-2.5 sm:py-5 border-slate-200/60 focus:border-black focus:ring-4 focus:ring-black/5 rounded-xl sm:rounded-2xl bg-slate-50/50 hover:bg-white text-sm sm:text-[15px] placeholder:text-slate-400 transition-all font-medium h-11 sm:h-auto"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
                 </div>
-                <div className="flex items-center gap-2.5 shrink-0">
-                    <Filter className="w-5 h-5 text-slate-400 hidden sm:block ml-2" />
-                    <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}>
-                        {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : c}</option>)}
+                <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto shrink-0">
+                    <div className="hidden sm:flex items-center pl-1">
+                        <Filter className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <select
+                        className="w-full sm:w-auto px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-xs sm:text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all cursor-pointer"
+                        value={selectedClass}
+                        onChange={e => { setSelectedClass(e.target.value); setSelectedSection("All"); }}
+                    >
+                        {classes.map(c => <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>)}
                     </select>
-                    <select className="px-4 py-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all outline-none" value={selectedSection} onChange={e => setSelectedSection(e.target.value)}>
-                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : s}</option>)}
+                    <select
+                        className="w-full sm:w-auto px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-slate-200/60 bg-slate-50/50 hover:bg-white text-xs sm:text-[14px] font-semibold text-slate-700 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/5 transition-all cursor-pointer"
+                        value={selectedSection}
+                        onChange={e => setSelectedSection(e.target.value)}
+                    >
+                        {sections.map(s => <option key={s} value={s as string}>{s === "All" ? "All Sections" : `Sec ${s}`}</option>)}
                     </select>
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col">
+            {/* Filter Result Info */}
+            {(searchTerm || selectedClass !== "All" || selectedSection !== "All") && (
+                <div className="flex items-center justify-between px-2 text-xs text-slate-500 font-medium">
+                    <span>Showing <strong className="text-slate-800 font-bold">{filtered.length}</strong> matching students</span>
+                    <button
+                        onClick={() => { setSearchTerm(""); setSelectedClass("All"); setSelectedSection("All"); }}
+                        className="text-blue-600 hover:underline font-semibold"
+                    >
+                        Clear filters
+                    </button>
+                </div>
+            )}
+
+            {/* ─── MOBILE CARD VIEW (< md) ─── */}
+            <div className="block md:hidden space-y-3">
+                {isLoading ? (
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-12 text-center text-slate-400">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-navy" />
+                        <p className="font-semibold text-sm tracking-wide">Loading Directory...</p>
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-12 text-center">
+                        <UserCircle2 className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        <p className="text-slate-500 text-sm font-bold tracking-wide">No students found</p>
+                    </div>
+                ) : (
+                    filtered.map((student, idx) => (
+                        <div
+                            key={student.id}
+                            className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 space-y-3 hover:border-slate-300 transition-all"
+                        >
+                            {/* Header Row: Photo + Name + ENR / Roll + Class Pill */}
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+                                        {student.childPhotoUrl ? (
+                                            <img src={student.childPhotoUrl} alt={getDisplayName(student)} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="font-bold text-slate-500 text-base">{(getDisplayName(student) || "S").charAt(0)}</span>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="font-bold text-slate-900 text-base leading-snug truncate">
+                                            {getDisplayName(student)}
+                                        </h3>
+                                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold font-mono">
+                                                #{student.serialNumber || idx + 1}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-bold font-mono border border-blue-100/80">
+                                                ENR: {safeStr(student.admissionNumber) || "—"}
+                                            </span>
+                                            {activeTab === "left" && (
+                                                <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-600 text-[10px] font-bold">
+                                                    LEFT
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                {activeTab === "active" ? (
+                                    <span className="px-2.5 py-1 rounded-xl bg-slate-900 text-white text-xs font-bold shrink-0 shadow-sm">
+                                        {getClass(student)}{student.section ? ` · ${student.section}` : ""}
+                                    </span>
+                                ) : (
+                                    <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold shrink-0 border border-slate-200">
+                                        Last: {safeStr(student.lastClass) || getClass(student) || "—"}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50/80 rounded-xl p-3 border border-slate-100">
+                                {activeTab === "active" ? (
+                                    <>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Father's Name</span>
+                                            <span className="font-semibold text-slate-700 truncate block mt-0.5">
+                                                {safeStr(student.fatherName) || "—"}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile No.</span>
+                                            {student.mobileNo ? (
+                                                <a href={`tel:${student.mobileNo}`} className="font-mono font-bold text-blue-600 hover:underline block mt-0.5">
+                                                    {student.mobileNo}
+                                                </a>
+                                            ) : (
+                                                <span className="font-medium text-slate-400 block mt-0.5">—</span>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Left Year / Date</span>
+                                            <span className="font-semibold text-slate-700 truncate block mt-0.5">
+                                                {safeStr(student.leftYear) || "—"} {student.lastDate ? `· ${student.lastDate}` : ""}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Branch</span>
+                                            <span className="font-semibold text-slate-700 truncate block mt-0.5">
+                                                {safeStr(student.branch) || "—"}
+                                            </span>
+                                        </div>
+                                        {student.remarks && (
+                                            <div className="col-span-2 pt-1 border-t border-slate-200/60">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Remarks</span>
+                                                <span className="text-slate-600 text-xs block mt-0.5">
+                                                    {student.remarks}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Actions Grid */}
+                            <div className="grid grid-cols-4 gap-1.5 pt-1">
+                                <button
+                                    onClick={() => setViewProfileStudent(student)}
+                                    className="flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 active:scale-95 transition-all"
+                                >
+                                    <Eye className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                    <span>View</span>
+                                </button>
+                                <button
+                                    onClick={() => setEditingStudent(student)}
+                                    className="flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 ring-1 ring-slate-200 active:scale-95 transition-all"
+                                >
+                                    <Pencil className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                    <span>Edit</span>
+                                </button>
+                                {activeTab === "active" ? (
+                                    <>
+                                        <button
+                                            onClick={() => setChangeClassStudent(student)}
+                                            className="flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 ring-1 ring-violet-200 active:scale-95 transition-all"
+                                        >
+                                            <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                            <span>Transfer</span>
+                                        </button>
+                                        <button
+                                            onClick={() => openDisableModal(student)}
+                                            className="flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-xs font-bold text-red-600 bg-red-50/60 hover:bg-red-100 ring-1 ring-red-200 active:scale-95 transition-all"
+                                        >
+                                            <PowerOff className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                            <span>Disable</span>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => setReactivateTarget(student)}
+                                            className="flex items-center justify-center gap-1 py-2 px-1 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 active:scale-95 transition-all"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                            <span>Restore</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setDeleteTarget(student)}
+                                            className="flex items-center justify-center gap-1 py-2 px-1 rounded-xl text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 ring-1 ring-red-200 active:scale-95 transition-all"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                                            <span>Delete</span>
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* ─── DESKTOP & TABLET TABLE VIEW (>= md) ─── */}
+            <div className="hidden md:flex bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex-col">
                 <div className="w-full overflow-auto max-h-[calc(100vh-280px)] min-h-[300px] pb-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent relative">
-                    <table className="w-full text-sm whitespace-nowrap">
+                    <table className="w-full text-sm whitespace-nowrap min-w-[880px]">
                         <thead className="bg-slate-50 border-b border-slate-200/60 sticky top-0 z-20 shadow-sm">
                             <tr>
                                 {(activeTab === "active"
@@ -577,7 +782,7 @@ export default function AdminStudentsPage() {
             {/* Disable Confirmation Modal */}
             {disableTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
-                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-5">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-5 sm:p-7 space-y-5 max-h-[90vh] overflow-y-auto">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
                             <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
                                 <PowerOff className="w-7 h-7 text-red-500" strokeWidth={2.5} />
@@ -658,7 +863,7 @@ export default function AdminStudentsPage() {
             {/* Re-activate Confirmation Modal */}
             {reactivateTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
-                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-5 sm:p-7 space-y-6 max-h-[90vh] overflow-y-auto">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
                             <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
                                 <RotateCcw className="w-7 h-7 text-emerald-500" strokeWidth={2.5} />
@@ -683,7 +888,7 @@ export default function AdminStudentsPage() {
             {/* ─── Permanent Delete Modal ─── */}
             {deleteTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-[2px]">
-                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-7 space-y-6">
+                    <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-full max-w-md p-5 sm:p-7 space-y-6 max-h-[90vh] overflow-y-auto">
                         <div className="flex flex-col items-center text-center gap-3 pt-2">
                             <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
                                 <Trash2 className="w-7 h-7 text-red-500" strokeWidth={2.5} />

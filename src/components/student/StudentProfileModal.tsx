@@ -610,31 +610,32 @@ ${resultRows ? `
             <div className="bg-white rounded-3xl shadow-[0_24px_80px_rgb(0,0,0,0.18)] w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
 
                 {/* ── Header ─────────────────────────────────────────────────── */}
-                <div className="flex items-center gap-4 px-6 py-4 bg-[#0f2044] shrink-0">
+                <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 sm:py-4 bg-[#0f2044] shrink-0">
                     {/* Avatar */}
-                    <div className="w-12 h-12 rounded-full bg-white/10 border-2 border-white/20 overflow-hidden flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 border-2 border-white/20 overflow-hidden flex items-center justify-center shrink-0">
                         {student.childPhotoUrl
                             ? <img src={student.childPhotoUrl} alt={studentName} className="w-full h-full object-cover" />
-                            : <span className="text-white font-bold text-lg">{studentName.charAt(0)}</span>
+                            : <span className="text-white font-bold text-base sm:text-lg">{studentName.charAt(0)}</span>
                         }
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-white font-bold text-lg leading-tight truncate">{studentName}</h2>
-                        <p className="text-white/60 text-xs mt-0.5">
+                        <h2 className="text-white font-bold text-base sm:text-lg leading-tight truncate">{studentName}</h2>
+                        <p className="text-white/60 text-[11px] sm:text-xs mt-0.5 truncate">
                             ENR: <span className="font-mono font-bold text-white/80">{student.admissionNumber || "—"}</span>
-                            <span className="mx-2 text-white/30">·</span>
+                            <span className="mx-1.5 sm:mx-2 text-white/30">·</span>
                             Class {cls}{sec ? ` – ${sec}` : ""}
-                            <span className="mx-2 text-white/30">·</span>
+                            <span className="mx-1.5 sm:mx-2 text-white/30">·</span>
                             {student.gender || "—"}
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <button
                             onClick={handlePrint}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all"
+                            className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all"
                         >
                             <Printer className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Print A4
+                            <span className="hidden sm:inline">Print A4</span>
+                            <span className="sm:hidden">Print</span>
                         </button>
                         <button
                             onClick={onClose}
@@ -646,7 +647,7 @@ ${resultRows ? `
                 </div>
 
                 {/* ── Tabs ───────────────────────────────────────────────────── */}
-                <div className="flex gap-0 border-b border-slate-200 bg-white shrink-0">
+                <div className="flex gap-0 border-b border-slate-200 bg-white shrink-0 overflow-x-auto scrollbar-hide">
                     {TABS.map(tab => {
                         const Icon = tab.icon;
                         const active = activeTab === tab.key;
@@ -654,12 +655,12 @@ ${resultRows ? `
                             <button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
-                                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-bold border-b-2 transition-all ${active
+                                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-3 sm:py-3.5 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-all ${active
                                     ? "border-[#0f2044] text-[#0f2044]"
                                     : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                                 }`}
                             >
-                                <Icon className="w-4 h-4" strokeWidth={2} />
+                                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={2} />
                                 {tab.label}
                             </button>
                         );
