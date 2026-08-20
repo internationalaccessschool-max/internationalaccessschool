@@ -92,6 +92,7 @@ interface TCData {
   workingDays: string; presentDays: string;
   feeDueMonth: string; feeConcession: string;
   ncc: string; govtMinority: string; sports: string;
+  character: string;
   applicationDate: string; rollsDate: string; issueDate: string;
   remarks: string;
 }
@@ -109,6 +110,7 @@ const defaultTC = (): TCData => ({
   workingDays: "207", presentDays: "195",
   feeDueMonth: "MARCH - " + new Date().getFullYear(),
   feeConcession: "NO", ncc: "YES", govtMinority: "NO", sports: "NO",
+  character: "GOOD",
   applicationDate: "", rollsDate: "", issueDate: "", remarks: "",
 });
 
@@ -137,10 +139,11 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string, udiseSchool:
     ["18.", "Whether NCC Cadet/Boy Scout/Girl Guide (details may be given)", tc.ncc, ""],
     ["19.", "Whether school is under Govt./Minority/Independent Category", tc.govtMinority, ""],
     ["20.", "Games played on extracurricular activities in which the pupil usually took part (mention achievement level therein)", tc.sports, ""],
-    ["21.", "Date of application for certificate:", tc.applicationDate, ""],
-    ["22.", "Date on which pupils name was struck off the rolls of the school:", tc.rollsDate, ""],
-    ["23.", "Date of issue of certificate:", tc.issueDate, ""],
-    ["24.", "Any other remark.", tc.remarks || "NO", ""],
+    ["21.", "General Conduct / Character:", tc.character, ""],
+    ["22.", "Date of application for certificate:", tc.applicationDate, ""],
+    ["23.", "Date on which pupils name was struck off the rolls of the school:", tc.rollsDate, ""],
+    ["24.", "Date of issue of certificate:", tc.issueDate, ""],
+    ["25.", "Any other remark.", tc.remarks || "NO", ""],
   ];
 
   const rowsHtml = rows.map(([sno, label, val, extra], i) => {
@@ -160,7 +163,7 @@ function buildPrintHTML(tc: TCData, admNo: string, logoUrl: string, udiseSchool:
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>Transfer Certificate – ${tc.studentName}</title>
+  <title>Transfer Certificate</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:"Times New Roman",Times,serif;background:#fff;color:#000}
@@ -342,6 +345,7 @@ export default function TransferCertificatePage() {
         ncc: safeStr(s.nccCadet) || "YES",
         govtMinority: safeStr(s.govtMinority) || "NO",
         sports: safeStr(s.sports) || "NO",
+        character: safeStr(s.character) || "GOOD",
         applicationDate: todayFmt,
         rollsDate: formatDate(safeStr(s.lastDate || today)),
         issueDate: todayFmt,
@@ -547,6 +551,7 @@ export default function TransferCertificatePage() {
             {field("ncc", "NCC Cadet?")}
             {field("govtMinority", "Govt/Minority?")}
             {field("sports", "Sports / Extracurricular")}
+            {field("character", "General Conduct / Character")}
             {field("applicationDate", "Date of Application")}
             {field("rollsDate", "Date Struck from Rolls")}
             {field("issueDate", "Date of Issue")}
@@ -634,10 +639,11 @@ export default function TransferCertificatePage() {
                     ["18.", "NCC / Scout / Guide:", tcData.ncc, ""],
                     ["19.", "Govt/Minority:", tcData.govtMinority, ""],
                     ["20.", "Sports / Extracurricular:", tcData.sports, ""],
-                    ["21.", "Application date:", tcData.applicationDate, ""],
-                    ["22.", "Struck from rolls:", tcData.rollsDate, ""],
-                    ["23.", "Issue date:", tcData.issueDate, ""],
-                    ["24.", "Any other remark:", tcData.remarks || "NO", ""],
+                    ["21.", "General Conduct / Character:", tcData.character, ""],
+                    ["22.", "Application date:", tcData.applicationDate, ""],
+                    ["23.", "Struck from rolls:", tcData.rollsDate, ""],
+                    ["24.", "Issue date:", tcData.issueDate, ""],
+                    ["25.", "Any other remark:", tcData.remarks || "NO", ""],
                   ].map(([sno, label, val, extra], i) => (
                     <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#f5f5ff" : "#fff" }}>
                       <td style={{ padding: "3px 4px", verticalAlign: "top", fontWeight: "bold", fontSize: "10px", whiteSpace: "nowrap" }}>{sno}</td>
