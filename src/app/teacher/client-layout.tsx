@@ -4,12 +4,16 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, CheckSquare, GraduationCap,
-    BookOpen, User, Settings, Loader2, Clock, CalendarCheck, Banknote, FileText, IndianRupee
+    BookOpen, User, Settings, Loader2, Clock, CalendarCheck, Banknote, FileText, IndianRupee, MessageCircle
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
+import { MessageToastWatcher } from "@/components/dashboard/message-toast-watcher";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { resolveClassTeacherSection } from "@/lib/utils/classTeacher";
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
     const { user, role, status, loading } = useAuth();
@@ -30,11 +34,36 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         }
     }, [user, role, status, loading, router, isLoginPage]);
 
+    // Unread message badge — watches conversations for the class this teacher is Class Teacher of
+    const [unreadMessages, setUnreadMessages] = useState(false);
+    useEffect(() => {
+        if (!user || isLoginPage) return;
+        let unsubscribe: (() => void) | undefined;
+        let cancelled = false;
+
+        resolveClassTeacherSection(user.uid, user.email).then((section) => {
+            if (cancelled || !section) return;
+            const q = query(
+                collection(db, "conversations"),
+                where("className", "==", section.cls),
+                where("section", "==", section.section),
+                where("unreadForStaff", "==", true)
+            );
+            unsubscribe = onSnapshot(q, (snap) => setUnreadMessages(!snap.empty), () => {});
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
+    }, [user, isLoginPage]);
+
     const links = [
         {
             section: "Overview",
             items: [
                 { href: "/teacher", label: "Dashboard", icon: LayoutDashboard },
+                { href: "/teacher/messages", label: "Messages", icon: MessageCircle, badge: unreadMessages },
             ],
         },
         {
@@ -95,6 +124,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 </div>
             </main>
             <PWAInstallTrigger appName="Teacher Portal" themeColor="#10b981" icon="📚" />
+            <MessageToastWatcher scope={{ kind: "teacher" }} />
         </div>
     );
 }

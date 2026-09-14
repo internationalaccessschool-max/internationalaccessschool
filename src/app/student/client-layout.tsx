@@ -2,12 +2,16 @@
 
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
-import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus, Bell, X, CalendarRange, BookOpen } from "lucide-react";
+import { LayoutDashboard, CalendarCheck, FileText, ClipboardList, User, Settings, Loader2, Banknote, FileCheck, Bus, Bell, X, CalendarRange, BookOpen, MessageCircle } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
+import { NoticePopup } from "@/components/dashboard/notice-popup";
+import { MessageToastWatcher } from "@/components/dashboard/message-toast-watcher";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 /** Check if running as installed PWA (standalone mode) */
 const isPWA = () =>
@@ -23,6 +27,16 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
     // PWA notification prompt state
     const [showNotifBanner, setShowNotifBanner] = useState(false);
+
+    // Unread message badge — watches this student's own conversation thread
+    const [unreadMessages, setUnreadMessages] = useState(false);
+    useEffect(() => {
+        if (!user || isLoginPage) return;
+        const unsubscribe = onSnapshot(doc(db, "conversations", user.uid), (snap) => {
+            setUnreadMessages(snap.exists() && snap.data().unreadForParent === true);
+        }, () => {});
+        return () => unsubscribe();
+    }, [user, isLoginPage]);
 
     useEffect(() => {
         if (!loading && !isLoginPage) {
@@ -62,6 +76,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             section: "Overview",
             items: [
                 { href: "/student", label: "Dashboard", icon: LayoutDashboard },
+                { href: "/student/messages", label: "Messages", icon: MessageCircle, badge: unreadMessages },
             ],
         },
         {
@@ -119,6 +134,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </main>
 
             <PWAInstallTrigger appName="Student Portal" themeColor="#3b82f6" icon="🎓" />
+
+            <NoticePopup />
+            <MessageToastWatcher scope={{ kind: "parent", studentUid: user.uid }} />
 
             {/* PWA Notification Permission Banner — shown once after install */}
             {showNotifBanner && (

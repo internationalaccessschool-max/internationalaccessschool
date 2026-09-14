@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { AlertTriangle, Check, Info, Megaphone, Plus, Trash2, X, Edit2 } from "lucide-react";
 
 interface Notice {
@@ -37,6 +38,23 @@ export default function NoticesPage() {
         return () => unsubscribe();
     }, []);
 
+    // Push a broadcast notification to students/parents. Best-effort — a failure
+    // here must never block saving the notice itself.
+    const notifyStudents = async (content: string, type: string) => {
+        try {
+            const res = await authFetch("/api/notifications/notice", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content, type }),
+            });
+            if (res.ok) {
+                toast.success("Notice published & students notified");
+            }
+        } catch (error) {
+            console.error("Error sending notice push notification:", error);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -56,6 +74,12 @@ export default function NoticesPage() {
                     priority: formData.priority,
                     createdAt: serverTimestamp()
                 });
+
+                // Only a brand-new active notice triggers a push — edits update the
+                // in-app popup via updatedAt but don't re-spam a push notification.
+                if (formData.isActive) {
+                    notifyStudents(formData.content, formData.type);
+                }
             }
 
             closeForm();
@@ -88,9 +112,16 @@ export default function NoticesPage() {
 
     const toggleStatus = async (notice: Notice) => {
         try {
+            const willActivate = !notice.isActive;
             await updateDoc(doc(db, "notices", notice.id), {
-                isActive: !notice.isActive
+                isActive: willActivate,
+                updatedAt: serverTimestamp()
             });
+
+            // Went from inactive -> active: treat it as a fresh publish.
+            if (willActivate) {
+                notifyStudents(notice.content, notice.type);
+            }
         } catch (error) {
             console.error("Error updating status:", error);
         }

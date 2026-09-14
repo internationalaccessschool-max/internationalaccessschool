@@ -4,9 +4,10 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
-    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange, UsersRound, ScrollText
+    Megaphone, ImageIcon, UserCheck, ClipboardList, Settings, Sliders, School, CalendarCheck, Loader2, Award, Layers, ShieldCheck, BarChart3, Banknote, UserCheck2, Tags, Bus, UserCog, CreditCard, CalendarDays, FileText, BadgeCheck, ArrowLeftRight, CalendarRange, UsersRound, ScrollText, MessageCircle
 } from "lucide-react";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
+import { MessageToastWatcher } from "@/components/dashboard/message-toast-watcher";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -31,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [pendingAdmissions, setPendingAdmissions] = useState(0);
     const [pendingApplications, setPendingApplications] = useState(0);
     const [pendingLeave, setPendingLeave] = useState(0);
+    const [unreadMessages, setUnreadMessages] = useState(0);
 
     useEffect(() => {
         if (isLoginPage || !user) return;
@@ -41,6 +43,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 s => setPendingApplications(s.size), () => {}),
             onSnapshot(query(collection(db, "leaveApplications"), where("status", "==", "pending")),
                 s => setPendingLeave(s.size), () => {}),
+            onSnapshot(query(collection(db, "conversations"), where("unreadForStaff", "==", true)),
+                s => setUnreadMessages(s.size), () => {}),
         ];
         return () => unsubs.forEach(u => u());
     }, [isLoginPage, user]);
@@ -50,6 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             section: "Overview",
             items: [
                 { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+                { href: "/admin/messages", label: "Messages", icon: MessageCircle, badge: unreadMessages > 0 },
             ],
         },
         {
@@ -150,6 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </div>
             </main>
             <PWAInstallTrigger appName="Admin Console" themeColor="#ef4444" icon="🛡️" />
+            <MessageToastWatcher scope={{ kind: "staff-all" }} />
         </div>
     );
 }

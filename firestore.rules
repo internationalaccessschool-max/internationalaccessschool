@@ -296,6 +296,21 @@ service cloud.firestore {
       allow read, write: if isAuth();
     }
 
+    // ─── Parent ↔ Class Teacher / Admin Messaging ────────────────────────────
+    // One thread per student (doc id == student uid). Parent (logged in as the
+    // student) manages their own thread; any staff member can read/act on all
+    // threads (same broad-staff convention as attendance/leaveApplications —
+    // fine-grained "only the concerned class teacher" scoping happens in the UI).
+    match /conversations/{studentUid} {
+      allow read, write: if isAuth() && (uid() == studentUid || isStaff());
+
+      match /messages/{messageId} {
+        allow read: if isAuth() && (uid() == studentUid || isStaff());
+        allow create: if isAuth() && (uid() == studentUid || isStaff()) &&
+          request.resource.data.senderUid == uid();
+      }
+    }
+
     // ─── Default deny ─────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

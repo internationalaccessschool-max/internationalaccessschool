@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
@@ -13,14 +13,17 @@ import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Briefcase,
     Megaphone, ImageIcon, UserCheck, ClipboardList, Settings,
     Sliders, School, CalendarCheck, Loader2, Award, Library, Layers,
-    ChevronRight, LogOut,
+    ChevronRight, LogOut, MessageCircle,
 } from "lucide-react";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { MessageToastWatcher } from "@/components/dashboard/message-toast-watcher";
 import { PWAInstallTrigger } from "@/components/PWAInstallTrigger";
 
 // Master list — maps supervisor route → icon + label
 const ALL_NAV = [
     { href: "/supervisor", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
+    { href: "/supervisor/messages", label: "Messages", icon: MessageCircle, section: "Overview" },
     { href: "/supervisor/students", label: "Students", icon: GraduationCap, section: "Management" },
     { href: "/supervisor/teachers", label: "Teachers", icon: Users, section: "Management" },
     { href: "/supervisor/class-teacher", label: "Class Teachers", icon: School, section: "Management" },
@@ -50,6 +53,15 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
     const [allowedPages, setAllowedPages] = useState<string[]>([]);
     const [loadingPerms, setLoadingPerms] = useState(true);
+    const [unreadMessages, setUnreadMessages] = useState(0);
+
+    // Unread message badge — supervisors see all conversations
+    useEffect(() => {
+        if (!user || role !== "supervisor" || isLoginPage) return;
+        const q = query(collection(db, "conversations"), where("unreadForStaff", "==", true));
+        const unsubscribe = onSnapshot(q, (snap) => setUnreadMessages(snap.size), () => {});
+        return () => unsubscribe();
+    }, [user, role, isLoginPage]);
 
     // Fetch allowed pages for this supervisor
     useEffect(() => {
@@ -116,7 +128,8 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
     // Build sidebar — only allowed pages, grouped by section
     const sections = ["Overview", "Management", "Finance", "Content", "Examinations"];
-    const filteredNav = ALL_NAV.filter(item => allowedPages.includes(item.href));
+    const filteredNav = ALL_NAV.filter(item => allowedPages.includes(item.href))
+        .map(item => ({ ...item, badge: item.href === "/supervisor/messages" && unreadMessages > 0 }));
     const groupedNav = sections
         .map(section => ({
             section,
@@ -159,6 +172,9 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                                             {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-emerald-400" />}
                                             <Icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-emerald-400" : "text-white/40 group-hover:text-white/60")} />
                                             <span className="flex-1 truncate">{item.label}</span>
+                                            {item.badge && !isActive && (
+                                                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
+                                            )}
                                             {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/30 shrink-0" />}
                                         </Link>
                                     );
@@ -170,6 +186,10 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
                 {/* Profile & Logout */}
                 <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
+                    <div className="flex justify-between items-center px-1 mb-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Account</span>
+                        <NotificationBell theme="dark" />
+                    </div>
                     <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5">
                         <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
                             <span className="text-emerald-400 text-xs font-bold">
@@ -199,6 +219,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 </div>
             </main>
             <PWAInstallTrigger appName="Supervisor Portal" themeColor="#8b5cf6" icon="💼" />
+            <MessageToastWatcher scope={{ kind: "staff-all" }} />
         </div>
     );
 }

@@ -22,6 +22,7 @@ import { authFetch } from "@/lib/auth-fetch";
 const ALL_PAGES: { label: string; path: string; section: string }[] = [
     // ── Overview ─────────────────────────────────────────────────
     { label: "Dashboard", path: "/supervisor", section: "Overview" },
+    { label: "Messages",  path: "/supervisor/messages", section: "Overview" },
 
     // ── Management ───────────────────────────────────────────────
     { label: "Students",           path: "/supervisor/students",           section: "Management" },
