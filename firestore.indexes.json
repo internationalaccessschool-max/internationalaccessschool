@@ -202,6 +202,24 @@
                 { "fieldPath": "teacherId", "order": "ASCENDING" },
                 { "fieldPath": "status", "order": "ASCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "conversations",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "className", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "lastMessageAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "conversations",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "className", "order": "ASCENDING" },
+                { "fieldPath": "section", "order": "ASCENDING" },
+                { "fieldPath": "unreadForStaff", "order": "ASCENDING" }
+            ]
         }
     ],
     "fieldOverrides": [
