@@ -113,7 +113,11 @@ export function NoticePopup() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                style={{
+                    paddingTop: "max(1rem, env(safe-area-inset-top))",
+                    paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+                }}
             >
                 <motion.div
                     key={current.id}
@@ -121,50 +125,54 @@ export function NoticePopup() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96, y: -8 }}
                     transition={{ type: "spring", damping: 22, stiffness: 300 }}
-                    className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+                    className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-full flex flex-col overflow-hidden"
                     role="alertdialog"
                     aria-live="assertive"
                 >
-                    <div className={`h-1.5 ${s.bar}`} />
-                    <div className="p-5">
-                        <div className="flex items-start justify-between gap-3">
+                    <div className={`h-1.5 shrink-0 ${s.bar}`} />
+
+                    {/* Header — always visible so the close button never scrolls away */}
+                    <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2 shrink-0">
+                        <div className="flex items-center gap-3 min-w-0">
                             <div className={`w-10 h-10 rounded-xl border ${s.badge} flex items-center justify-center shrink-0`}>
                                 <Icon className="w-5 h-5" />
                             </div>
-                            <button
-                                onClick={() => dismiss(current)}
-                                className="p-1.5 text-gray-300 hover:text-gray-500 hover:bg-gray-50 rounded-lg transition-colors"
-                                aria-label="Dismiss notice"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        <div className="mt-3">
                             <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${s.badge}`}>
                                 {s.label}
                             </span>
-                            <p className="mt-2 text-sm text-navy font-medium leading-relaxed whitespace-pre-wrap">
-                                {current.content}
-                            </p>
                         </div>
+                        <button
+                            onClick={() => dismiss(current)}
+                            className="w-10 h-10 flex items-center justify-center shrink-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                            aria-label="Dismiss notice"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
 
-                        <div className="mt-5 flex items-center justify-end gap-2">
-                            {remaining > 0 && (
-                                <button
-                                    onClick={dismissAll}
-                                    className="px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700"
-                                >
-                                    Dismiss all ({remaining} more)
-                                </button>
-                            )}
+                    {/* Only the notice text scrolls when it is long */}
+                    <div className="px-5 pb-3 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                        <p className="text-sm text-navy font-medium leading-relaxed whitespace-pre-wrap break-words">
+                            {current.content}
+                        </p>
+                    </div>
+
+                    {/* Footer — always visible */}
+                    <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 shrink-0">
+                        {remaining > 0 && (
                             <button
-                                onClick={() => dismiss(current)}
-                                className="px-4 py-2 bg-navy text-white text-xs font-bold rounded-lg hover:bg-navy-light transition-colors"
+                                onClick={dismissAll}
+                                className="px-3 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700"
                             >
-                                Got it
+                                Dismiss all ({remaining} more)
                             </button>
-                        </div>
+                        )}
+                        <button
+                            onClick={() => dismiss(current)}
+                            className="flex-1 sm:flex-none px-5 py-2.5 bg-navy text-white text-sm font-bold rounded-xl hover:bg-navy-light transition-colors"
+                        >
+                            Got it
+                        </button>
                     </div>
                 </motion.div>
             </motion.div>
