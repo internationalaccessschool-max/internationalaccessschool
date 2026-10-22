@@ -280,6 +280,8 @@ export default function TeacherMarksPage() {
                                         } else {
                                             entryMap[subId] = m.obtained !== null && m.obtained !== undefined ? String(m.obtained) : "";
                                         }
+                                        // Absent in this one subject only
+                                        entryMap[`${subId}__absent`] = m.absent === true ? "1" : "";
                                     });
                                     newMap[exam.id!][d.id] = entryMap;
 
@@ -388,6 +390,11 @@ export default function TeacherMarksPage() {
                     });
                 } else if (isUnit) {
                     subjects.forEach(sub => {
+                        // absent is always written (true/false) so merge:true clears an old flag
+                        if (entry[`${sub.id}__absent`] === "1") {
+                            marks[sub.id] = { subjectId: sub.id, perTest: null, noteBook: null, sea: null, obtained: null, total: 20, absent: true };
+                            return;
+                        }
                         const pt  = parseFloat(entry[`${sub.id}__perTest`]  || "") || 0;
                         const nb  = parseFloat(entry[`${sub.id}__noteBook`] || "") || 0;
                         const sea = parseFloat(entry[`${sub.id}__sea`]      || "") || 0;
@@ -399,16 +406,22 @@ export default function TeacherMarksPage() {
                             sea: sea,
                             obtained: total,
                             total: 20,
+                            absent: false,
                         };
                     });
                 } else {
                     subjects.forEach(sub => {
-                        const obt = parseFloat(entry[sub.id] || "") || 0;
                         const maxM = isTermOrAnnual ? 80 : sub.maxMarks;
+                        if (entry[`${sub.id}__absent`] === "1") {
+                            marks[sub.id] = { subjectId: sub.id, obtained: null, total: maxM, absent: true };
+                            return;
+                        }
+                        const obt = parseFloat(entry[sub.id] || "") || 0;
                         marks[sub.id] = {
                             subjectId: sub.id,
                             obtained: obt,
                             total: maxM,
+                            absent: false,
                         };
                     });
                 }
@@ -458,6 +471,11 @@ export default function TeacherMarksPage() {
     });
 
     const isAbsent = (examId: string, studentId: string) => !!absentMap[examId]?.[studentId];
+    // Absent in one subject only — kept as "<subId>__absent" = "1" alongside the marks
+    const isSubAbsent = (examId: string, studentId: string, subId: string) =>
+        markVal(examId, studentId, `${subId}__absent`) === "1";
+    const toggleSubAbsent = (examId: string, studentId: string, subId: string) =>
+        setMarkVal(examId, studentId, `${subId}__absent`, isSubAbsent(examId, studentId, subId) ? "" : "1");
     const toggleAbsent = (examId: string, studentId: string) => {
         setAbsentMap(prev => ({
             ...prev,
@@ -739,6 +757,7 @@ export default function TeacherMarksPage() {
                                                             <span className="w-10 text-center">PT/10</span>
                                                             <span className="w-10 text-center">NB/5</span>
                                                             <span className="w-10 text-center">SEA/5</span>
+                                                            <span className="w-6" />
                                                         </div>
                                                     </th>
                                                 ))}
@@ -791,10 +810,14 @@ export default function TeacherMarksPage() {
                                                     ) : (
                                                         <>
                                                             {/* Unit Test sub-cells */}
-                                                            {isUnit && subjects.map(sub => (
+                                                            {isUnit && subjects.map(sub => {
+                                                                const subAbsent = isSubAbsent(exam.id!, student.id, sub.id);
+                                                                return (
                                                                 <td key={sub.id} className="border-l border-border/30 px-1 py-1.5">
                                                                     <div className="flex justify-center gap-0.5">
-                                                                        {(["perTest", "noteBook", "sea"] as const).map(field => {
+                                                                        {subAbsent ? (
+                                                                            <span className="w-[124px] h-8 flex items-center justify-center rounded bg-red-50 text-red-600 font-bold text-xs">ABSENT</span>
+                                                                        ) : (["perTest", "noteBook", "sea"] as const).map(field => {
                                                                             const max = field === "perTest" ? 10 : 5;
                                                                             const key = `${sub.id}__${field}`;
                                                                             const val = markVal(exam.id!, student.id, key);
@@ -814,9 +837,19 @@ export default function TeacherMarksPage() {
                                                                                 />
                                                                             );
                                                                         })}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => canEditMarks && toggleSubAbsent(exam.id!, student.id, sub.id)}
+                                                                                disabled={!canEditMarks}
+                                                                                title={subAbsent ? `Mark present in ${sub.name}` : `Mark absent in ${sub.name}`}
+                                                                                className={`w-6 h-8 shrink-0 text-[10px] rounded font-bold border transition-colors ${!canEditMarks ? "opacity-40 cursor-not-allowed" : ""} ${subAbsent ? "bg-red-100 text-red-700 border-red-300" : "bg-gray-100 text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-500"}`}
+                                                                            >
+                                                                                AB
+                                                                            </button>
                                                                     </div>
                                                                 </td>
-                                                            ))}
+                                                                );
+                                                            })}
 
                                                             {/* Standard / Annual single cell */}
                                                             {!isUnit && subjects.map(sub => {
@@ -825,8 +858,13 @@ export default function TeacherMarksPage() {
                                                                 const max = exam?.examType === "Term Exam" || isAnnual ? 80 : sub.maxMarks;
                                                                 const isOver = !isNaN(numVal) && numVal > max;
                                                                 const isFail = !isNaN(numVal) && !isOver && (numVal / max) * 100 < 33;
+                                                                const subAbsent = isSubAbsent(exam.id!, student.id, sub.id);
                                                                 return (
                                                                     <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
+                                                                        <div className="flex justify-center gap-0.5">
+                                                                        {subAbsent ? (
+                                                                            <span className="w-16 h-8 flex items-center justify-center rounded bg-red-50 text-red-600 font-bold text-xs">ABSENT</span>
+                                                                        ) : (
                                                                         <input
                                                                             type="number"
                                                                             min={0}
@@ -836,6 +874,17 @@ export default function TeacherMarksPage() {
                                                                             onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
                                                                             className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : isFail ? "border-red-400 text-red-600 font-bold" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                         />
+                                                                        )}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => canEditMarks && toggleSubAbsent(exam.id!, student.id, sub.id)}
+                                                                            disabled={!canEditMarks}
+                                                                            title={subAbsent ? `Mark present in ${sub.name}` : `Mark absent in ${sub.name}`}
+                                                                            className={`w-6 h-8 shrink-0 text-[10px] rounded font-bold border transition-colors ${!canEditMarks ? "opacity-40 cursor-not-allowed" : ""} ${subAbsent ? "bg-red-100 text-red-700 border-red-300" : "bg-gray-100 text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-500"}`}
+                                                                        >
+                                                                            AB
+                                                                        </button>
+                                                                        </div>
                                                                     </td>
                                                                 );
                                                             })}
@@ -845,6 +894,7 @@ export default function TeacherMarksPage() {
                                                                 let total = 0;
                                                                 if (isUnit) {
                                                                     subjects.forEach(sub => {
+                                                                        if (isSubAbsent(exam.id!, student.id, sub.id)) return;
                                                                         const pt = parseFloat(markVal(exam.id!, student.id, `${sub.id}__perTest`) || "0") || 0;
                                                                         const nb = parseFloat(markVal(exam.id!, student.id, `${sub.id}__noteBook`) || "0") || 0;
                                                                         const se = parseFloat(markVal(exam.id!, student.id, `${sub.id}__sea`) || "0") || 0;
@@ -852,6 +902,7 @@ export default function TeacherMarksPage() {
                                                                     });
                                                                 } else {
                                                                     subjects.forEach(sub => {
+                                                                        if (isSubAbsent(exam.id!, student.id, sub.id)) return;
                                                                         total += parseFloat(markVal(exam.id!, student.id, sub.id) || "0") || 0;
                                                                     });
                                                                 }

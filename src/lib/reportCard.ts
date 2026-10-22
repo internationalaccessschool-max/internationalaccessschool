@@ -33,6 +33,8 @@ export type MarksEntry = {
   perTest?: number | null;
   noteBook?: number | null;
   sea?: number | null;
+  /** Absent in this subject only */
+  absent?: boolean;
 };
 
 export type StudentResult = {
@@ -199,10 +201,12 @@ export function buildReportCardPage(s: StudentResult, ctx: ReportCardContext, lo
     colSum.u2Tot += u2Tot; colSum.an += anObt; colSum.t2 += t2Tot;
 
     // Helpers
+    // Absent for the whole exam, or only in this subject
+    const subAB = (eId: string) => isAB(eId) || s.examMarks[eId]?.[sid]?.absent === true;
     const D  = (v: number | null, show: boolean, eId: string) =>
-      !show || !eId ? "" : isAB(eId) ? "AB" : v !== null ? String(v) : "0";
+      !show || !eId ? "" : subAB(eId) ? "AB" : v !== null ? String(v) : "0";
     const DB = (v: number, show: boolean, eId: string) =>
-      !show || !eId ? "" : isAB(eId) ? "AB" : String(v);
+      !show || !eId ? "" : subAB(eId) ? "AB" : String(v);
 
     // For Unit II: CUMULATIVE TOTAL = T1 + U2 (no annual yet)
     const cumulativeTotal = reportType === "unit2" ? String(t1Tot + u2Tot) : "";

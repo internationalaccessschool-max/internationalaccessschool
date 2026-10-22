@@ -390,7 +390,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
               if (data.absent === true) (absentExams[d.id] ??= []).push(eId);
               allMarks[eId][d.id] = {};
               Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
-                allMarks[eId][d.id][subId] = { obtained: m.obtained, total: m.total, perTest: m.perTest, noteBook: m.noteBook, sea: m.sea };
+                allMarks[eId][d.id][subId] = { obtained: m.obtained, total: m.total, perTest: m.perTest, noteBook: m.noteBook, sea: m.sea, absent: m.absent === true };
               });
             });
             if (Object.keys(allMarks[eId]).length > 0) break;
