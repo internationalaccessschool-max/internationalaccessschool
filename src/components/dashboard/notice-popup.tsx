@@ -54,8 +54,8 @@ const STYLES = {
 
 /**
  * Shows a one-time popup for every active school notice the student/parent
- * hasn't dismissed yet. Reads the same `notices` collection as the public
- * NewsTicker, so nothing here needs its own Firestore index.
+ * hasn't dismissed yet. Uses the existing `notices` (isActive, priority)
+ * index, so nothing here needs its own Firestore index.
  */
 export function NoticePopup() {
     const [queue, setQueue] = useState<Notice[]>([]);

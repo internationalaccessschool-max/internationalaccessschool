@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
 import Image from "next/image";
-import { NewsTicker } from "@/components/news-ticker";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
@@ -98,7 +97,6 @@ export function Navbar() {
             <header
                 className={`fixed top-0 left-0 right-0 z-navbar transition-all duration-300 flex flex-col ${headerBg}`}
             >
-                <NewsTicker />
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
                     <div className="flex items-center justify-between h-[72px]">
                         {/* Logo */}
