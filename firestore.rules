@@ -202,6 +202,18 @@ service cloud.firestore {
       );
     }
 
+    // ─── Published report cards ───────────────────────────────────────────────
+    // reportCards/{studentUid}/cards/{session}_{reportType} — snapshot written by
+    // "Publish to Students" on the admin generator. Student reads only own cards.
+    match /reportCards/{ownerId}/cards/{cardKey} {
+      allow read: if isAuth() && (uid() == ownerId || isStaff());
+      allow write: if isTeacherOrAdmin() || isAdminOrSupervisor();
+    }
+    // Collection-group read for the admin View page (query on cardKey).
+    match /{path=**}/cards/{cardKey} {
+      allow read: if isStaff();
+    }
+
     // ─── Exams ────────────────────────────────────────────────────────────────
     match /exams/{document=**} {
       allow read: if isAuth();

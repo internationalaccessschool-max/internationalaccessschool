@@ -800,6 +800,7 @@ export default function TeacherMarksPage() {
                                                                             const val = markVal(exam.id!, student.id, key);
                                                                             const numVal = parseFloat(val);
                                                                             const isOver = !isNaN(numVal) && numVal > max;
+                                                                            const isFail = !isNaN(numVal) && !isOver && (numVal / max) * 100 < 33;
                                                                             return (
                                                                                 <input
                                                                                     key={field}
@@ -809,7 +810,7 @@ export default function TeacherMarksPage() {
                                                                                     value={val}
                                                                                     disabled={!canEditMarks}
                                                                                     onChange={e => setMarkVal(exam.id!, student.id, key, e.target.value)}
-                                                                                    className={`w-10 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                                    className={`w-10 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : isFail ? "border-red-400 text-red-600 font-bold" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                                 />
                                                                             );
                                                                         })}
@@ -823,6 +824,7 @@ export default function TeacherMarksPage() {
                                                                 const numVal = parseFloat(val);
                                                                 const max = exam?.examType === "Term Exam" || isAnnual ? 80 : sub.maxMarks;
                                                                 const isOver = !isNaN(numVal) && numVal > max;
+                                                                const isFail = !isNaN(numVal) && !isOver && (numVal / max) * 100 < 33;
                                                                 return (
                                                                     <td key={sub.id} className="border-l border-border/30 px-2 py-1.5">
                                                                         <input
@@ -832,7 +834,7 @@ export default function TeacherMarksPage() {
                                                                             value={val}
                                                                             disabled={!canEditMarks}
                                                                             onChange={e => setMarkVal(exam.id!, student.id, sub.id, e.target.value)}
-                                                                            className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
+                                                                            className={`w-16 h-8 text-center text-xs rounded border ${!canEditMarks ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : isOver ? "border-red-400 bg-red-50 text-red-700" : isFail ? "border-red-400 text-red-600 font-bold" : "border-border/50 focus:border-primary"} focus:outline-none focus:ring-1 focus:ring-primary/30`}
                                                                         />
                                                                     </td>
                                                                 );
