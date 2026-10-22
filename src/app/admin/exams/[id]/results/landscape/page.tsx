@@ -379,6 +379,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
 
       // 3. Fetch marks
       const allMarks: Record<string, Record<string, Record<string, MarksEntry>>> = {};
+      const absentExams: Record<string, string[]> = {};   // studentId → exam ids marked ABSENT
       for (const eId of examIdsToFetch.filter(Boolean)) {
         allMarks[eId] = {};
         for (const cls of [normCls, selectedClass, `Class ${normCls}`]) {
@@ -386,6 +387,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
             const snap = await getDocs(collection(db, "results", eId, "classes", cls, "sections", selectedSection, "students"));
             snap.docs.forEach(d => {
               const data = d.data();
+              if (data.absent === true) (absentExams[d.id] ??= []).push(eId);
               allMarks[eId][d.id] = {};
               Object.entries(data.marks || {}).forEach(([subId, m]: [string, any]) => {
                 allMarks[eId][d.id][subId] = { obtained: m.obtained, total: m.total, perTest: m.perTest, noteBook: m.noteBook, sea: m.sea };
@@ -507,6 +509,7 @@ export default function LandscapeReportPage({ params }: { params: Promise<{ id: 
           fatherName: p.fatherName || p.guardianName || "—",
           motherName: p.motherName || "—",
           examMarks,
+          absentExams: absentExams[uid] ?? [],
           coScholastic: coSchoData[uid] ?? {},
           attendance: { t1WD: t1.wd, t1P: t1.p, hyWD: hy.wd, hyP: hy.p, t2WD: t2.wd, t2P: t2.p, yrlWD: yrl.wd, yrlP: yrl.p },
         };

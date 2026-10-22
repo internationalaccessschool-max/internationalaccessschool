@@ -46,6 +46,8 @@ export type StudentResult = {
   fatherName?: string;
   motherName?: string;
   examMarks: Record<string, Record<string, MarksEntry>>;
+  /** Exam ids where the teacher marked the student ABSENT — printed as "AB". */
+  absentExams?: string[];
   coScholastic?: Record<string, { hy?: string; annual?: string }>;
   attendance: {
     t1WD: number; t1P: number;
@@ -156,13 +158,14 @@ export function buildReportCardPage(s: StudentResult, ctx: ReportCardContext, lo
   const sRank = s.rank ?? "—";
   let grandTotalObt = 0;
   // Column totals for the TOTAL row
-  const colSum = { u1PT: 0, u1NB: 0, u1SEA: 0, u1Tot: 0, hy: 0, t1: 0, u2PT: 0, u2NB: 0, u2SEA: 0, u2Tot: 0, an: 0, t2: 0 };
+  const colSum = { u1Tot: 0, hy: 0, t1: 0, u2Tot: 0, an: 0, t2: 0 };
 
   const getV = (eId: string, sid: string, field: "obtained"|"perTest"|"noteBook"|"sea") => {
     if (!eId) return null;
     const v = s.examMarks[eId]?.[sid]?.[field];
     return (v !== undefined && v !== null) ? Number(v) : null;
   };
+  const isAB = (eId: string) => !!eId && (s.absentExams ?? []).includes(eId);
 
   const subRows = subjects.map(sub => {
     const sid = String(sub.id || sub.name);
@@ -192,16 +195,14 @@ export function buildReportCardPage(s: StudentResult, ctx: ReportCardContext, lo
 
     grandTotalObt += subContrib;
 
-    colSum.u1PT += u1PT; colSum.u1NB += u1NB; colSum.u1SEA += u1SEA; colSum.u1Tot += u1Tot;
-    colSum.hy += hyObt; colSum.t1 += t1Tot;
-    colSum.u2PT += u2PT; colSum.u2NB += u2NB; colSum.u2SEA += u2SEA; colSum.u2Tot += u2Tot;
-    colSum.an += anObt; colSum.t2 += t2Tot;
+    colSum.u1Tot += u1Tot; colSum.hy += hyObt; colSum.t1 += t1Tot;
+    colSum.u2Tot += u2Tot; colSum.an += anObt; colSum.t2 += t2Tot;
 
     // Helpers
     const D  = (v: number | null, show: boolean, eId: string) =>
-      !show || !eId ? "" : v !== null ? String(v) : "0";
+      !show || !eId ? "" : isAB(eId) ? "AB" : v !== null ? String(v) : "0";
     const DB = (v: number, show: boolean, eId: string) =>
-      !show || !eId ? "" : String(v);
+      !show || !eId ? "" : isAB(eId) ? "AB" : String(v);
 
     // For Unit II: CUMULATIVE TOTAL = T1 + U2 (no annual yet)
     const cumulativeTotal = reportType === "unit2" ? String(t1Tot + u2Tot) : "";
@@ -335,15 +336,17 @@ export function buildReportCardPage(s: StudentResult, ctx: ReportCardContext, lo
   };
 
   // Totals row — column-wise sums across all subjects
-  const T = (v: number, max: number, cls = "") => `<td class="ctr bold${cls ? " " + cls : ""}${F(v, n * max)}">${v}</td>`;
+  const T = (v: number, max: number, cls = "", eId = "") => isAB(eId)
+    ? `<td class="ctr bold fail${cls ? " " + cls : ""}">AB</td>`
+    : `<td class="ctr bold${cls ? " " + cls : ""}${F(v, n * max)}">${v}</td>`;
   const u1Cells = unit1Id
-    ? `${T(colSum.u1PT, 10, "bdr-l")}${T(colSum.u1NB, 5)}${T(colSum.u1SEA, 5)}${T(colSum.u1Tot, 20)}`
+    ? `<td class="bdr-l" colspan="3"></td>${T(colSum.u1Tot, 20, "", unit1Id)}`
     : `<td class="ctr bdr-l" colspan="4">—</td>`;
   const u2Cells = unit2Id
-    ? `${T(colSum.u2PT, 10, "bdr-l")}${T(colSum.u2NB, 5)}${T(colSum.u2SEA, 5)}${T(colSum.u2Tot, 20, reportType === "unit2" ? "bdr-r" : "")}`
+    ? `<td class="bdr-l" colspan="3"></td>${T(colSum.u2Tot, 20, reportType === "unit2" ? "bdr-r" : "", unit2Id)}`
     : `<td class="ctr bdr-l" colspan="4">—</td>`;
-  const hyCell = hyId ? T(colSum.hy, 80) : `<td class="ctr">—</td>`;
-  const anCell = annualId ? T(colSum.an, 80) : `<td class="ctr">—</td>`;
+  const hyCell = hyId ? T(colSum.hy, 80, "", hyId) : `<td class="ctr">—</td>`;
+  const anCell = annualId ? T(colSum.an, 80, "", annualId) : `<td class="ctr">—</td>`;
   const overallGradeCell = `<td class="ctr bold grade${F(overallPct, 100)}">${overallGrade}</td>`;
 
   const buildTotalsRow = () => {
